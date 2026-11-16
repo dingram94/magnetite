@@ -4,7 +4,10 @@
 copper wire); `magnetite-small.svg` is the simplified drawing for small sizes.
 The rendered files live where each platform needs them:
 
-- macOS: `crates/app/resources/mac/magnetite.icns` (bundle icon)
+- macOS: `crates/app/resources/mac/magnetite.icns` (bundle icon). It follows
+  Apple's grid: the rounded square is 824 px of the 1024 px canvas, centred,
+  with a soft drop shadow in the margin. Drawn edge to edge it looks bigger
+  than every other icon in the Dock.
 - Linux: `packaging/linux/magnetite.png` (512 px, next to the `.desktop` file)
 - Windows: `packaging/windows/magnetite.ico` (shipped next to `magnetite.exe`;
   embedding it in the executable comes with the Windows bring-up)
