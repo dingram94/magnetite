@@ -256,7 +256,8 @@ lists of saved passwords open (`passwords-and-autofill.md`).
   Deleting cookies signs the user out of websites.
 - It works on one set of logins. With more than one, a list next to
   "Delete…" chooses which, starting with those of the space in front; a
-  private profile is not offered, it keeps nothing.
+  private profile is not offered: its data is in memory only and goes
+  when Magnetite quits.
 - The "Browsing history" and "Download history" the dialog names are
   Chromium's own records, not Magnetite's history (`history.md`) or its
   list of downloads, which have "Clear" of their own.
