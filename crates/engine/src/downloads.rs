@@ -24,25 +24,19 @@ pub struct DownloadPrefs {
     pub ask: bool,
 }
 
-/// Chromium's preferences for the folder: of downloads, and of "Save as".
-const FOLDERS: [&str; 2] = ["download.default_directory", "savefile.default_directory"];
+/// Chromium's preference for the folder downloads go to. The folder "Save
+/// as" starts in is another one, which Chromium keeps as the user last
+/// left it: Magnetite does not touch it.
+const FOLDER: &str = "download.default_directory";
 const ASK: &str = "download.prompt_for_download";
 
 impl DownloadPrefs {
-    /// Set them on `ctx`; the folder only with `folder`, since writing it
-    /// also moves the folder "Save as" starts in, which Chromium otherwise
-    /// remembers from the last time. False if Chromium refused one (a
-    /// context that is not initialised yet refuses all; it gets them in
-    /// `prepare_context`).
-    pub(crate) fn apply(&self, ctx: &RequestContext, folder: bool) -> bool {
-        let mut set = crate::autofill::set_bool_pref(ctx, ASK, self.ask);
-        if folder {
-            let chosen = (!self.folder.is_empty()).then_some(self.folder.as_str());
-            for name in FOLDERS {
-                set &= crate::autofill::set_string_pref(ctx, name, chosen);
-            }
-        }
-        set
+    /// Set them on `ctx`. False if Chromium refused one (a context that is
+    /// not initialised yet refuses all; it gets them in `prepare_context`).
+    pub(crate) fn apply(&self, ctx: &RequestContext) -> bool {
+        let folder = (!self.folder.is_empty()).then_some(self.folder.as_str());
+        crate::autofill::set_bool_pref(ctx, ASK, self.ask)
+            & crate::autofill::set_string_pref(ctx, FOLDER, folder)
     }
 }
 
@@ -68,17 +62,16 @@ impl Engine {
     /// Use `prefs` from now on: in every profile that exists, and in those
     /// made later.
     pub fn set_downloads(&self, prefs: &DownloadPrefs) {
-        let (contexts, folder): (Vec<RequestContext>, bool) = {
+        let contexts: Vec<RequestContext> = {
             let mut inner = self.lock();
-            let folder = inner.downloads.folder != prefs.folder;
             inner.downloads.clone_from(prefs);
-            (inner.contexts.values().cloned().collect(), folder)
+            inner.contexts.values().cloned().collect()
         };
         for ctx in request_context_get_global_context()
             .into_iter()
             .chain(contexts)
         {
-            prefs.apply(&ctx, folder);
+            prefs.apply(&ctx);
         }
     }
 
