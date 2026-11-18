@@ -141,12 +141,12 @@ export function Notifications() {
       ref={root}
       className="notifications"
       onMouseEnter={() => {
-        // Held from here on are the cards that show now, not those of the
-        // last time: unless the pointer is back within the two seconds
-        // its cards stay for.
-        const at = Date.now() / 1000;
-        if (at >= leftAt + 2) setHeld(new Set());
-        setNow(at);
+        // Held from here on are the cards that show now, taken before the
+        // clock moves: one whose time ran out since the last tick is still
+        // under the pointer. Those of the last time are among them only
+        // while they still show.
+        setHeld(new Set(shown.map((d) => d.id)));
+        setNow(Date.now() / 1000);
         setHover(true);
       }}
       onMouseLeave={() => {
