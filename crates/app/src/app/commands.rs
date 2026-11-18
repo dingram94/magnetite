@@ -1778,6 +1778,8 @@ impl MagnetiteApp {
                 if settings.downloads != downloads_before {
                     engine.set_downloads(&settings.downloads);
                 }
+                // Written now so that it is there at the next start: Chromium
+                // reads the level when it starts, before Magnetite could set it.
                 engine.set_default_zoom(settings.page_zoom);
                 engine.set_quick_search_key(settings.quick_search);
                 self.dev_settings_changed(engine);

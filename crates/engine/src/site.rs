@@ -133,7 +133,9 @@ impl Engine {
 
     /// Use `pct` percent as the zoom every site starts with: in every
     /// profile that exists, and in those made later. A site zoomed on its
-    /// own keeps its zoom.
+    /// own keeps its zoom. Chromium reads the level when it
+    /// starts, so what is set here counts from the next start; it has to
+    /// be set before that start, when the setting changes.
     pub fn set_default_zoom(&self, pct: u32) {
         let contexts: Vec<RequestContext> = {
             let mut inner = self.lock();
@@ -168,7 +170,17 @@ impl Engine {
     pub fn set_content_zoom(&self, id: ContentId, pct: Option<u32>) {
         if let Some(host) = self.content_browser_host(id) {
             let base = level_to_percent(host.default_zoom_level());
+            // A page of Magnetite's own has no part in that default
+            // (`keep_own_page_unzoomed`): its zoom "again" is 100 percent.
+            let own = (host.browser())
+                .and_then(|b| b.main_frame())
+                .is_some_and(|f| {
+                    CefString::from(&f.url())
+                        .to_string()
+                        .starts_with("magnetite://")
+                });
             host.set_zoom_level(match pct {
+                None if own && base != 100 => OWN_100,
                 // Level 0 is Chromium's word for "the default again".
                 None => 0.0,
                 Some(pct) if pct == base => 0.0,
