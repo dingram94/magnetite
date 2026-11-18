@@ -493,7 +493,7 @@ impl EngineDelegate for MagnetiteApp {
 
 impl MagnetiteApp {
     /// The space a rule names for a link from another app to `url`
-    /// (Settings → General).
+    /// (Settings → Links).
     fn link_rule_space(&self, url: &str) -> Option<String> {
         self.with_state(|s| {
             (s.settings)
@@ -578,7 +578,7 @@ struct Ask {
     background: bool,
     /// The peek or a web panel asked: what it opens becomes a tab.
     from_peek: bool,
-    /// A link from another app to a site with a rule (Settings → General).
+    /// A link from another app to a site with a rule (Settings → Links).
     ruled: bool,
 }
 

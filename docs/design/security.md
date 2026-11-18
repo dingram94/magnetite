@@ -55,7 +55,7 @@ search; search and site search addresses are `https://` with `%s` only
 are dropped (`state::drop_unsafe_tabs`).
 
 Magnetite asks the system to become the default browser only on the user's
-click (Settings → General, or the welcome page's switch once "Start
+click (Settings → Links, or the welcome page's switch once "Start
 browsing" is pressed), and macOS confirms with the user
 (`Engine::make_default_browser`).
 

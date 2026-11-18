@@ -67,7 +67,7 @@ export function SiteCodeSection({ saved, open, save }: { saved: SiteCode[]; open
       {rows.map((c, i) => {
         const why = c.site ? problem(c, rows) : null;
         return (
-          <div key={i} className="set-card space-y-3">
+          <div key={i} className="set-card set-group"><div className="set-row space-y-3">
             <div className="flex items-center gap-3">
               <input className="field mono" style={{ flex: 1, minWidth: 0 }} value={c.site} placeholder="example.org" aria-label="Site" aria-invalid={!!why || undefined} autoFocus={!c.site} onChange={(e) => change(i, { site: e.target.value })} onBlur={() => commit(rows)} />
               <Switch label={`Use on ${c.site || "this site"}`} checked={c.enabled} onChange={(on) => commit(change(i, { enabled: on }))} />
@@ -76,15 +76,15 @@ export function SiteCodeSection({ saved, open, save }: { saved: SiteCode[]; open
             {why && <p className="set-hint" style={{ color: "var(--danger)" }}>Not saved: {why}</p>}
             {area(i, "css", "CSS", "header { position: static; }")}
             {area(i, "js", "JavaScript", "document.title = document.title.toLowerCase();")}
-          </div>
+          </div></div>
         );
       })}
-      <div className="set-card flex items-center gap-4">
-        <p className="set-hint min-w-0 flex-1">
+      <div className="set-card set-group"><div className="set-row flex items-center gap-4">
+        <p className="set-hint min-w-0 flex-1" style={{ marginTop: 0 }}>
           CSS reaches open pages of the site as soon as it is saved; JavaScript runs each time one of its pages has loaded. A site stands for its subdomains. The code runs as part of the page and can read and change everything on it: only add code you understand. It stays on this computer.
         </p>
         <button className="btn" disabled={rows.length >= MAX_SITES} title={rows.length >= MAX_SITES ? `No more than ${MAX_SITES} sites are kept.` : undefined} onClick={() => setRows((list) => [...list, { site: "", css: "", js: "", enabled: true }])}>Add site</button>
-      </div>
+      </div></div>
     </>
   );
 }

@@ -219,7 +219,7 @@ in front, the space beside it comes to the front for the link.
 
 | Setting | Values |
 |---|---|
-| Settings → General → "Links to these sites open in a space of their own" | a list of rules: a site and a space |
+| Settings → Links → "Links to these sites open in a space of their own" | a list of rules: a site and a space |
 
 - A site is a host (`github.com`) or a host and the start of a path
   (`github.com/acme`). Typed as a whole address, its host and path are
@@ -229,7 +229,7 @@ in front, the space beside it comes to the front for the link.
   Of several rules that fit, the one with the longest host counts, then
   the longest path.
 - A link with a rule opens as a new tab in the rule's space, which comes
-  to the front, whatever Settings → General → "Open links from other apps
+  to the front, whatever Settings → Links → "Open links from other apps
   in" says (`peek.md`, `mini-window.md`): that setting is for links
   without a rule. Of several links handed over at once as peeks, only the
   last is one; the others become background tabs, each in the space its

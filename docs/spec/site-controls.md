@@ -30,7 +30,7 @@ outline the row. The chip's tooltip lists every state.
   (`fbclid`, `gclid`, `msclkid`, … and every name starting with `utm_`,
   `pk_` or `mtm_`). It ships with the app and is never fetched. Order,
   encoding, repeated parameters and the fragment stay as they were.
-  Settings → General → "Remove trackers from copied links" (on by default)
+  Settings → Links → "Remove trackers from copied links" (on by default)
   switches the removal off.
 - A status line under the row confirms for 3 seconds, longer while the
   pointer rests on it: "Copied", "Copied · 2 trackers removed" with a "Copy

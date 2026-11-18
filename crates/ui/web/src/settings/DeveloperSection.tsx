@@ -12,7 +12,7 @@ export function DeveloperSection({ settings, update }: { settings: Settings; upd
     <>
       <Toggle
         label="Developer bar for local pages"
-        hint="A page served from this computer (localhost, 127.0.0.1) gets a row under its address: the project that serves it, its console errors, the console, element picker and network panel a click away, and a reset. A page whose server is not running yet loads by itself once it is. The commands work on any page from the command bar."
+        hint="A page served from this computer (localhost, 127.0.0.1) gets a row under its address: its project, its console errors, and the console, element picker, network panel and a reset a click away."
         checked={dev.enabled}
         onChange={(enabled) => update({ developer: { ...dev, enabled } })}
       />

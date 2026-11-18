@@ -20,7 +20,7 @@ it as a tab, or put it beside the current tab in split view.
   lock follows the pin state within a minute.
 - Links opened in the background (`Cmd`+click, middle click) become
   background Today tabs, never a peek.
-- Settings → General → "Open links from other apps in" offers "a mini
+- Settings → Links → "Open links from other apps in" offers "a mini
   window" (the default, `mini-window.md`), "a new tab in the current space"
   and "a peek window".
 - A rule can send the links to a site to a space of their own: they open

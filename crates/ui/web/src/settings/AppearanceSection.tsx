@@ -1,9 +1,8 @@
 // Settings → Appearance: space colours and their strength, backgrounds, layout, text size, density, sidebar width.
 import { useRef, useState } from "react";
-import { SpaceGlyph } from "../Glyphs";
 import { storeImage, userImageUrl, type ImageSlot } from "../backgrounds";
 import { DEFAULT_ACCENT, accentCss, applyAppearance, lookOf, send, type Appearance, type Color, type SpaceLook } from "../bridge";
-import { Field, Slider } from "./fields";
+import { Field, Group, Slider } from "./fields";
 import type { Info, SettingsPatch } from "./types";
 
 const toColor = (r: number, g: number, b: number): Color => ({ red: r / 255, green: g / 255, blue: b / 255 });
@@ -93,18 +92,13 @@ export function AppearanceSection({ info, update, reload }: { info: Info; update
   const stored = lookOf(saved, sp.id);
   return (
     <>
-      <Field label="Space" hint="Colour, strength and backgrounds belong to a space: each one can look different.">
-        <div className="flex flex-wrap gap-1.5">
-          {info.spaces.map((s) => (
-            <button key={s.id} className="chip inline-flex items-center gap-1.5" data-on={s.id === sp.id || undefined} onClick={() => setChosen(s.id)}>
-              <span style={{ color: toHex(s.accent) }}><SpaceGlyph icon={s.icon} title={s.title} size={14} /></span>
-              {s.title}
-              {s.id === info.active_space && <span className="text-[var(--muted)]">· current</span>}
-            </button>
-          ))}
-        </div>
+      <Group title="Spaces" hint="Colour, strength and backgrounds belong to a space: each one can look different.">
+      <Field side label="Space" hint="The space the settings below are for.">
+        <select className="field" value={sp.id} onChange={(e) => setChosen(e.target.value)} aria-label="Space">
+          {info.spaces.map((s) => <option key={s.id} value={s.id}>{s.title}{s.id === info.active_space ? " (current)" : ""}</option>)}
+        </select>
       </Field>
-      <Field label="Colour" hint="Tints the sidebar and outlines the focused page in split view. It syncs with the space.">
+      <Field side label="Colour" hint="Tints the sidebar and outlines the focused page in split view. It syncs with the space.">
         <div className="swatches">
           {SPACE_COLOURS.map(([name, c]) => (
             <button key={name} className="swatch" title={name} aria-label={name} data-on={sameColour(sp.accent, c) || undefined} style={{ background: accentCss(c) }} onClick={() => colour(sp.id, c)} />
@@ -114,45 +108,44 @@ export function AppearanceSection({ info, update, reload }: { info: Info; update
           </label>
         </div>
       </Field>
-      <Field label="Colour strength" hint="How much of the space colour the window takes.">
+      <Field side label="Colour strength" hint="How much of the space colour the window takes.">
         <Slider value={look.tint} min={0} max={30} step={1} unit="%" reset={8} onChange={(v, now) => setLook({ tint: v }, now)} />
       </Field>
       <Field label="Background" hint="An effect in the space colour across the window, or a picture of your own under the sidebar's rows.">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="seg">
-            {EFFECTS.map(([label, effect]) => (
-              <button key={effect} data-on={look.sidebar_effect === effect || undefined} onClick={() => setLook({ sidebar_effect: effect }, true)}>{label}</button>
-            ))}
-            {stored.sidebar_image != null && (
-              <button data-on={look.sidebar_effect === "image" || undefined} onClick={() => setLook({ sidebar_effect: "image" }, true)}>Picture</button>
-            )}
-          </div>
+          <select className="field" style={{ width: 200 }} value={look.sidebar_effect} aria-label="Background" onChange={(e) => setLook({ sidebar_effect: e.target.value as SpaceLook["sidebar_effect"] }, true)}>
+            {EFFECTS.map(([label, effect]) => <option key={effect} value={effect}>{label}</option>)}
+            {stored.sidebar_image != null && <option value="image">Your picture</option>}
+          </select>
           <OwnImage slot="sidebar" space={sp.id} stamp={stored.sidebar_image} maxSide={1600} reload={reload} />
         </div>
       </Field>
-      <Field label="Empty window" hint="A picture behind the window while no tab is open in this space. Without one, the logo shows there.">
+      <Field side label="Empty window" hint="A picture behind the window while no tab is open in this space. Without one, the logo shows there.">
         <OwnImage slot="empty" space={sp.id} stamp={stored.empty_image} maxSide={2880} reload={reload} />
       </Field>
-      <Field label="Layout" hint="Where back, forward, the address and the extensions sit: at the top of the sidebar, or in a bar across the window.">
+      </Group>
+      <Group title="Window" hint="The same in every space.">
+      <Field side label="Layout" hint="Where back, forward, the address and the extensions sit: at the top of the sidebar, or in a bar across the window.">
         <div className="seg">
           {([["Sidebar", false], ["Top bar", true]] as const).map(([label, on]) => (
             <button key={label} data-on={draft.top_bar === on || undefined} onClick={() => set({ top_bar: on }, true)}>{label}</button>
           ))}
         </div>
       </Field>
-      <Field label="Text size" hint="The sidebar, the command bar and these pages. Web pages zoom on their own with ⌘+ and ⌘−.">
+      <Field side label="Text size" hint="The sidebar, the command bar and these pages. Web pages zoom on their own with ⌘+ and ⌘−.">
         <Slider value={draft.text_scale} min={85} max={130} step={5} unit="%" reset={100} onChange={(v, now) => set({ text_scale: v }, now)} />
       </Field>
-      <Field label="Density" hint="Height and spacing of the sidebar rows.">
+      <Field side label="Density" hint="Height and spacing of the sidebar rows.">
         <div className="seg">
           {(["compact", "comfortable", "spacious"] as const).map((d) => (
             <button key={d} data-on={draft.density === d || undefined} onClick={() => set({ density: d }, true)}>{d[0]!.toUpperCase() + d.slice(1)}</button>
           ))}
         </div>
       </Field>
-      <Field label="Sidebar width" hint="The pages take the rest of the window.">
+      <Field side label="Sidebar width" hint="The pages take the rest of the window.">
         <Slider value={draft.sidebar_width} min={220} max={360} step={4} unit=" pt" reset={264} onChange={(v, now) => set({ sidebar_width: v }, now)} />
       </Field>
+      </Group>
     </>
   );
 }

@@ -556,10 +556,37 @@ button:disabled, select:disabled, [aria-disabled="true"] { cursor: default; }
 [data-miss] { display: none !important; }
 [data-dim] { opacity: 0.35; }
 [data-dim] [data-dim] { opacity: 1; }
+/* The typed words, where a found setting names them. */
+::highlight(settings-search) { background: color-mix(in srgb, var(--accent) 38%, transparent); color: var(--fg); }
 .set-icon { width: 44px; height: 44px; flex: none; border-radius: 12px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
 .set-card { padding: 16px 18px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
 .set-label { font-size: 14px; line-height: 20px; font-weight: 500; color: var(--fg); }
 .set-hint { margin-top: 3px; max-width: 560px; font-size: 13px; line-height: 18px; color: var(--muted); }
+/* A group of settings: one card, a name on top, a row per setting. */
+.set-group { padding: 0; }
+.set-group-head { padding: 14px 18px 4px; }
+.set-group-title { font-size: 12.5px; line-height: 18px; font-weight: 600; letter-spacing: 0.02em; color: var(--secondary); }
+.set-row { padding: 14px 18px; border-top: 1px solid var(--line); }
+.set-group-body > .set-row:first-child, .set-group-body > :first-child > .set-row:first-child { border-top: 0; }
+.set-group-head + .set-group-body > .set-row:first-child { padding-top: 10px; }
+.set-group[data-folded] .set-group-head { padding-bottom: 14px; }
+/* The name of a group that folds: a button over the whole line. */
+.set-fold { display: flex; align-items: center; gap: 8px; width: 100%; font: inherit; color: inherit; letter-spacing: inherit; }
+.set-fold svg { flex: none; transition: transform 120ms; }
+.set-fold[aria-expanded="false"] svg { transform: rotate(-90deg); }
+.set-fold:hover { color: var(--fg); }
+/* The search shows what a folded group holds. */
+[data-search-body] .set-group-body[hidden] { display: block; }
+/* A list of rows of its own kind inside a group (shortcuts, isolation). */
+.set-group .set-list { padding: 0 18px 6px; }
+.set-group-body > .iso-list { border-width: 1px 0 0; border-radius: 0; margin-top: 8px; }
+.set-group-body > .iso-list .iso-row { padding: 10px 18px; }
+/* A short control to the right of its setting's name. */
+.set-sided { display: flex; align-items: center; gap: 20px; }
+.set-side { flex: none; max-width: 56%; }
+.set-side .field { width: auto; min-width: 190px; max-width: 100%; }
+.set-side > .flex:has(.range) { width: 320px; }
+.set-side select.field { padding-right: 30px; }
 .link-tile { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px; border-radius: 9px; background: rgba(255,255,255,0.05); color: var(--secondary); }
 .link-tile:hover:not(:disabled) { background: rgba(255,255,255,0.09); color: var(--fg); }
 .link-tile:disabled { opacity: 0.45; }
@@ -734,3 +761,7 @@ button.wel-space-icon:hover:not(:disabled) { background: color-mix(in srgb, var(
 .wel-glyphs button { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; color: var(--secondary); }
 .wel-glyphs button:hover { background: rgba(255,255,255,0.1); color: var(--fg); }
 .wel-glyphs button[data-active] { background: var(--accent-soft); color: var(--accent); }
+/* What Magnetite talks to: a name and a line per server. */
+.set-talks { padding-top: 6px; padding-bottom: 14px; }
+.set-talks li { display: flex; gap: 12px; padding: 5px 0; font-size: 13px; line-height: 18px; color: var(--muted); }
+.set-talks b { flex: none; width: 190px; font-weight: 500; color: var(--fg); }

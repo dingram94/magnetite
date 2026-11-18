@@ -14,9 +14,10 @@ export type SearchSection = { id: string; title: string; Icon: IconComponent };
  * word somewhere in them; the others are greyed out (`data-dim`), and a
  * section without any match is left out (`data-miss`). A section whose
  * title matches comes first, with nothing greyed out. In a card of rows
- * (`data-search-row`: the shortcuts, the spaces of sync) the rows are
- * marked one by one, by their name (`data-search-name`, or all their text),
- * unless the card's own name matches.
+ * (`data-search-row`: the settings of a group, the shortcuts, the spaces
+ * of sync) the rows are marked one by one, by their name
+ * (`data-search-name`, or all their text), unless the card's own name
+ * matches.
  */
 function filter(root: HTMLElement, query: string): string[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -35,23 +36,105 @@ function filter(root: HTMLElement, query: string): string[] {
       // Next to the cards of a wrapper, what else it holds (a closing paragraph).
       const apart = cards.length > 0 && cards[0] !== child ? [...child.children].filter((el) => !cards.some((c) => el.contains(c))) : [];
       for (const unit of cards.length > 0 ? [...cards, ...apart] : [child]) {
-        const named = [...unit.querySelectorAll(".set-label, .set-hint")];
-        const own = whole || has(named.length > 0 ? named.map((n) => n.textContent).join(" ") : unit.textContent);
+        const all = [...unit.querySelectorAll("[data-search-row]")];
+        // The card's own name: what names it outside its rows. A card of
+        // rows without a name of its own is found by its rows only.
+        const named = [...unit.querySelectorAll(".set-label, .set-hint")].filter((n) => !n.closest("[data-search-row]"));
+        const own = whole || (named.length > 0 ? has(named.map((n) => n.textContent).join(" ")) : all.length === 0 && has(unit.textContent));
+        const byName = (row: Element) => has((row.querySelector("[data-search-name]") ?? row).textContent);
         let rows = 0;
-        for (const row of unit.querySelectorAll("[data-search-row]")) {
-          const hit = own || has((row.querySelector("[data-search-name]") ?? row).textContent);
+        for (const row of all) {
+          // A row inside a row (the spaces listed by a setting) is found with it.
+          const around = row.parentElement?.closest("[data-search-row]");
+          const hit = own || byName(row) || (!!around && byName(around));
           light(row, hit);
           if (hit) rows++;
         }
+        // A setting with a matching row inside stays lit.
+        for (const row of all) if (row.querySelector("[data-search-row]:not([data-dim])")) light(row, true);
         // A card with a matching row stays lit; its other rows are grey.
         light(unit, own || rows > 0);
         if (own || rows > 0) hits++;
       }
     }
-    section.toggleAttribute("data-miss", hits === 0);
+    // One section opened from a search stays, also without a match in it.
+    section.toggleAttribute("data-miss", hits === 0 && !section.hasAttribute("data-search-keep"));
     if (hits > 0 && section.dataset.searchId) found.push(section.dataset.searchId);
   }
   return found;
+}
+
+/** The name of the highlight that marks the typed words (`::highlight` in index.css). */
+const MARKED = "settings-search";
+
+/**
+ * Marks the typed words where they stand in the names and descriptions of
+ * the settings found below `root`. The page is not changed for it: the
+ * words are ranges of a CSS highlight.
+ */
+function mark(root: HTMLElement, query: string) {
+  if (!CSS.highlights) return;
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const ranges: Range[] = [];
+  const texts = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let node = texts.nextNode(); node; node = texts.nextNode()) {
+    const within = node.parentElement;
+    if (!within?.closest(".set-label, .set-hint, [data-search-name], [data-search-row]") || within.closest("[data-dim], [data-miss], select")) continue;
+    const text = (node.textContent ?? "").toLowerCase();
+    for (const word of words) {
+      for (let at = text.indexOf(word); at >= 0; at = text.indexOf(word, at + word.length)) {
+        const range = new Range();
+        range.setStart(node, at);
+        range.setEnd(node, at + word.length);
+        ranges.push(range);
+      }
+    }
+  }
+  CSS.highlights.set(MARKED, new Highlight(...ranges));
+}
+
+/**
+ * Marks what `query` finds below the element the returned ref is on, and
+ * again whenever that changes: sections change after they are drawn (lists
+ * that load, a switch that brings more settings). `onFound` hears which
+ * sections hold a match.
+ */
+function useMarked(query: string, onFound?: (ids: string[]) => void) {
+  const root = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const apply = () => {
+      const found = filter(el, query);
+      mark(el, query);
+      onFound?.(found);
+    };
+    apply();
+    // Other words, other settings: back to the top of the page.
+    el.closest("main")?.scrollTo(0, 0);
+    const changes = new MutationObserver(apply);
+    changes.observe(el, { childList: true, subtree: true, characterData: true });
+    return () => {
+      changes.disconnect();
+      CSS.highlights?.delete(MARKED);
+    };
+  }, [query, onFound]);
+  return root;
+}
+
+/**
+ * One section opened while a search is typed: all its settings, those the
+ * search did not find greyed out.
+ */
+export function SearchedSection({ query, section, children }: { query: string; section: SearchSection; children: React.ReactNode }) {
+  const root = useMarked(query);
+  return (
+    <div ref={root}>
+      <section data-search-id={section.id} data-search-section={section.title} data-search-keep>
+        <div className="space-y-4" data-search-body>{children}</div>
+      </section>
+    </div>
+  );
 }
 
 /**
@@ -61,20 +144,7 @@ function filter(root: HTMLElement, query: string): string[] {
  * none does.
  */
 export function SearchResults({ query, sections, body, open, onFound, none }: { query: string; sections: SearchSection[]; body: (id: string) => React.ReactNode; open: (id: string) => void; onFound: (ids: string[]) => void; none: boolean }) {
-  const root = useRef<HTMLDivElement>(null);
-  // Sections change after they are drawn (lists that load, a switch that
-  // brings more settings): marked again whenever they do.
-  useLayoutEffect(() => {
-    const el = root.current;
-    if (!el) return;
-    const apply = () => onFound(filter(el, query));
-    apply();
-    // Other words, other settings: back to the top of the page.
-    el.closest("main")?.scrollTo(0, 0);
-    const changes = new MutationObserver(apply);
-    changes.observe(el, { childList: true, subtree: true, characterData: true });
-    return () => changes.disconnect();
-  }, [query, onFound]);
+  const root = useMarked(query, onFound);
   return (
     <>
       <div ref={root} className="flex flex-col gap-8">
@@ -84,7 +154,7 @@ export function SearchResults({ query, sections, body, open, onFound, none }: { 
               <s.Icon width={15} height={15} />
               {s.title}
             </button>
-            <div className="space-y-3" data-search-body>{body(s.id)}</div>
+            <div className="space-y-4" data-search-body>{body(s.id)}</div>
           </section>
         ))}
       </div>

@@ -96,7 +96,7 @@ the answer:
   "Start browsing". It shows only on macOS, and only while another app
   opens web links. Turning it on changes nothing yet: after
   "Start browsing" Magnetite asks macOS, which asks the user to confirm
-  (Settings → General has the same, `Default browser` below).
+  (Settings → Links has the same, `Default browser` below).
 - If a chosen browser cannot be read at the end, nothing is imported: the
   page stays, names the browser and the reason, and leaves it out of the
   next try.
@@ -127,7 +127,7 @@ page (`import.md`).
 
 ## Default browser
 
-Settings → General shows whether Magnetite opens links from other apps
+Settings → Links shows whether Magnetite opens links from other apps
 (the system's handler for `https`; any copy of Magnetite counts, since
 macOS keeps the default by the app's identifier). While it does not, "Make default" asks
 macOS to make it the handler for `http` and `https`; macOS asks the user to

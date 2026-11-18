@@ -6,7 +6,7 @@ import { TokenForm } from "../SmartFolderDialog";
 import { normaliseHost, send, type Service, type SmartSource, type UiState } from "../bridge";
 import { useArmed } from "../dismiss";
 import { DEFAULT_SOURCES, SERVICES, SERVICE_LABEL, ago, smartFolders } from "../smart";
-import { Field } from "./fields";
+import { Field, Group } from "./fields";
 
 const SHOW_LABEL = { pull_requests: "Mine + review requests", review_requests: "Review requests", my_pull_requests: "Mine", assigned_issues: "Issues assigned to me" } as const;
 
@@ -52,7 +52,7 @@ export function SmartFoldersSection() {
     : connect === "youtrack" ? { ...DEFAULT_SOURCES.youtrack, url: host }
     : { ...DEFAULT_SOURCES.github, host };
   return (
-    <>
+    <Group>
       <Field label="Folders" hint="Right-click any folder in the sidebar to turn it into a smart folder.">
         <div className="list">
           {folders.length === 0 && <div className="list-empty">No smart folders yet.</div>}
@@ -113,6 +113,6 @@ export function SmartFoldersSection() {
           <button className="btn mt-3" onClick={() => startConnect("github")}>Connect an account</button>
         )}
       </Field>
-    </>
+    </Group>
   );
 }

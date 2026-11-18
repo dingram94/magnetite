@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import appIcon from "../assets/icon.png?url";
 import { BugIcon, CodeIcon, ExternalIcon, GlobeIcon, NotesIcon, PrivacyIcon, type IconComponent } from "../Icons";
 import { onUpdate, send, type UpdateInfo } from "../bridge";
-import { Field, Toggle } from "./fields";
+import { Field, Group, Toggle } from "./fields";
 import type { Info, SettingsPatch } from "./types";
 
 const WEBSITE = "https://magnetitebrowser.org";
@@ -36,6 +36,7 @@ export function About({ info, update }: { info: Info; update: (patch: SettingsPa
 
       <Updates checkUpdates={info.settings.check_updates} update={update} />
 
+      <Group>
       <Field label="Project" hint={repo ? undefined : "The source repository is not published yet; its links follow once it is."}>
         <div className="grid grid-cols-2 gap-2">
           {links.map(({ label, url, Icon }) => (
@@ -55,6 +56,7 @@ export function About({ info, update }: { info: Info; update: (patch: SettingsPa
           <button className="btn" onClick={() => open("chrome://credits")}>Chromium licences</button>
         </div>
       </Field>
+      </Group>
 
       <p className="set-hint px-1 pt-2">© the Magnetite contributors. Magnetite is an independent project, not affiliated with The Browser Company.</p>
     </>
@@ -81,10 +83,10 @@ function Updates({ checkUpdates, update }: { checkUpdates: boolean; update: (pat
     : u?.system ? st.error
     : `The last check failed: ${st.error}`;
   return (
-    <>
-      <div className="set-card">
+    <Group>
+      <div className="set-row" data-search-row>
         <div className="flex items-start gap-4">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1" data-search-name>
             <div className="set-label">Updates</div>
             <p className="set-hint" role="status">{line}</p>
           </div>
@@ -101,10 +103,10 @@ function Updates({ checkUpdates, update }: { checkUpdates: boolean; update: (pat
       {/* A system package never asks GitHub: the switch would do nothing. */}
       {!u?.system && <Toggle
         label="Check for updates automatically"
-        hint="At start and once a day Magnetite asks the project's release page on GitHub whether a new version exists. Only that request is sent: no identifiers, no usage data. Updates are signed; Magnetite installs only what the project's release key signed."
+        hint="At start and once a day Magnetite asks the project's release page on GitHub for a new version: no identifiers, no usage data. Only updates signed with the project's release key are installed."
         checked={checkUpdates}
         onChange={(v) => update({ check_updates: v })}
       />}
-    </>
+    </Group>
   );
 }

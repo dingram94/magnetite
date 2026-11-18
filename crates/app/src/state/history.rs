@@ -1,6 +1,6 @@
 //! History: the pages visited on this device, kept in `history.json` next
 //! to `state.json`. Never synced, nothing from private profiles, only web
-//! pages, and only as long as Settings → Tabs & archive says.
+//! pages, and only as long as Settings → Data & privacy says.
 
 use std::path::{Path, PathBuf};
 

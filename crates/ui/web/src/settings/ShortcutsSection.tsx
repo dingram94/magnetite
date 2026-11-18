@@ -1,6 +1,7 @@
 // Settings → Shortcuts: every shortcut whose keys can be changed, with the
 // keys it has, and the spaces, each of which can have keys that go to it.
 // "Change" waits for the next key press and saves it.
+import { Field, Group } from "./fields";
 import { useEffect, useRef, useState } from "react";
 import { SpaceGlyph } from "../Glyphs";
 import { accentCss, send } from "../bridge";
@@ -121,24 +122,22 @@ export function ShortcutsSection({ info, reload }: { info: Info; reload: () => v
     );
   };
 
+  const first = SHORTCUT_GROUPS[0];
   // Saved keys count, also those that do nothing here: "Reset all" clears them too.
   const changed = info.shortcuts.some((s) => s.keys !== s.default) || info.spaces.some((s) => s.shortcut);
   return (
     <>
       {SHORTCUT_GROUPS.map((group) => (
-        <div key={group.label} className="set-card">
-          <div className="set-label">{group.label}</div>
-          <div className="mt-2 flex flex-col">
+        <Group key={group.label} title={group.label} fold={first === group ? "open" : "closed"} count={`${Object.keys(group.actions).length} commands`}>
+          <div className="set-list">
             {(Object.keys(group.actions) as ShortcutAction[]).map((action) =>
               row({ kind: "action", action }, action, <span className="min-w-0 flex-1 truncate" data-search-name>{SHORTCUT_LABEL[action]}</span>),
             )}
           </div>
-        </div>
+        </Group>
       ))}
-      <div className="set-card">
-        <div className="set-label">Spaces</div>
-        <p className="set-hint mt-1">Keys that go straight to one space. The first nine also have the digits of their place.</p>
-        <div className="mt-2 flex flex-col">
+      <Group title="Spaces" fold="closed" count={`${info.spaces.length} ${info.spaces.length === 1 ? "space" : "spaces"}`} hint="Keys that go straight to one space. The first nine also have the digits of their place.">
+        <div className="set-list">
           {info.spaces.map((space) =>
             row(
               { kind: "space", id: space.id },
@@ -150,13 +149,12 @@ export function ShortcutsSection({ info, reload }: { info: Info; reload: () => v
             ),
           )}
         </div>
-      </div>
-      <div className="set-card flex items-center gap-4">
-        <p className="set-hint min-w-0 flex-1">
-          Changed shortcuts sync to your other devices with the rest of your settings, a space's keys with the space. Reload, back, forward, zoom, the digits that choose a tab or a space, and the quick search from anywhere keep their keys.
-        </p>
-        <button className="btn" disabled={!changed} title="Every shortcut gets its default keys back; the spaces have no keys of their own" onClick={() => reset()}>Reset all</button>
-      </div>
+      </Group>
+      <Group>
+        <Field side label="All shortcuts" hint="Changed shortcuts sync to your other devices, a space's keys with the space. Reload, back, forward, zoom, the digits that choose a tab or a space, and the quick search from anywhere keep their keys.">
+          <button className="btn" disabled={!changed} title="Every shortcut gets its default keys back; the spaces have no keys of their own" onClick={() => reset()}>Reset all</button>
+        </Field>
+      </Group>
     </>
   );
 }
