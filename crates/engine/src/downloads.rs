@@ -75,6 +75,12 @@ impl Engine {
         }
     }
 
+    /// Whether a dialog of the system's can open now: there is a window
+    /// to open it over.
+    pub fn can_open_dialog(&self) -> bool {
+        self.dialog_host().is_some()
+    }
+
     /// Let the user choose a folder in the system's dialog, starting at
     /// `start`. `done` gets it on the UI thread, or `None` when the dialog
     /// was closed without a choice or could not open.
