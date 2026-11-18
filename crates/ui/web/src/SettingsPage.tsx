@@ -207,7 +207,7 @@ export function SettingsPage() {
           </Group>
           <Group title="Text and languages">
             <Toggle label="Check spelling as you type" hint="Marks words the spell checker does not know, in the text fields of web pages." checked={settings.languages.spellcheck} onChange={(spellcheck) => void send({ cmd: "set_settings", settings: { languages: { spellcheck } } }).then(reload, reload).catch(() => {})} />
-            <WebLanguages key={settings.languages.languages.join()} saved={settings.languages.languages} save={(languages) => send({ cmd: "set_settings", settings: { languages: { languages } } }).then(reload)} />
+            <WebLanguages key={settings.languages.languages.join()} saved={settings.languages.languages} save={(languages) => send({ cmd: "set_settings", settings: { languages: { languages } } }).then(() => void reload().catch(() => undefined))} />
           </Group>
           <Group title="Command bar">
           <Toggle label="Quick search from anywhere (⌥⌘N)" hint="Opens the command bar over any app; what you pick opens in a mini window. Only that key combination reaches Magnetite, no other typing." checked={settings.quick_search} onChange={(v) => update({ quick_search: v })} />
@@ -562,7 +562,7 @@ function DefaultBrowserCard({ state }: { state: DefaultBrowser }) {
 }
 
 /** A language tag as the app keeps one (`is_tag` in the engine's `languages.rs`). */
-const LANGUAGE_TAG = /^[a-z]{2,3}(-[a-z0-9]{2,8})*$/i;
+const LANGUAGE_TAG = /^[a-z]{2,3}(-[a-z]{4})?(-([a-z]{2}|\d{3}))?(-([a-z0-9]{5,8}|\d[a-z0-9]{3}))*$/i;
 /** The most languages the app keeps (`MAX_LANGUAGES`). */
 const MAX_LANGUAGES = 10;
 
@@ -575,7 +575,13 @@ function WebLanguages({ saved, save }: { saved: string[]; save: (languages: stri
   // The app did not take the list: the field says so and keeps what was typed.
   const [refused, setRefused] = useState(false);
   // As the app keeps them: each once, whatever its case, and no more than it takes.
-  const typed = text.split(/[\s,;]+/).filter((tag, i, all) => tag && all.findIndex((t) => t.toLowerCase() === tag.toLowerCase()) === i);
+  const known = new Set<string>();
+  const typed = text.split(/[\s,;]+/).filter((tag) => {
+    const lower = tag.toLowerCase();
+    if (!tag || known.has(lower)) return false;
+    known.add(lower);
+    return true;
+  });
   const many = typed.length > MAX_LANGUAGES;
   const wrong = typed.filter((t) => !LANGUAGE_TAG.test(t));
   return (

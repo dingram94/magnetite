@@ -38,15 +38,24 @@ impl Default for LanguagePrefs {
 const SPELLCHECK: &str = "browser.enable_spellchecking";
 
 /// Whether `tag` is a language tag as websites are sent them: a language
-/// of two or three letters, then parts of two to eight letters and digits
-/// (`en-US`, `zh-Hant-TW`). A part of one letter starts an extension, which
-/// no website is asked for.
+/// of two or three letters, then, each at most once and in this order, a
+/// script of four letters and a region of two letters or three digits
+/// (`en-US`, `zh-Hant-TW`, `es-419`), then variants (`de-1996`). Extensions
+/// and private parts, which start with a single letter, are none.
 fn is_tag(tag: &str) -> bool {
-    let mut parts = tag.split('-');
+    let letters = |p: &str, n: usize| p.len() == n && p.bytes().all(|b| b.is_ascii_alphabetic());
+    let mut parts = tag.split('-').peekable();
     let language = parts.next().unwrap_or_default();
-    (2..=3).contains(&language.len())
-        && language.bytes().all(|b| b.is_ascii_alphabetic())
-        && parts.all(|p| (2..=8).contains(&p.len()) && p.bytes().all(|b| b.is_ascii_alphanumeric()))
+    if !(letters(language, 2) || letters(language, 3)) {
+        return false;
+    }
+    parts.next_if(|p| letters(p, 4));
+    parts.next_if(|p| letters(p, 2) || (p.len() == 3 && p.bytes().all(|b| b.is_ascii_digit())));
+    parts.all(|p| {
+        let b = p.as_bytes();
+        b.iter().all(u8::is_ascii_alphanumeric)
+            && ((5..=8).contains(&b.len()) || (b.len() == 4 && b[0].is_ascii_digit()))
+    })
 }
 
 impl LanguagePrefs {
@@ -55,11 +64,16 @@ impl LanguagePrefs {
     pub fn sanitised(mut self) -> Self {
         let mut kept: Vec<String> = Vec::new();
         for tag in std::mem::take(&mut self.languages) {
-            let tag = tag.trim().to_string();
-            let known = kept.iter().any(|k| k.eq_ignore_ascii_case(&tag));
-            if is_tag(&tag) && !known && kept.len() < MAX_LANGUAGES {
-                kept.push(tag);
+            if kept.len() == MAX_LANGUAGES {
+                break;
             }
+            let trimmed = tag.trim();
+            if !is_tag(trimmed) || kept.iter().any(|k| k.eq_ignore_ascii_case(trimmed)) {
+                continue;
+            }
+            // The string that came in, unless it had spaces around it.
+            let cut = (trimmed.len() != tag.len()).then(|| trimmed.to_string());
+            kept.push(cut.unwrap_or(tag));
         }
         self.languages = kept;
         self
@@ -71,12 +85,12 @@ impl LanguagePrefs {
     pub fn accept_languages(&self) -> String {
         self.languages.join(",")
     }
+}
 
-    /// Set spell check on `ctx`. False if Chromium refused (a context that
-    /// is not initialised yet does; it gets it in `prepare_context`).
-    pub(crate) fn apply(&self, ctx: &RequestContext) -> bool {
-        set_bool_pref(ctx, SPELLCHECK, self.spellcheck)
-    }
+/// Turn spell check on or off in `ctx`. False if Chromium refused (a context
+/// that is not initialised yet does; it gets it in `prepare_context`).
+pub(crate) fn apply_spellcheck(ctx: &RequestContext, on: bool) -> bool {
+    set_bool_pref(ctx, SPELLCHECK, on)
 }
 
 impl Engine {
@@ -93,7 +107,7 @@ impl Engine {
             .into_iter()
             .chain(contexts)
         {
-            prefs.apply(&ctx);
+            apply_spellcheck(&ctx, prefs.spellcheck);
         }
     }
 }
@@ -115,13 +129,21 @@ mod tests {
                 "x",
                 "de;q=0.5",
                 "en-a",
+                "en-12",
+                "es-419",
+                "de-1996",
+                "en-US-US",
+                "e",
                 "en\r\nX-Evil: 1",
                 "english",
             ]
             .map(String::from)
             .to_vec(),
         };
-        assert_eq!(prefs.sanitised().languages, ["de", "en-US", "zh-Hant-TW"]);
+        assert_eq!(
+            prefs.sanitised().languages,
+            ["de", "en-US", "zh-Hant-TW", "es-419", "de-1996"]
+        );
         let many = LanguagePrefs {
             spellcheck: false,
             languages: (0..40)
