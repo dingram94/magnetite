@@ -658,7 +658,9 @@ function WebLanguages({ saved, save }: { saved: string[]; save: (languages: stri
     return true;
   });
   const many = typed.length > MAX_LANGUAGES;
-  const wrong = typed.filter((t) => !LANGUAGE_TAG.test(t));
+  // No language code, or one that names a variant twice.
+  const twice = (tag: string) => tag.toLowerCase().split("-").some((part, i, all) => part.length > 3 && all.indexOf(part) !== i);
+  const wrong = typed.filter((t) => !LANGUAGE_TAG.test(t) || twice(t));
   return (
     <Field label="Languages websites are asked for" hint="In the order you prefer them, as language codes: de, en-US, en. A website with several languages can choose by them. Empty: the languages of your system. A change counts from the next start of Magnetite.">
       <input
@@ -677,7 +679,8 @@ function WebLanguages({ saved, save }: { saved: string[]; save: (languages: stri
       />
       {wrong.length > 0 && <p className="set-hint" style={{ color: "var(--danger)" }}>Not saved: {wrong.join(", ")} {wrong.length === 1 ? "is no language code" : "are no language codes"}.</p>}
       {wrong.length === 0 && many && <p className="set-hint" style={{ color: "var(--danger)" }}>Not saved: no more than {MAX_LANGUAGES} languages.</p>}
-      {refused && <p className="set-hint" style={{ color: "var(--danger)" }}>Not saved: that did not work. Leave the field again to try once more.</p>}
+      {/* Said aloud: it comes after the field was left. */}
+      {refused && <p className="set-hint" role="alert" style={{ color: "var(--danger)" }}>Not saved: that did not work. Leave the field again to try once more.</p>}
     </Field>
   );
 }
