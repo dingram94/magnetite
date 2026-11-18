@@ -217,6 +217,26 @@ or written without one of these actions.
 | `Cmd+G`, `Cmd+Shift+G` | Next or previous match of the last search; also Enter and Shift+Enter in the find bar | the page keeps it |
 | `Cmd++`, `Cmd+-`, `Cmd+0` | Zoom in, out, 100 % | Chromium's own command |
 
+## Deleting the data of all websites
+
+Settings → Data & privacy → "Cookies, site data and cache" has "Delete…".
+It opens Chromium's own dialog "Delete browsing data" over the page, as the
+lists of saved passwords open (`passwords-and-autofill.md`).
+
+- The dialog deletes what websites stored on this computer: cookies and
+  other site data, and the cache, of the last 15 minutes up to all time.
+  Deleting cookies signs the user out of websites.
+- It works on one set of logins. With more than one, a list next to
+  "Delete…" chooses which, starting with those of the space in front; a
+  private profile is not offered, it keeps nothing.
+- The "Browsing history" and "Download history" the dialog names are
+  Chromium's own records, not Magnetite's history (`history.md`) or its
+  list of downloads, which have "Clear" of their own.
+- One site's data is deleted in its site panel (above).
+
+Chromium deletes: Magnetite has no way of its own to name every site that
+has stored something.
+
 ## What is stored
 
 | Data | Where | Until |

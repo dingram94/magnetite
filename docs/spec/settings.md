@@ -25,6 +25,8 @@ The list has four groups:
   archive keeps them, the order of Ctrl+Tab and what the archive button
   opens.
 - **Data & privacy** has the history (how long it is kept, clearing it),
+  deleting the cookies, site data and cache of all websites
+  (`site-controls.md`),
   the import from another browser or a bookmarks file, the servers
   Magnetite talks to, each with what for, and where the data lives.
 
