@@ -558,7 +558,8 @@ export type Command =
   | { cmd: "make_default_browser" }
   /** The system's dialog for the folder downloads are saved to; answers with the settings' `downloads` once it is closed. */
   | { cmd: "choose_download_folder" }
-  | { cmd: "set_settings"; settings: Partial<Settings> }
+  /** What is named changes; `downloads` may name one of its two parts. */
+  | { cmd: "set_settings"; settings: Partial<Omit<Settings, "downloads">> & { downloads?: Partial<DownloadPrefs> } }
   /** Store an own image (WebP as base64) for `slot` of space `space`, or remove it (`null`). Settings page only. */
   | { cmd: "set_appearance_image"; slot: "empty" | "sidebar"; space: Id; data: string | null }
   | { cmd: "get_settings" }
