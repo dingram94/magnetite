@@ -96,14 +96,15 @@ export function Notifications() {
     .filter((d) => !closed.has(d.id))
     .filter((d) => d.status === "in_progress" || now < d.changed_at + LINGER || (holding && held.has(d.id)))
     .slice(0, MAX);
-  // What shows while the pointer is on the panel is held: also a card that
-  // came after the pointer.
+  // What shows while the pointer is on the panel is what is held: also a
+  // card that came after the pointer, and no longer one that newer cards
+  // pushed out or that was closed.
   const showing = shown.map((d) => d.id).join();
   useEffect(() => {
     if (!hover) return;
     setHeld((was) => {
       const ids = showing ? showing.split(",") : [];
-      return ids.every((id) => was.has(id)) ? was : new Set([...was, ...ids]);
+      return ids.length === was.size && ids.every((id) => was.has(id)) ? was : new Set(ids);
     });
   }, [hover, showing]);
 
@@ -140,9 +141,12 @@ export function Notifications() {
       ref={root}
       className="notifications"
       onMouseEnter={() => {
-        // Held from here on are the cards that show now, not those of the last time.
-        setHeld(new Set());
-        setNow(Date.now() / 1000);
+        // Held from here on are the cards that show now, not those of the
+        // last time: unless the pointer is back within the two seconds
+        // its cards stay for.
+        const at = Date.now() / 1000;
+        if (at >= leftAt + 2) setHeld(new Set());
+        setNow(at);
         setHover(true);
       }}
       onMouseLeave={() => {
