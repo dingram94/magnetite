@@ -24,7 +24,9 @@ as in a browser without the signal.
 
 - The switch counts at once for requests. An open page gets the property
   with its next document (a reload, a new address).
-- Magnetite's own pages, extensions and Chromium's pages get neither.
+- Magnetite's own pages, the pages of extensions and Chromium's pages get
+  neither: the signal goes by the address asked for. A request an
+  extension makes to a web address carries the header as any other.
 - The older "Do Not Track" header is not sent.
 
 Chromium has no such signal of its own: the header is added on the way out
