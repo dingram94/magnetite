@@ -1391,6 +1391,8 @@ impl MagnetiteApp {
                                 s.settings.downloads.clone()
                             });
                             engine.set_downloads(&downloads);
+                            // Kept also if the app ends without a proper quit.
+                            app.save_soon();
                             let reply = json!({ "downloads": downloads }).to_string();
                             engine.finish_reply(ticket, Ok(reply));
                         }),
@@ -1701,6 +1703,7 @@ impl MagnetiteApp {
             }
             UiCommand::SetSettings { settings: patch } => {
                 let before = self.with_state(|s| s.settings.adblock.clone());
+                let downloads_before = self.with_state(|s| s.settings.downloads.clone());
                 let (settings, code_changed) = self.with_state(|s| {
                     let settings = s.settings.patched(patch)?;
                     let code_changed = settings.site_code != s.settings.site_code;
@@ -1717,7 +1720,11 @@ impl MagnetiteApp {
                     .set_chrome_toolbar(settings.chrome_toolbar || engine.config().chrome_toolbar);
                 Self::apply_devtools_dock(engine, settings.devtools_dock);
                 engine.set_autofill(settings.autofill);
-                engine.set_downloads(&settings.downloads);
+                // Only when they changed: setting them also moves the
+                // folder "Save as" starts in back to this one.
+                if settings.downloads != downloads_before {
+                    engine.set_downloads(&settings.downloads);
+                }
                 engine.set_quick_search_key(settings.quick_search);
                 self.dev_settings_changed(engine);
                 // Open pages get changed CSS at once.

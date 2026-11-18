@@ -206,8 +206,9 @@ export function SettingsPage() {
           <Toggle label="Pop out playing videos" hint="When you leave a tab with a playing video, it continues in a floating picture-in-picture window. Coming back puts it into the page again." checked={settings.auto_pip} onChange={(v) => update({ auto_pip: v })} />
           </Group>
           <Group title="Downloads">
-            <DownloadFolder folder={settings.downloads.folder} missing={info.download_folder_missing} reset={() => update({ downloads: { ...settings.downloads, folder: "" } })} chosen={() => void reload()} />
-            <Toggle label="Ask where to save each file" hint="A dialog for every download, to name the file and its folder." checked={settings.downloads.ask} onChange={(ask) => update({ downloads: { ...settings.downloads, ask } })} />
+            {/* Each sends its own part only: the other one may be newer than this page knows. */}
+            <DownloadFolder folder={settings.downloads.folder} missing={info.download_folder_missing} reset={() => void send({ cmd: "set_settings", settings: { downloads: { folder: "" } } }).then(reload)} chosen={() => void reload()} />
+            <Toggle label="Ask where to save each file" hint="A dialog for every download, to name the file and its folder." checked={settings.downloads.ask} onChange={(ask) => void send({ cmd: "set_settings", settings: { downloads: { ask } } }).then(reload)} />
           </Group>
           <Group title="Command bar">
           <Toggle label="Quick search from anywhere (⌥⌘N)" hint="Opens the command bar over any app; what you pick opens in a mini window. Only that key combination reaches Magnetite, no other typing." checked={settings.quick_search} onChange={(v) => update({ quick_search: v })} />
@@ -577,7 +578,7 @@ function DownloadFolder({ folder, missing, reset, chosen }: { folder: string; mi
         {folder && <button className="btn ghost" onClick={reset}>Reset</button>}
         <button className="btn" disabled={choosing} onClick={choose}>Choose…</button>
       </div>
-      {missing && <p className="set-hint" style={{ color: "var(--warn)" }}>This folder is not there right now.</p>}
+      {missing && folder && <p className="set-hint" style={{ color: "var(--warn)" }}>This folder is not there right now.</p>}
     </Field>
   );
 }
