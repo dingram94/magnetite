@@ -1811,6 +1811,14 @@ impl MagnetiteApp {
             UiCommand::OpenEnginePage { page, profile } => {
                 // Over the page in front (Settings), in the logins asked
                 // for: each profile has its own passwords and addresses.
+                // Logins asked for that are gone are an error: the peek
+                // would open in those of the space in front, and the page
+                // may delete data.
+                if let Some(id) = &profile
+                    && self.with_state(|s| s.profile_for_context(id).is_none())
+                {
+                    return Err("Those logins are gone.".into());
+                }
                 let context = profile.or_else(|| self.with_state(|s| Some(s.default_profile_id())));
                 self.open_peek(
                     engine,
