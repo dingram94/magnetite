@@ -880,6 +880,25 @@ pub(super) enum UiCommand {
 }
 
 impl MagnetiteApp {
+    /// The logins a command of Settings → Permissions names, as the engine
+    /// takes them: none for the default profile, which no id or its own id
+    /// names. An id that is no profile (any more) is an error: its choices
+    /// must not be read from, or written to, the default profile in its
+    /// place.
+    fn permission_logins(
+        &self,
+        profile: Option<&str>,
+    ) -> Result<Option<magnetite_engine::ContextProfile>, String> {
+        let Some(id) = profile else { return Ok(None) };
+        self.with_state(|s| {
+            if s.sidebar.profiles.iter().any(|p| p.id == id) {
+                Ok(s.context(Some(id)))
+            } else {
+                Err("Those logins are gone.".into())
+            }
+        })
+    }
+
     pub(super) fn handle_command(&self, engine: &Engine, cmd: UiCommand) -> Result<Value, String> {
         match cmd {
             UiCommand::Ready => {
@@ -2156,7 +2175,7 @@ impl MagnetiteApp {
             UiCommand::DeviceGet { page } => return Ok(engine.device_config(page)),
             UiCommand::DeviceSet { page, config } => engine.set_device_config(page, config),
             UiCommand::AllPermissions { profile } => {
-                let context = self.with_state(|s| s.context(profile.as_deref()));
+                let context = self.permission_logins(profile.as_deref())?;
                 return Ok(json!({ "rows": engine.all_permissions(context.as_ref()) }));
             }
             UiCommand::SetProfilePermission {
@@ -2165,8 +2184,10 @@ impl MagnetiteApp {
                 kind,
                 value,
             } => {
-                let context = self.with_state(|s| s.context(profile.as_deref()));
-                engine.set_permission(context.as_ref(), &origin, kind, value);
+                let context = self.permission_logins(profile.as_deref())?;
+                if !engine.set_permission(context.as_ref(), &origin, kind, value) {
+                    return Err("That is no website's address.".into());
+                }
             }
             UiCommand::SitePermissions => {
                 let rows = self
