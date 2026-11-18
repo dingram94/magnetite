@@ -53,6 +53,7 @@ mod overlay;
 mod panel_close;
 #[cfg(target_os = "macos")]
 mod pip;
+mod privacy;
 mod prompts;
 mod router;
 mod scheme;
@@ -82,6 +83,7 @@ pub use events::{
 pub use extensions::ExtensionInfo;
 pub use keymap::{Action, Combo, KeysError, Overrides};
 pub use media::{MediaAction, MediaState};
+pub use privacy::set_global_privacy_control;
 pub use prompts::{PermissionPrompt, PromptAnswer, PromptKind};
 pub use router::ReplyTicket;
 pub use scheme::user_image_dir;

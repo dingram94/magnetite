@@ -1682,6 +1682,7 @@ impl MagnetiteApp {
                     .set_chrome_toolbar(settings.chrome_toolbar || engine.config().chrome_toolbar);
                 Self::apply_devtools_dock(engine, settings.devtools_dock);
                 engine.set_autofill(settings.autofill);
+                magnetite_engine::set_global_privacy_control(settings.global_privacy_control);
                 engine.set_quick_search_key(settings.quick_search);
                 self.dev_settings_changed(engine);
                 // Open pages get changed CSS at once.

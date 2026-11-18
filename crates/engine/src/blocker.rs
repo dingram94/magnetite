@@ -215,17 +215,25 @@ fn decide(url: &str, source: &str, kind: ResourceType, method: &str) -> Verdict 
 }
 
 /// The script a page at `url` is to run before its own, with the filters
-/// and allowed sites in use: the lists' scriptlets for it. Empty for none,
-/// as for every page that is no web page.
+/// and allowed sites in use: the lists' scriptlets for it, after the privacy
+/// signal while that is on (`privacy.rs`). Empty for none, as for every
+/// page that is no web page.
 fn page_script(url: &str) -> String {
     if !is_web(url) {
         return String::new();
     }
-    filters_for(url).map_or_else(String::new, |f| f.page_script(url))
+    let lists = filters_for(url).map_or_else(String::new, |f| f.page_script(url));
+    // The privacy signal is a property of the page, set the same way.
+    if crate::privacy::on() {
+        format!("{};{lists}", crate::privacy::PAGE_SCRIPT)
+    } else {
+        lists
+    }
 }
 
 /// The handler for a request a browser (`browser`, if any: service workers
-/// have none) is about to make, when the blocker stops or changes it. The
+/// have none) is about to make, when the blocker stops or changes it or
+/// the privacy signal goes with it. The
 /// page counts as the source, so a site's own exceptions and the user's
 /// allowed sites hold for everything in it, also its frames; without a
 /// page, the request's initiator. The request for a page's document itself
@@ -235,12 +243,23 @@ pub(crate) fn resource_request_handler(
     request: Option<&Request>,
     initiator: Option<&CefString>,
 ) -> Option<ResourceRequestHandler> {
+    crate::privacy::with_signal(request, blocking_handler(browser, request, initiator))
+}
+
+/// `resource_request_handler` without the privacy signal.
+fn blocking_handler(
+    browser: Option<&Browser>,
+    request: Option<&Request>,
+    initiator: Option<&CefString>,
+) -> Option<ResourceRequestHandler> {
     // Nothing to ask while the blocker is off: the common case stays cheap.
     let filters = FILTERS.read().ok().and_then(|f| f.clone());
     let request = request?;
     if request.resource_type() == ResourceType::MAIN_FRAME {
         // Also with the blocker off again: a page may still have a script.
-        let scriptlets = filters.is_some_and(|f| f.scriptlets) || crate::scriptlets::in_use();
+        let scriptlets = filters.is_some_and(|f| f.scriptlets)
+            || crate::scriptlets::in_use()
+            || crate::privacy::on();
         return (scriptlets && browser.is_some()).then(|| crate::scriptlets::exchange(page_script));
     }
     filters?;
