@@ -367,7 +367,7 @@ export function SettingsPage() {
           <Field side label="Visited pages" hint={`${info.history_count} so far. Single pages can be removed in the history view.`}>
             <ClearHistory key={info.history_count} disabled={info.history_count === 0} onClear={() => send({ cmd: "clear_history" }).then(() => void reload())} />
           </Field>
-            <ClearBrowsingData info={info} />
+            <ClearBrowsingData info={info} reload={reload} />
           </Group>
           <Group title="Import">
           <ImportBrowsers />
@@ -600,13 +600,23 @@ function DownloadFolder({ folder, missing, reset, chosen }: { folder: string; mi
  * Deleting what websites left behind: Chromium's own dialog, for the logins
  * chosen here, to start with those of the space in front.
  */
-function ClearBrowsingData({ info }: { info: Info }) {
+function ClearBrowsingData({ info, reload }: { info: Info; reload: () => Promise<unknown> }) {
   const logins = info.profiles.filter((p) => !p.ephemeral);
   const inFront = info.spaces.find((s) => s.id === info.active_space)?.profile_id;
   const [chosen, setChosen] = useState<string | undefined>(undefined);
   // The logins chosen while they still exist (another window may have
   // deleted them), else those of the space in front, else the main ones.
   const profile = (logins.find((p) => p.id === chosen) ?? logins.find((p) => p.id === inFront) ?? logins.find((p) => p.is_default))?.id;
+  // The app refuses logins deleted since this page last read them: say so,
+  // and read again so the list offers those that are there.
+  const [failed, setFailed] = useState(false);
+  const open = () => {
+    setFailed(false);
+    send({ cmd: "open_engine_page", page: "clear_data", profile }).catch(() => {
+      setFailed(true);
+      void reload();
+    });
+  };
   return (
     <Field side label="Cookies, site data and cache" hint="Delete what websites have stored on this computer, for the last hour or for all time. Deleting cookies signs you out of websites. The dialog is Chromium's own; the history it names is not the one above.">
       <div className="flex flex-wrap gap-2">
@@ -615,8 +625,9 @@ function ClearBrowsingData({ info }: { info: Info }) {
             {logins.map((p) => <option key={p.id} value={p.id}>{p.is_default ? "Shared (your main logins)" : p.name}</option>)}
           </select>
         )}
-        <button className="btn" disabled={!profile} onClick={() => void send({ cmd: "open_engine_page", page: "clear_data", profile })}>Delete…</button>
+        <button className="btn" disabled={!profile} onClick={open}>Delete…</button>
       </div>
+      {failed && <p className="set-hint" role="alert" style={{ color: "var(--danger)" }}>The dialog could not be opened for those logins. Choose again.</p>}
     </Field>
   );
 }
