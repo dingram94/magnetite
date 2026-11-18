@@ -542,6 +542,7 @@ impl Settings {
         // A folder is a whole path; anything else means Chromium's own.
         if !std::path::Path::new(&self.downloads.folder).is_absolute() {
             self.downloads.folder.clear();
+        }
         if !magnetite_engine::ZOOM_STEPS.contains(&self.page_zoom) {
             self.page_zoom = defaults.page_zoom;
         }
@@ -774,6 +775,9 @@ mod tests {
         let mut odd = Settings::default();
         odd.downloads.folder = "Downloads".into();
         assert_eq!(odd.sanitised().downloads.folder, "");
+    }
+
+    #[test]
     fn the_page_zoom_is_one_of_chromiums_steps() {
         let zoom = |pct: u32| {
             let s = Settings {

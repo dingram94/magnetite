@@ -801,10 +801,12 @@ pub(crate) fn prepare_context(ctx: &RequestContext) -> bool {
     let downloads = Engine::global().lock().downloads.clone();
     if !downloads.apply(ctx) {
         crate::trace("cannot set the download preferences");
+    }
     // The zoom sites start with, as the user's settings have it.
     let zoom = Engine::global().lock().default_zoom;
     if zoom != 100 && !crate::site::apply_default_zoom(ctx, zoom) {
         crate::trace("cannot set the default zoom");
+    }
     // Spell check and languages as the user's settings have them.
     let languages = Engine::global().lock().languages.clone();
     if languages != crate::LanguagePrefs::default() && !languages.apply(ctx) {

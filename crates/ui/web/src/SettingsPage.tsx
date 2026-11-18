@@ -195,6 +195,7 @@ export function SettingsPage() {
           <Group title="Downloads">
             <DownloadFolder folder={settings.downloads.folder} missing={info.download_folder_missing} reset={() => update({ downloads: { ...settings.downloads, folder: "" } })} chosen={() => void reload()} />
             <Toggle label="Ask where to save each file" hint="A dialog for every download, to name the file and its folder." checked={settings.downloads.ask} onChange={(ask) => update({ downloads: { ...settings.downloads, ask } })} />
+          </Group>
           <Group title="Text and languages">
             <Toggle label="Check spelling as you type" hint="Marks words the spell checker does not know, in the text fields of web pages." checked={settings.languages.spellcheck} onChange={(spellcheck) => update({ languages: { ...settings.languages, spellcheck } })} />
             <WebLanguages key={settings.languages.languages.join()} saved={settings.languages.languages} save={(languages) => update({ languages: { ...settings.languages, languages } })} />
@@ -576,6 +577,10 @@ function DownloadFolder({ folder, missing, reset, chosen }: { folder: string; mi
         <button className="btn" disabled={choosing} onClick={choose}>Choose…</button>
       </div>
       {missing && <p className="set-hint" style={{ color: "var(--warn)" }}>This folder is not there right now.</p>}
+    </Field>
+  );
+}
+
 /** A language tag as the app keeps one (`is_tag` in the engine's `languages.rs`). */
 const LANGUAGE_TAG = /^[a-z]{2,3}(-[a-z0-9]{1,8})*$/i;
 
@@ -603,6 +608,11 @@ function WebLanguages({ saved, save }: { saved: string[]; save: (languages: stri
         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
       />
       {wrong.length > 0 && <p className="set-hint" style={{ color: "var(--danger)" }}>Not saved: {wrong.join(", ")} {wrong.length === 1 ? "is no language code" : "are no language codes"}.</p>}
+    </Field>
+  );
+}
+
+/**
  * Deleting what websites left behind: Chromium's own dialog, for the logins
  * chosen here, to start with those of the space in front.
  */
