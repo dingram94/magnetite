@@ -20,6 +20,9 @@ const fromHex = (h: string) => toColor(parseInt(h.slice(1, 3), 16), parseInt(h.s
 const sameColour = (a: Color | null | undefined, b: Color) => !!a && channels(a).join() === channels(b).join();
 
 /** The built-in sidebar effects; the user's own picture is offered once one is stored. */
+/** Chromium's zoom steps, in percent (`ZOOM_STEPS` in the engine). */
+const PAGE_ZOOM = [25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500];
+
 const EFFECTS = [["None", "none"], ["Grain", "grain"], ["Glow", "glow"], ["Aurora", "aurora"], ["Fade", "fade"]] as const;
 
 /**
@@ -134,6 +137,11 @@ export function AppearanceSection({ info, update, reload }: { info: Info; update
       </Field>
       <Field side label="Text size" hint="The sidebar, the command bar and these pages. Web pages zoom on their own with ⌘+ and ⌘−.">
         <Slider value={draft.text_scale} min={85} max={130} step={5} unit="%" reset={100} onChange={(v, now) => set({ text_scale: v }, now)} />
+      </Field>
+      <Field side label="Page zoom" hint="The zoom a website has until you zoom it yourself. A change counts from the next start of Magnetite.">
+        <select className="field" value={info.settings.page_zoom} aria-label="Page zoom" onChange={(e) => update({ page_zoom: Number(e.target.value) })}>
+          {PAGE_ZOOM.map((pct) => <option key={pct} value={pct}>{pct}%</option>)}
+        </select>
       </Field>
       <Field side label="Density" hint="Height and spacing of the sidebar rows.">
         <div className="seg">

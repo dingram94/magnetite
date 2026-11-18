@@ -122,6 +122,9 @@ pub(crate) struct Inner {
     /// Which parts of Chromium's password manager and autofill are on
     /// (`autofill.rs`), for the profiles made from now on.
     pub autofill: crate::AutofillPrefs,
+    /// The zoom, in percent, every site starts with (`site.rs`), for the
+    /// profiles made from now on.
+    pub default_zoom: u32,
     /// Pages the app muted. Kept here because a page gets its browser a
     /// moment after it is asked for: the mute is applied once it has one.
     pub muted: HashSet<ContentId>,
@@ -263,6 +266,7 @@ impl Engine {
                 quitting: false,
                 locks: HashMap::new(),
                 autofill: crate::AutofillPrefs::default(),
+                default_zoom: 100,
                 muted: HashSet::new(),
                 shares: crate::tabshare::Shares::default(),
                 mobile: HashSet::new(),
@@ -776,6 +780,11 @@ pub(crate) fn prepare_context(ctx: &RequestContext) -> bool {
         crate::trace("cannot set the password and autofill preferences");
     }
     crate::autofill::watch(ctx);
+    // The zoom sites start with, as the user's settings have it.
+    let zoom = Engine::global().lock().default_zoom;
+    if zoom != 100 && !crate::site::apply_default_zoom(ctx, zoom) {
+        crate::trace("cannot set the default zoom");
+    }
     set
 }
 

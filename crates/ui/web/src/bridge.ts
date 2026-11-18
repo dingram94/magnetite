@@ -194,6 +194,8 @@ export interface SiteState {
   cert_error: boolean;
   /** Percent, 100 = default. */
   zoom: number;
+  /** The zoom, in percent, the site has without one of its own. */
+  base_zoom?: number;
 }
 
 /** Chromium's zoom steps in percent (same list as the engine). */
@@ -355,6 +357,8 @@ export interface Settings {
   tab_order: "recent" | "sidebar";
   /** Chromium's password manager and autofill: which parts are on (Settings → Passwords & autofill). */
   autofill: { passwords: boolean; addresses: boolean; cards: boolean; breach_check: boolean };
+  /** The zoom, in percent, a site has until it is zoomed on its own (Settings → Appearance): one of Chromium's steps. */
+  page_zoom: number;
   /** The ad blocker (Settings → Ad blocking); this device's own choice, never synced. */
   /** Developer features (Settings → Developer). */
   developer: { enabled: boolean; hosts: string[] };
