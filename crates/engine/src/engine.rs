@@ -786,7 +786,8 @@ pub(crate) fn prepare_context(ctx: &RequestContext) -> bool {
     crate::autofill::watch(ctx);
     // Spell check and languages as the user's settings have them.
     let languages = Engine::global().lock().languages.clone();
-    if languages != crate::LanguagePrefs::default() && !languages.apply(ctx) {
+    // Also when it is on, as at first: a profile may still hold "off".
+    if !languages.apply(ctx) {
         crate::trace("cannot set the language preferences");
     }
     set

@@ -21,11 +21,13 @@ Neither is synced.
 
 - The languages are language codes such as `de`, `en-US` or `zh-Hant-TW`,
   typed with commas between and saved when the field is left. Up to ten
-  are kept, each once; anything that is no language code is not saved,
-  and the field says which.
+  are kept, each once. While one of them is no language code, or there are
+  more than ten, nothing is saved and the field says why: the whole list
+  is saved or none of it.
 - Websites get them as the `Accept-Language` header, in that order, and
   read them as `navigator.languages`. A website with several languages
-  answers in the first one it knows.
+  can choose by them; many answer in the first one they know, and some
+  go by a choice of their own, such as the one of an account.
 - An empty field gives websites the languages of the system, as before
   there was a setting.
 - A change counts from the next start of Magnetite: the engine takes the

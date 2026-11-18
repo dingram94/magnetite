@@ -543,7 +543,8 @@ export type Command =
   | { cmd: "open_mini"; url: string }
   /** The system asks the user; answers once they did. */
   | { cmd: "make_default_browser" }
-  | { cmd: "set_settings"; settings: Partial<Settings> }
+  /** What is named changes; `languages` may name one of its two parts. */
+  | { cmd: "set_settings"; settings: Partial<Omit<Settings, "languages">> & { languages?: Partial<Settings["languages"]> } }
   /** Store an own image (WebP as base64) for `slot` of space `space`, or remove it (`null`). Settings page only. */
   | { cmd: "set_appearance_image"; slot: "empty" | "sidebar"; space: Id; data: string | null }
   | { cmd: "get_settings" }
