@@ -782,7 +782,8 @@ pub(crate) fn prepare_context(ctx: &RequestContext) -> bool {
     crate::autofill::watch(ctx);
     // The zoom sites start with, as the user's settings have it.
     let zoom = Engine::global().lock().default_zoom;
-    if zoom != 100 && !crate::site::apply_default_zoom(ctx, zoom) {
+    // Also 100 percent: a profile may still hold an earlier choice.
+    if !crate::site::apply_default_zoom(ctx, zoom) {
         crate::trace("cannot set the default zoom");
     }
     set
