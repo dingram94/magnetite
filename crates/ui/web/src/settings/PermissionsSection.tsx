@@ -33,8 +33,11 @@ export function PermissionsSection({ info }: { info: Info }) {
   const [read, setRead] = useState<Read | null>(null);
   // Reading the list failed; and a change that failed, kept with the logins
   // it was for, to try it again.
-  const [unread, setUnread] = useState(false);
-  const [failed, setFailed] = useState<{ profile: string | undefined; row: PermissionEntry; value: PermissionEntry["value"] } | null>(null);
+  // Both by the logins they were for ("" for none named): what failed for
+  // one set of logins is neither shown nor forgotten with another.
+  const [unreadFor, setUnreadFor] = useState<string | null>(null);
+  const [failures, setFailures] = useState<Record<string, { row: PermissionEntry; value: PermissionEntry["value"] }>>({});
+  const key = profile ?? "";
   // The last read asked for: an answer to an earlier one is out of date.
   const asked = useRef(0);
   const load = useCallback(() => {
@@ -43,10 +46,10 @@ export function PermissionsSection({ info }: { info: Info }) {
       (r) => {
         if (mine !== asked.current) return;
         setRead({ profile, rows: r.rows ?? [] });
-        setUnread(false);
+        setUnreadFor(null);
       },
       () => {
-        if (mine === asked.current) setUnread(true);
+        if (mine === asked.current) setUnreadFor(profile ?? "");
       },
     );
   }, [profile]);
@@ -60,16 +63,17 @@ export function PermissionsSection({ info }: { info: Info }) {
   // while theirs are read.
   const rows = read && read.profile === profile ? read.rows : null;
   const set = (row: PermissionEntry, value: PermissionEntry["value"]) => {
-    setFailed(null);
+    const forget = (all: typeof failures) => Object.fromEntries(Object.entries(all).filter(([k]) => k !== key));
+    setFailures(forget);
     void send({ cmd: "set_profile_permission", profile, origin: row.origin, kind: row.kind, value }).then(load, () => {
-      // Said until it is tried again or another change is made; the list
-      // is read anew to show what holds.
-      setFailed({ profile, row, value });
+      // Said until it is tried again or another change is made for these
+      // logins; the list is read anew to show what holds.
+      setFailures((all) => ({ ...forget(all), [key]: { row, value } }));
       void load();
     });
   };
-  // A change that failed for other logins is not this list's to try again.
-  const retry = failed && failed.profile === profile ? failed : null;
+  const unread = unreadFor === key;
+  const retry = failures[key] ?? null;
   const sites = [...new Set((rows ?? []).map((r) => r.origin))];
   return (
     <>
