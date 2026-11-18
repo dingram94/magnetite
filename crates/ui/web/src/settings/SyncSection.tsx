@@ -180,6 +180,8 @@ export function SyncSection({ info, reload, job, setJob, spaces = true, only }: 
           <Field label={only ? "Start a sync chain" : "First device"} hint={only ? "Magnetite gives you 24 words, your sync code. Enter them on your other computers and they show the same sidebar." : "Magnetite creates a sync code for you to use on your other devices."}>
             {own && <input className="field mb-3" value={invite} onChange={(e) => setInvite(e.target.value)} placeholder="Invite code, if the server needs one" spellCheck={false} />}
             <button data-search-name className="btn" disabled={job !== null || !server} onClick={() => begin("create", send({ cmd: "sync_create", server, invite: (own && invite) || undefined }))}>{job === "create" ? "Starting…" : "Start syncing"}</button>
+            {/* Found as "Start syncing" also while it starts. */}
+            <span hidden data-search-name>Start syncing</span>
           </Field>
         )}
         {only !== "create" && (

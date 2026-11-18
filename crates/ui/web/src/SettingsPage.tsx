@@ -100,12 +100,7 @@ export function SettingsPage() {
   // The one section on the page while a search is typed: it alone is
   // looked at, so only its place among the sections found changes.
   const onSectionFound = useCallback(
-    (ids: string[]) =>
-      setFound((now) => {
-        const id = fromHash().id;
-        const hit = ids.includes(id);
-        return hit === now.includes(id) ? now : hit ? [...now, id] : now.filter((x) => x !== id);
-      }),
+    (hit: boolean, id: string) => setFound((now) => (hit === now.includes(id) ? now : hit ? [...now, id] : now.filter((x) => x !== id))),
     [],
   );
   // A section opened while a search is typed: the page shows it alone, with
@@ -115,7 +110,16 @@ export function SettingsPage() {
     setQuery(text);
     setPicked(false);
   };
+  // The section's name takes the keyboard when a result opens it: the
+  // button that was pressed is gone with the results.
+  const heading = useRef<HTMLHeadingElement>(null);
+  const toHeading = useRef(false);
+  useEffect(() => {
+    if (toHeading.current && picked) heading.current?.focus();
+    toHeading.current = false;
+  }, [picked, sectionId]);
   const openSection = (id: string) => {
+    toHeading.current = searching && !picked;
     setPicked(true);
     setPlace({ id });
     // The address follows without a `hashchange`: that event is the app,
@@ -227,7 +231,7 @@ export function SettingsPage() {
       {sectionId === "tabs" && (
         <>
           <Group title="Tidying up" hint="What Magnetite does with tabs you leave alone. An archived tab can be opened again for as long as the archive keeps it.">
-          <Field side label="Archive Today tabs after" hint="Pinned tabs and favorites are never archived.">
+          <Field side label="Archive Today tabs after" hint="Pinned tabs and favorites are left where they are.">
             <select className="field" value={settings.auto_archive_hours} onChange={(e) => update({ auto_archive_hours: Number(e.target.value) })}>
               {ARCHIVE_AFTER.map((t) => <option key={t.hours} value={t.hours}>{t.label}</option>)}
             </select>
@@ -415,7 +419,7 @@ export function SettingsPage() {
               <header className="mb-6 flex items-start gap-4">
                 <span className="set-icon"><section.Icon width={22} height={22} /></span>
                 <div>
-                  <h1 className="text-[22px] font-semibold tracking-[-0.01em]">{section.title}</h1>
+                  <h1 ref={heading} tabIndex={-1} className="text-[22px] font-semibold tracking-[-0.01em] outline-none">{section.title}</h1>
                   <p className="mt-1 max-w-[560px] text-[14px] leading-5 text-[var(--muted)]">{section.intro}</p>
                 </div>
               </header>

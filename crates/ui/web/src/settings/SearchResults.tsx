@@ -2,7 +2,7 @@
 // that do not match greyed out. The sections are rendered as they are and
 // marked by what they show, so a new setting is found without being listed
 // anywhere.
-import { useLayoutEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 import type { IconComponent } from "../Icons";
 import { Unfolded } from "./fields";
 
@@ -104,7 +104,10 @@ function mark(root: HTMLElement, query: string) {
       }
     }
   }
-  CSS.highlights.set(MARKED, new Highlight(...ranges));
+  // One by one: there may be more places than a call takes arguments.
+  const marked = new Highlight();
+  for (const range of ranges) marked.add(range);
+  CSS.highlights.set(MARKED, marked);
 }
 
 /**
@@ -126,7 +129,12 @@ function useMarked(query: string, onFound?: (ids: string[]) => void) {
     };
     apply();
     // Other words, other settings: back to the top of the page.
-    if (query.trim()) el.closest("main")?.scrollTo(0, 0);
+    if (!query.trim()) {
+      // Nothing to find: the one pass above took the marks away, and no
+      // change of the settings brings any back.
+      return () => CSS.highlights?.delete(MARKED);
+    }
+    el.closest("main")?.scrollTo(0, 0);
     const changes = new MutationObserver(apply);
     changes.observe(el, { childList: true, subtree: true, characterData: true });
     return () => {
@@ -141,11 +149,15 @@ function useMarked(query: string, onFound?: (ids: string[]) => void) {
  * One section on the page: all its settings, and while a search is typed
  * (`query`) those it did not find greyed out. The same with and without a
  * search, so that emptying the field leaves what was typed into a setting.
- * `onFound` hears whether the section still holds a match (its id, or
- * nothing), as its settings change.
+ * `onFound` hears whether the section still holds a match, as its
+ * settings change.
  */
-export function SearchedSection({ query, section, onFound, children }: { query: string; section: SearchSection; onFound?: (ids: string[]) => void; children: React.ReactNode }) {
-  const root = useMarked(query, onFound);
+export function SearchedSection({ query, section, onFound, children }: { query: string; section: SearchSection; onFound?: (found: boolean, id: string) => void; children: React.ReactNode }) {
+  // What is found is the section's own, also when its answer comes after
+  // the page has gone on to another one.
+  const id = section.id;
+  const told = useCallback((ids: string[]) => onFound?.(ids.includes(id), id), [onFound, id]);
+  const root = useMarked(query, onFound ? told : undefined);
   return (
     <div ref={root}>
       <section data-search-id={section.id} data-search-section={section.title} data-search-keep>
