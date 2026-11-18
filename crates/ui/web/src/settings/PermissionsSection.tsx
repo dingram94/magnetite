@@ -53,7 +53,11 @@ export function PermissionsSection({ info }: { info: Info }) {
       },
     );
   }, [profile]);
+  // The read of the logins chosen now: a change that ends after other
+  // logins were chosen must not read its own in their place.
+  const reload = useRef(load);
   useEffect(() => {
+    reload.current = load;
     void load();
     // A choice made in a site panel meanwhile shows when the page comes back.
     window.addEventListener("focus", load);
@@ -65,11 +69,11 @@ export function PermissionsSection({ info }: { info: Info }) {
   const set = (row: PermissionEntry, value: PermissionEntry["value"]) => {
     const forget = (all: typeof failures) => Object.fromEntries(Object.entries(all).filter(([k]) => k !== key));
     setFailures(forget);
-    void send({ cmd: "set_profile_permission", profile, origin: row.origin, kind: row.kind, value }).then(load, () => {
+    void send({ cmd: "set_profile_permission", profile, origin: row.origin, kind: row.kind, value }).then(() => reload.current(), () => {
       // Said until it is tried again or another change is made for these
       // logins; the list is read anew to show what holds.
       setFailures((all) => ({ ...forget(all), [key]: { row, value } }));
-      void load();
+      void reload.current();
     });
   };
   const unread = unreadFor === key;
