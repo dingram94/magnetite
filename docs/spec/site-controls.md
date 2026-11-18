@@ -258,6 +258,8 @@ lists of saved passwords open (`passwords-and-autofill.md`).
   "Delete…" chooses which, starting with those of the space in front; a
   private profile is not offered: its data is in memory only and goes
   when Magnetite quits.
+- Logins deleted meanwhile are an error the row names, not other logins
+  in their place.
 - The "Browsing history" and "Download history" the dialog names are
   Chromium's own records, not Magnetite's history (`history.md`) or its
   list of downloads, which have "Clear" of their own.
