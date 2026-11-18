@@ -20,7 +20,7 @@ function Feature({ label, hint, checked, onChange, manage, onManage, children }:
         <Switch label={label} checked={checked} onChange={onChange} />
       </label>
       {children}
-      <button className="btn mt-3" onClick={onManage}>{manage}</button>
+      <button className="btn mt-3" data-search-name onClick={onManage}>{manage}</button>
     </div>
   );
 }

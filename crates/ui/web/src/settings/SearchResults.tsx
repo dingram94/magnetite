@@ -86,7 +86,11 @@ function mark(root: HTMLElement, query: string) {
   for (let node = texts.nextNode(); node; node = texts.nextNode()) {
     const within = node.parentElement;
     if (!within?.closest(".set-label, .set-hint, [data-search-name], [data-search-row]") || within.closest("[data-dim], [data-miss], select")) continue;
-    const text = (node.textContent ?? "").toLowerCase();
+    const original = node.textContent ?? "";
+    const text = original.toLowerCase();
+    // A letter whose lower case is longer (İ) would shift every place after
+    // it: such a text is found, but not marked.
+    if (text.length !== original.length) continue;
     for (const word of words) {
       for (let at = text.indexOf(word); at >= 0; at = text.indexOf(word, at + word.length)) {
         const range = new Range();
@@ -111,9 +115,8 @@ function useMarked(query: string, onFound?: (ids: string[]) => void) {
     const el = root.current;
     if (!el) return;
     const apply = () => {
-      const found = filter(el, query);
+      onFound?.(filter(el, query));
       mark(el, query);
-      onFound?.(found);
     };
     apply();
     // Other words, other settings: back to the top of the page.

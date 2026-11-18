@@ -103,7 +103,7 @@ function Updates({ checkUpdates, update }: { checkUpdates: boolean; update: (pat
       {/* A system package never asks GitHub: the switch would do nothing. */}
       {!u?.system && <Toggle
         label="Check for updates automatically"
-        hint="At start and once a day Magnetite asks the project's release page on GitHub for a new version: no identifiers, no usage data. Only updates signed with the project's release key are installed."
+        hint="At start and once a day Magnetite asks the project's release page on GitHub for a new version: no identifiers, no usage data. Before it installs an update, Magnetite checks it against the release manifest the project's key signed."
         checked={checkUpdates}
         onChange={(v) => update({ check_updates: v })}
       />}

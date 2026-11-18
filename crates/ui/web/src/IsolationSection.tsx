@@ -103,7 +103,7 @@ function IsolationRow({ target, icon, info, defaultId, reload }: { target: Targe
   return (
     <div className="iso-row" data-search-row>
       {icon}
-      <span className="min-w-0 flex-1 truncate">{target.title}</span>
+      <span className="min-w-0 flex-1 truncate" data-search-name>{target.title}</span>
       {level === "separate" && (
         <select
           className="field"

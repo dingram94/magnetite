@@ -22,7 +22,7 @@ export function ImportBrowsers() {
   return (
     <Field
       label="Import from another browser"
-      hint="Adds a space for each space, workspace or profile of that browser, with its tabs, tab groups and bookmarks. Your sidebar stays as it is. Passwords, cookies and extensions are not copied, and nothing leaves this computer."
+      hint="Adds a space for each space or workspace of that browser, or for each profile that has neither, with its tabs, tab groups and bookmarks. Your sidebar stays as it is. Passwords, cookies and extensions are not copied, and nothing leaves this computer."
     >
       {sources?.length === 0 && <p className="set-hint">No other browser found on this computer.</p>}
       {sources && sources.length > 0 && (

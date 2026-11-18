@@ -151,7 +151,7 @@ export function ShortcutsSection({ info, reload }: { info: Info; reload: () => v
         </div>
       </Group>
       <Group>
-        <Field side label="All shortcuts" hint="Changed shortcuts sync to your other devices, a space's keys with the space. Reload, back, forward, zoom, the digits that choose a tab or a space, and the quick search from anywhere keep their keys.">
+        <Field side label="Reset all shortcuts" hint="Changed shortcuts sync to your other devices, a space's keys with the space. Reload, back, forward, zoom, the digits that choose a tab or a space, and the quick search from anywhere keep their keys.">
           <button className="btn" disabled={!changed} title="Every shortcut gets its default keys back; the spaces have no keys of their own" onClick={() => reset()}>Reset all</button>
         </Field>
       </Group>

@@ -79,11 +79,11 @@ export function SiteCodeSection({ saved, open, save }: { saved: SiteCode[]; open
           </div></div>
         );
       })}
-      <div className="set-card set-group"><div className="set-row flex items-center gap-4">
-        <p className="set-hint min-w-0 flex-1" style={{ marginTop: 0 }}>
+      <div className="set-card set-group"><div className="set-row flex items-center gap-4" data-search-row>
+        <p className="set-hint min-w-0 flex-1" style={{ marginTop: 0 }} data-search-name>
           CSS reaches open pages of the site as soon as it is saved; JavaScript runs each time one of its pages has loaded. A site stands for its subdomains. The code runs as part of the page and can read and change everything on it: only add code you understand. It stays on this computer.
         </p>
-        <button className="btn" disabled={rows.length >= MAX_SITES} title={rows.length >= MAX_SITES ? `No more than ${MAX_SITES} sites are kept.` : undefined} onClick={() => setRows((list) => [...list, { site: "", css: "", js: "", enabled: true }])}>Add site</button>
+        <button className="btn" data-search-name disabled={rows.length >= MAX_SITES} title={rows.length >= MAX_SITES ? `No more than ${MAX_SITES} sites are kept.` : undefined} onClick={() => setRows((list) => [...list, { site: "", css: "", js: "", enabled: true }])}>Add site</button>
       </div></div>
     </>
   );

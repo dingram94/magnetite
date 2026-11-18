@@ -257,7 +257,9 @@ export function SettingsPage() {
         <>
           <Group>
           <Field side label="Search engine" hint="Nothing goes to it until you search.">
-            <select className="field" value={SEARCH_ENGINES.some((e) => e.template === settings.search_template) ? settings.search_template : ""} onChange={(e) => e.target.value && update({ search_template: e.target.value })}>
+            {/* Found by the names of the engines too, which only the list holds. */}
+            <span hidden data-search-name>{SEARCH_ENGINES.map((e) => e.label).join(" ")}</span>
+            <select className="field" aria-label="Search engine" value={SEARCH_ENGINES.some((e) => e.template === settings.search_template) ? settings.search_template : ""} onChange={(e) => e.target.value && update({ search_template: e.target.value })}>
               {SEARCH_ENGINES.map((e) => <option key={e.template} value={e.template}>{e.label}</option>)}
               {!SEARCH_ENGINES.some((e) => e.template === settings.search_template) && <option value="">Your own address</option>}
             </select>
@@ -295,8 +297,8 @@ export function SettingsPage() {
                 {info.extensions.map((e) => {
                   const pinned = settings.pinned_extensions.includes(e.id);
                   return (
-                    <label key={e.id} className="list-row">
-                      <span className="min-w-0 flex-1 truncate">{e.name}</span>
+                    <label key={e.id} className="list-row" data-search-row>
+                      <span className="min-w-0 flex-1 truncate" data-search-name>{e.name}</span>
                       <Switch
                         label={`${e.name} in the sidebar`}
                         checked={pinned}
@@ -348,8 +350,9 @@ export function SettingsPage() {
               <li data-search-row><b>The sites you open</b><span>and what their pages load, less what ad blocking stops.</span></li>
               <li data-search-row><b>Services you connect</b><span>your sync server, and the servers of your smart folders.</span></li>
               <li data-search-row><b>Publishers of filter lists</b><span>for the ad blocking lists you choose, every four days.</span></li>
-              <li data-search-row><b>GitHub</b><span>for update checks, at start and once a day, unless turned off in About.</span></li>
+              <li data-search-row><b>GitHub</b><span>for update checks, at start and once a day, unless turned off in About. Not where your system's packages bring the updates.</span></li>
               <li data-search-row><b>Google's component server</b><span>from which Chromium fetches the Widevine module for protected video and its certificate lists.</span></li>
+              <li data-search-row><b>Google's password check</b><span>only while "Warn about passwords from data breaches" is on: an encrypted fragment of a password you sign in with.</span></li>
             </ul>
           </Group>
           <Group title="On this computer">
@@ -465,7 +468,7 @@ function ArchiveRetention({ days, save }: { days: number; save: (days: number) =
   };
   return (
     <Field side label="Keep archived tabs for" hint="Older ones are deleted from the archive for good. A tab can also be removed by hand in the archive view.">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <select
           className="field"
           value={custom ? "custom" : days}

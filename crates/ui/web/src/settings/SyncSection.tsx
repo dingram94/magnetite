@@ -179,13 +179,13 @@ export function SyncSection({ info, reload, job, setJob, spaces = true, only }: 
         {only !== "join" && (
           <Field label={only ? "Start a sync chain" : "First device"} hint={only ? "Magnetite gives you 24 words, your sync code. Enter them on your other computers and they show the same sidebar." : "Magnetite creates a sync code for you to use on your other devices."}>
             {own && <input className="field mb-3" value={invite} onChange={(e) => setInvite(e.target.value)} placeholder="Invite code, if the server needs one" spellCheck={false} />}
-            <button className="btn" disabled={job !== null || !server} onClick={() => begin("create", send({ cmd: "sync_create", server, invite: (own && invite) || undefined }))}>{job === "create" ? "Starting…" : "Start syncing"}</button>
+            <button data-search-name className="btn" disabled={job !== null || !server} onClick={() => begin("create", send({ cmd: "sync_create", server, invite: (own && invite) || undefined }))}>{job === "create" ? "Starting…" : "Start syncing"}</button>
           </Field>
         )}
         {only !== "create" && (
           <Field label={only ? "Your sync code" : "Another device"} hint={only ? "The 24 words that Settings → Sync shows on a device that already syncs." : "Enter the 24 words from Settings → Sync on a device that already syncs."}>
             <textarea className="field mono resize-none" style={{ height: 72, padding: 8 }} value={words} onChange={(e) => setWords(e.target.value)} placeholder="24 words" spellCheck={false} autoComplete="off" />
-            <button className="btn mt-3" disabled={job !== null || !server || wordCount !== 24} onClick={() => { begin("join", send({ cmd: "sync_join", server, words })); setWords(""); }}>{job === "join" ? "Joining…" : wordCount > 0 && wordCount !== 24 ? `${wordCount} of 24 words` : "Join"}</button>
+            <button data-search-name className="btn mt-3" disabled={job !== null || !server || wordCount !== 24} onClick={() => { begin("join", send({ cmd: "sync_join", server, words })); setWords(""); }}>{job === "join" ? "Joining…" : wordCount > 0 && wordCount !== 24 ? `${wordCount} of 24 words` : "Join"}</button>
           </Field>
         )}
       </Group>
