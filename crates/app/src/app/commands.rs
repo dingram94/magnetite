@@ -652,6 +652,21 @@ pub(super) enum UiCommand {
     },
     /// Site panel: permission rows of the focused page.
     SitePermissions,
+    /// Every site with a choice of its own for a permission, in the
+    /// logins of `profile` (none: the default profile).
+    AllPermissions {
+        #[serde(default)]
+        profile: Option<String>,
+    },
+    /// Set what site `origin` may do in the logins of `profile`, from the
+    /// list in Settings.
+    SetProfilePermission {
+        #[serde(default)]
+        profile: Option<String>,
+        origin: String,
+        kind: magnetite_engine::PermissionKind,
+        value: magnetite_engine::PermissionValue,
+    },
     SetPermission {
         origin: String,
         kind: magnetite_engine::PermissionKind,
@@ -2182,6 +2197,19 @@ impl MagnetiteApp {
             }
             UiCommand::DeviceGet { page } => return Ok(engine.device_config(page)),
             UiCommand::DeviceSet { page, config } => engine.set_device_config(page, config),
+            UiCommand::AllPermissions { profile } => {
+                let context = self.with_state(|s| s.context(profile.as_deref()));
+                return Ok(json!({ "rows": engine.all_permissions(context.as_ref()) }));
+            }
+            UiCommand::SetProfilePermission {
+                profile,
+                origin,
+                kind,
+                value,
+            } => {
+                let context = self.with_state(|s| s.context(profile.as_deref()));
+                engine.set_permission(context.as_ref(), &origin, kind, value);
+            }
             UiCommand::SitePermissions => {
                 let rows = self
                     .focused_content(None)

@@ -242,6 +242,27 @@ lists of saved passwords open (`passwords-and-autofill.md`).
 
 Chromium deletes: Magnetite has no way of its own to name every site that
 has stored something.
+## Every site's permissions
+
+Settings → Permissions lists every site that has a choice of its own for
+the camera, the microphone, the location, notifications, pop-ups and
+redirects, or the clipboard: the choices made in a site panel or in a
+question a page asked.
+
+- One card per site, a row per permission, with "Allow" and "Block" and
+  the one that holds marked. "Reset" takes the choice back: the site asks
+  again (pop-ups: blocked, as for every site), and the row is gone.
+- A change counts at once, wherever the site is open, and the site panel
+  shows it.
+- Each set of logins has its own choices. With more than one, a list on
+  top chooses which, starting with those of the space in front; a private
+  profile is not offered, it keeps nothing.
+- A site that was never asked and never set is not listed: the section
+  says so while there is none.
+- The list is read again when the page comes back to the front.
+
+The choices are Chromium's site settings of the profile; the list reads
+them from its preferences (`profile.content_settings.exceptions.…`).
 
 ## What is stored
 
