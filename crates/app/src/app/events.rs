@@ -33,6 +33,7 @@ impl EngineDelegate for MagnetiteApp {
                 engine.set_site_code(self.with_state(|s| s.settings.site_code.clone()));
                 // Before any profile exists: each gets these when it is made.
                 engine.set_autofill(autofill);
+                engine.set_default_zoom(self.with_state(|s| s.settings.page_zoom));
                 engine.set_sidebar_width(width);
                 engine.set_top_bar_visible(self.with_state(|s| s.settings.appearance.top_bar));
                 if toolbar {

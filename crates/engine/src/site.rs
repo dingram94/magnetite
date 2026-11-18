@@ -20,8 +20,12 @@ pub struct SiteState {
     pub secure: Option<bool>,
     /// The certificate has an error (expired, wrong host, untrusted, …).
     pub cert_error: bool,
-    /// Page zoom in percent (100 = default).
+    /// Page zoom in percent.
     pub zoom: u32,
+    /// The zoom, in percent, the page's site has without one of its own:
+    /// 100 unless the user chose another (`Engine::set_default_zoom`).
+    #[serde(default)]
+    pub base_zoom: u32,
 }
 
 /// The zoom step after `current` percent, in (`up`) or out; `current` when
@@ -48,6 +52,36 @@ fn percent_to_level(pct: u32) -> f64 {
     (f64::from(pct) / 100.0).ln() / 1.2f64.ln()
 }
 
+/// Chromium's preference for the zoom a site has until it gets one of its
+/// own: a level per storage partition of the profile.
+const DEFAULT_ZOOM: &str = "partition.default_zoom_level";
+/// The partition a profile's own pages are in, as that preference names it.
+const DEFAULT_PARTITION: &str = "x";
+
+/// Make `pct` percent the zoom the sites of `ctx` start with. False if
+/// Chromium refused (a context that is not initialised yet does; it gets
+/// the zoom in `prepare_context`).
+pub(crate) fn apply_default_zoom(ctx: &RequestContext, pct: u32) -> bool {
+    let (Some(mut value), Some(mut levels)) = (value_create(), dictionary_value_create()) else {
+        return false;
+    };
+    let level = if pct == 100 {
+        0.0
+    } else {
+        percent_to_level(pct)
+    };
+    levels.set_double(Some(&CefString::from(DEFAULT_PARTITION)), level);
+    value.set_dictionary(Some(&mut levels));
+    // Not empty: see `autofill::set_bool_pref`.
+    let mut error = CefString::from(" ");
+    let name = CefString::from(DEFAULT_ZOOM);
+    ctx.set_preference(Some(&name), Some(&mut value), Some(&mut error)) != 0
+}
+
+/// The level of a site zoomed to 100 percent on its own: level 0 itself
+/// would give it the default zoom.
+const OWN_100: f64 = 1e-6;
+
 /// Errors are the low 16 bits and bits 24–31 of net's cert status
 /// (`CERT_STATUS_ALL_ERRORS`); bits 16–23 are informational.
 fn has_cert_error(status: CertStatus) -> bool {
@@ -60,6 +94,7 @@ impl Engine {
     pub fn content_site_state(&self, id: ContentId) -> Option<SiteState> {
         let host = self.content_browser_host(id)?;
         let zoom = level_to_percent(host.zoom_level());
+        let base_zoom = level_to_percent(host.default_zoom_level());
         let entry = host.visible_navigation_entry();
         let url = entry
             .as_ref()
@@ -80,6 +115,7 @@ impl Engine {
             secure,
             cert_error,
             zoom,
+            base_zoom,
         })
     }
 
@@ -95,13 +131,51 @@ impl Engine {
         Self::post_delayed(Box::new(move || Engine::global().emit_site_state(id)), 50);
     }
 
-    /// Set page zoom to `pct` percent (100 resets).
-    pub fn set_content_zoom(&self, id: ContentId, pct: u32) {
+    /// Use `pct` percent as the zoom every site starts with: in every
+    /// profile that exists, and in those made later. A site zoomed on its
+    /// own keeps its zoom.
+    pub fn set_default_zoom(&self, pct: u32) {
+        let contexts: Vec<RequestContext> = {
+            let mut inner = self.lock();
+            inner.default_zoom = pct;
+            inner.contexts.values().cloned().collect()
+        };
+        for ctx in request_context_get_global_context()
+            .into_iter()
+            .chain(contexts)
+        {
+            apply_default_zoom(&ctx, pct);
+        }
+    }
+
+    /// A page of Magnetite's own starts to load in `browser`: the zoom web
+    /// pages start with is not for it. The sidebar and Magnetite's pages
+    /// have a text size of their own (Settings → Appearance), so they stay
+    /// at 100 percent whatever that zoom is.
+    pub(crate) fn keep_own_page_unzoomed(browser: &Browser, url: &str) {
+        if !url.starts_with("magnetite://") {
+            return;
+        }
+        let Some(host) = browser.host() else { return };
+        let zoomed = host.default_zoom_level().abs() > OWN_100;
+        if zoomed && (host.zoom_level() - OWN_100).abs() > f64::EPSILON {
+            host.set_zoom_level(OWN_100);
+        }
+    }
+
+    /// Set page zoom to `pct` percent; `None` gives the site the zoom every
+    /// site starts with again.
+    pub fn set_content_zoom(&self, id: ContentId, pct: Option<u32>) {
         if let Some(host) = self.content_browser_host(id) {
-            host.set_zoom_level(if pct == 100 {
-                0.0
-            } else {
-                percent_to_level(pct)
+            let base = level_to_percent(host.default_zoom_level());
+            host.set_zoom_level(match pct {
+                // Level 0 is Chromium's word for "the default again".
+                None => 0.0,
+                Some(pct) if pct == base => 0.0,
+                // So 100 percent, where that is not the default, is a
+                // level next to 0.
+                Some(100) => OWN_100,
+                Some(pct) => percent_to_level(pct),
             });
             self.emit_site_state_soon(id);
         }

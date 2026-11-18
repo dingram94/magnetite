@@ -91,6 +91,9 @@ pub struct Settings {
     /// Chromium's password manager and autofill: which parts are on. Not
     /// synced: what a device saves is that device's.
     pub autofill: magnetite_engine::AutofillPrefs,
+    /// The zoom, in percent, a site has until it is zoomed on its own: one
+    /// of Chromium's steps. Not synced: screens differ.
+    pub page_zoom: u32,
     /// Smart folders allowed to fetch on this device (`smart_key`): those made
     /// or edited here, or turned on here. A folder another device synced
     /// waits, so the words alone cannot make this device's accounts run a
@@ -527,6 +530,9 @@ impl Settings {
         }
         self.site_code = code;
         self.shortcuts = self.shortcuts.sanitised();
+        if !magnetite_engine::ZOOM_STEPS.contains(&self.page_zoom) {
+            self.page_zoom = defaults.page_zoom;
+        }
         self
     }
 }
@@ -615,6 +621,7 @@ impl Default for Settings {
             library_opens: LibraryView::Archive,
             tab_order: TabOrder::Recent,
             autofill: magnetite_engine::AutofillPrefs::default(),
+            page_zoom: 100,
             smart_allowed: None,
             adblock: AdblockSettings::default(),
             developer: crate::dev::DeveloperSettings::default(),
@@ -719,6 +726,22 @@ mod tests {
             site_host("archive.example/https://target.example").as_deref(),
             Some("archive.example")
         );
+    }
+
+    #[test]
+    fn the_page_zoom_is_one_of_chromiums_steps() {
+        let zoom = |pct: u32| {
+            let s = Settings {
+                page_zoom: pct,
+                ..Settings::default()
+            };
+            s.sanitised().page_zoom
+        };
+        assert_eq!(Settings::default().page_zoom, 100);
+        assert_eq!(zoom(125), 125);
+        assert_eq!(zoom(0), 100);
+        assert_eq!(zoom(123), 100);
+        assert_eq!(zoom(5000), 100);
     }
 
     #[test]
