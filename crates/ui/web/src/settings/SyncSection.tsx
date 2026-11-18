@@ -186,6 +186,8 @@ export function SyncSection({ info, reload, job, setJob, spaces = true, only }: 
           <Field label={only ? "Your sync code" : "Another device"} hint={only ? "The 24 words that Settings → Sync shows on a device that already syncs." : "Enter the 24 words from Settings → Sync on a device that already syncs."}>
             <textarea className="field mono resize-none" style={{ height: 72, padding: 8 }} value={words} onChange={(e) => setWords(e.target.value)} placeholder="24 words" spellCheck={false} autoComplete="off" />
             <button data-search-name className="btn mt-3" disabled={job !== null || !server || wordCount !== 24} onClick={() => { begin("join", send({ cmd: "sync_join", server, words })); setWords(""); }}>{job === "join" ? "Joining…" : wordCount > 0 && wordCount !== 24 ? `${wordCount} of 24 words` : "Join"}</button>
+            {/* Found as "Join" also while the button counts the words. */}
+            <span hidden data-search-name>Join</span>
           </Field>
         )}
       </Group>

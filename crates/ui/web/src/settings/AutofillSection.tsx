@@ -61,7 +61,7 @@ export function AutofillSection({ info, update }: { info: Info; update: (patch: 
       </Feature>
       <Toggle
         label="Warn about passwords from data breaches"
-        hint="When you sign in, Chromium asks a Google service whether the password appeared in a known breach. It sends an encrypted fragment, not the password."
+        hint="While this is on, Chromium asks a Google service at each sign-in whether the password appeared in a known breach. It sends an encrypted fragment, not the password."
         checked={autofill.breach_check}
         onChange={(breach_check) => set({ breach_check })}
       />

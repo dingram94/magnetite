@@ -41,7 +41,7 @@ const GROUPS: { label: string; sections: Section[] }[] = [
       { id: "links", label: "Links", Icon: LinkIcon, title: "Links", intro: "What happens to a link you click in another app, and to a link you copy." },
       { id: "search", label: "Search", Icon: Search, title: "Search", intro: "Used when what you type in the command bar is not a web address. A keyword and a space search one site instead." },
       { id: "adblock", label: "Ad blocking", Icon: AdblockIcon, title: "Ad blocking", intro: "Magnetite can stop ads and trackers before they load, with filter lists you choose. Off until you turn it on." },
-      { id: "autofill", label: "Passwords & autofill", Icon: KeyIcon, title: "Passwords & autofill", intro: "Magnetite can keep your passwords, addresses and cards and fill them in for you. All of it stays on this computer." },
+      { id: "autofill", label: "Passwords & autofill", Icon: KeyIcon, title: "Passwords & autofill", intro: "Magnetite can keep your passwords, addresses and cards and fill them in for you. What it saves stays on this computer." },
     ],
   },
   {
@@ -97,6 +97,17 @@ export function SettingsPage() {
   // The sections that hold a match; the others are greyed out in the list.
   const [found, setFound] = useState<string[]>([]);
   const onFound = useCallback((ids: string[]) => setFound((now) => (now.join() === ids.join() ? now : ids)), []);
+  // The one section on the page while a search is typed: it alone is
+  // looked at, so only its place among the sections found changes.
+  const onSectionFound = useCallback(
+    (ids: string[]) =>
+      setFound((now) => {
+        const id = fromHash().id;
+        const hit = ids.includes(id);
+        return hit === now.includes(id) ? now : hit ? [...now, id] : now.filter((x) => x !== id);
+      }),
+    [],
+  );
   // A section opened while a search is typed: the page shows it alone, with
   // what the search found still marked, until other words are typed.
   const [picked, setPicked] = useState(false);
@@ -125,7 +136,8 @@ export function SettingsPage() {
   // The app sends an open Settings tab to another section by its address.
   useEffect(() => {
     const follow = () => {
-      if (!SECTIONS.some((s) => `#${s.id}` === location.hash.split("=")[0])) return;
+      // No section named (Back to the address Settings opened with) is General.
+      if (location.hash !== "" && !SECTIONS.some((s) => `#${s.id}` === location.hash.split("=")[0])) return;
       // The section asked for, not what a search was showing.
       setQuery("");
       setPicked(false);
@@ -413,7 +425,7 @@ export function SettingsPage() {
                   Everything for “{query.trim()}”
                 </button>
               )}
-              <SearchedSection key={sectionId} query={searching ? query : ""} section={section}>{body(sectionId)}</SearchedSection>
+              <SearchedSection key={sectionId} query={searching ? query : ""} section={section} onFound={searching ? onSectionFound : undefined}>{body(sectionId)}</SearchedSection>
             </>
           )}
         </div>

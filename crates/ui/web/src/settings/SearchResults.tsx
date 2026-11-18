@@ -42,10 +42,14 @@ function filter(root: HTMLElement, query: string): string[] {
         // rows without a name of its own is found by its rows only.
         const named = [...unit.querySelectorAll(".set-label, .set-hint")].filter((n) => !n.closest("[data-search-row]"));
         const own = whole || (named.length > 0 ? has(named.map((n) => n.textContent).join(" ")) : all.length === 0 && has(unit.textContent));
-        // A row's name: what it marks as such (its label and description,
-        // the words on its buttons), not that of a row inside it.
+        // A row's name: what it marks as such (its label and description),
+        // the words on its buttons and its notes, not those of a row
+        // inside it. Not what a list to open or a field holds.
         const byName = (row: Element) => {
-          const names = [...row.querySelectorAll("[data-search-name]")].filter((n) => n.closest("[data-search-row]") === row);
+          // The buttons and notes of a setting (`.set-row`) only: a line of
+          // a list has the same buttons as every other line of it.
+          const what = row.matches(".set-row") ? "[data-search-name], button, .set-hint" : "[data-search-name]";
+          const names = [...row.querySelectorAll(what)].filter((n) => n.closest("[data-search-row]") === row);
           return has(names.length > 0 ? names.map((n) => n.textContent).join(" ") : row.textContent);
         };
         let rows = 0;
@@ -80,12 +84,12 @@ const MARKED = "settings-search";
  */
 function mark(root: HTMLElement, query: string) {
   if (!CSS.highlights) return;
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const words = [...new Set(query.toLowerCase().split(/\s+/).filter(Boolean))];
   const ranges: Range[] = [];
   const texts = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   for (let node = texts.nextNode(); node; node = texts.nextNode()) {
     const within = node.parentElement;
-    if (!within?.closest(".set-label, .set-hint, [data-search-name], [data-search-row]") || within.closest("[data-dim], [data-miss], select")) continue;
+    if (!within?.closest(".set-label, .set-hint, .set-found, [data-search-name], [data-search-row]") || within.closest("[data-dim], [data-miss], select")) continue;
     const original = node.textContent ?? "";
     const text = original.toLowerCase();
     // A letter whose lower case is longer (İ) would shift every place after
@@ -115,7 +119,9 @@ function useMarked(query: string, onFound?: (ids: string[]) => void) {
     const el = root.current;
     if (!el) return;
     const apply = () => {
-      onFound?.(filter(el, query));
+      // Always: the filter greys out, whoever hears what it found.
+      const found = filter(el, query);
+      onFound?.(found);
       mark(el, query);
     };
     apply();
@@ -135,9 +141,11 @@ function useMarked(query: string, onFound?: (ids: string[]) => void) {
  * One section on the page: all its settings, and while a search is typed
  * (`query`) those it did not find greyed out. The same with and without a
  * search, so that emptying the field leaves what was typed into a setting.
+ * `onFound` hears whether the section still holds a match (its id, or
+ * nothing), as its settings change.
  */
-export function SearchedSection({ query, section, children }: { query: string; section: SearchSection; children: React.ReactNode }) {
-  const root = useMarked(query);
+export function SearchedSection({ query, section, onFound, children }: { query: string; section: SearchSection; onFound?: (ids: string[]) => void; children: React.ReactNode }) {
+  const root = useMarked(query, onFound);
   return (
     <div ref={root}>
       <section data-search-id={section.id} data-search-section={section.title} data-search-keep>
