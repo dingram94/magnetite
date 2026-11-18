@@ -47,6 +47,20 @@ impl PermissionKind {
         }
     }
 
+    /// Chromium's preference that holds the sites with a choice of their
+    /// own for this permission: a dictionary from "site,site" patterns to
+    /// what was chosen.
+    fn exceptions(self) -> &'static str {
+        match self {
+            Self::Camera => "profile.content_settings.exceptions.media_stream_camera",
+            Self::Microphone => "profile.content_settings.exceptions.media_stream_mic",
+            Self::Location => "profile.content_settings.exceptions.geolocation",
+            Self::Notifications => "profile.content_settings.exceptions.notifications",
+            Self::Popups => "profile.content_settings.exceptions.popups",
+            Self::Clipboard => "profile.content_settings.exceptions.clipboard",
+        }
+    }
+
     /// The site panel's row for what a prompt asks, if it has one.
     fn from_prompt_kind(kind: PromptKind) -> Option<Self> {
         match kind {
@@ -78,7 +92,7 @@ impl PermissionKind {
 }
 
 /// What a site may do. `Ask` means Chromium's default (pop-ups: blocked).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PermissionValue {
     Allow,
@@ -94,6 +108,33 @@ pub struct PermissionRow {
     pub value: PermissionValue,
     /// Asked for while this tab was open.
     pub requested: bool,
+}
+
+/// A site's own choice for one permission, as Settings lists them all.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub struct PermissionEntry {
+    /// `scheme://host[:port]` of the site.
+    pub origin: String,
+    pub kind: PermissionKind,
+    pub value: PermissionValue,
+}
+
+/// The origin a pattern of Chromium's exceptions names, as the site panel
+/// writes them: `https://example.org:443,*` is `https://example.org`. `None`
+/// for a pattern that is no single site (a wildcard, an extension).
+fn pattern_origin(pattern: &str) -> Option<String> {
+    let site = pattern.split(',').next()?;
+    let origin = origin_of(site)?;
+    let default_port = if origin.starts_with("https://") {
+        ":443"
+    } else {
+        ":80"
+    };
+    Some(
+        origin
+            .strip_suffix(default_port)
+            .map_or(origin.clone(), str::to_string),
+    )
 }
 
 /// Outcome of "Clear cookies and site storage".
@@ -260,6 +301,71 @@ impl Engine {
                 })
             })
             .collect()
+    }
+
+    /// The context of `profile`, or of the default profile.
+    fn context_of(&self, profile: Option<&crate::ContextProfile>) -> Option<RequestContext> {
+        match profile {
+            Some(profile) => self.request_context(Some(profile)),
+            None => request_context_get_global_context(),
+        }
+    }
+
+    /// Every site that has a choice of its own for a permission in
+    /// `profile` (none: the default profile), by site and permission.
+    pub fn all_permissions(&self, profile: Option<&crate::ContextProfile>) -> Vec<PermissionEntry> {
+        let Some(ctx) = self.context_of(profile) else {
+            return Vec::new();
+        };
+        let mut found = BTreeSet::new();
+        for kind in PermissionKind::ALL {
+            let name = CefString::from(kind.exceptions());
+            let Some(sites) = ctx.preference(Some(&name)).and_then(|v| v.dictionary()) else {
+                continue;
+            };
+            let mut keys = CefStringList::new();
+            sites.keys(Some(&mut keys));
+            for pattern in keys {
+                let chosen = sites
+                    .dictionary(Some(&CefString::from(pattern.as_str())))
+                    .map(|d| d.int(Some(&CefString::from("setting"))));
+                // Chromium's numbers: 1 allow, 2 block.
+                let value = match chosen {
+                    Some(1) => PermissionValue::Allow,
+                    Some(2) => PermissionValue::Block,
+                    _ => continue,
+                };
+                if let Some(origin) = pattern_origin(&pattern) {
+                    found.insert(PermissionEntry {
+                        origin,
+                        kind,
+                        value,
+                    });
+                }
+            }
+        }
+        found.into_iter().collect()
+    }
+
+    /// Set what `origin` may do in `profile` (none: the default profile),
+    /// wherever it is open.
+    pub fn set_permission(
+        &self,
+        profile: Option<&crate::ContextProfile>,
+        origin: &str,
+        kind: PermissionKind,
+        value: PermissionValue,
+    ) {
+        let (Some(ctx), Some(origin)) = (self.context_of(profile), origin_of(origin)) else {
+            return;
+        };
+        let setting = match value {
+            PermissionValue::Allow => ContentSettingValues::ALLOW,
+            PermissionValue::Block => ContentSettingValues::BLOCK,
+            PermissionValue::Ask => ContentSettingValues::DEFAULT,
+        };
+        let url = CefString::from(format!("{origin}/").as_str());
+        ctx.set_content_setting(Some(&url), Some(&url), kind.setting(), setting);
     }
 
     /// Set what `origin` may do on page `id` (in the page's profile).
@@ -475,6 +581,31 @@ fn clear_storage(job_id: u64, cookies: Option<usize>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_pattern_of_one_site_names_its_origin() {
+        let origin = |p: &str| pattern_origin(p);
+        assert_eq!(
+            origin("https://example.org:443,*").as_deref(),
+            Some("https://example.org")
+        );
+        assert_eq!(
+            origin("http://example.org:80,*").as_deref(),
+            Some("http://example.org")
+        );
+        assert_eq!(
+            origin("http://127.0.0.1:8765,*").as_deref(),
+            Some("http://127.0.0.1:8765")
+        );
+        assert_eq!(
+            origin("https://example.org:8443,https://example.org:8443").as_deref(),
+            Some("https://example.org:8443")
+        );
+        // No single site: every site, an extension.
+        assert_eq!(origin("*,*"), None);
+        assert_eq!(origin("chrome-extension://abcdefgh,*"), None);
+        assert_eq!(origin(""), None);
+    }
 
     #[test]
     fn registrable_domains_and_origins() {
