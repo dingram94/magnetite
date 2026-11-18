@@ -361,6 +361,8 @@ export interface Settings {
   downloads: DownloadPrefs;
   /** The zoom, in percent, a site has until it is zoomed on its own (Settings → Appearance): one of Chromium's steps. */
   page_zoom: number;
+  /** Tell websites not to sell or share the user's data: Global Privacy Control (Settings → Data & privacy). */
+  global_privacy_control: boolean;
   /** The ad blocker (Settings → Ad blocking); this device's own choice, never synced. */
   /** Developer features (Settings → Developer). */
   developer: { enabled: boolean; hosts: string[] };

@@ -97,6 +97,9 @@ pub struct Settings {
     /// The zoom, in percent, a site has until it is zoomed on its own: one
     /// of Chromium's steps. Not synced: screens differ.
     pub page_zoom: u32,
+    /// Tell websites not to sell or share the user's data (Global Privacy
+    /// Control). Not synced, as the other settings of this kind.
+    pub global_privacy_control: bool,
     /// Smart folders allowed to fetch on this device (`smart_key`): those made
     /// or edited here, or turned on here. A folder another device synced
     /// waits, so the words alone cannot make this device's accounts run a
@@ -635,6 +638,7 @@ impl Default for Settings {
             autofill: magnetite_engine::AutofillPrefs::default(),
             downloads: magnetite_engine::DownloadPrefs::default(),
             page_zoom: 100,
+            global_privacy_control: false,
             smart_allowed: None,
             adblock: AdblockSettings::default(),
             developer: crate::dev::DeveloperSettings::default(),

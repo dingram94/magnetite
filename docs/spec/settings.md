@@ -26,7 +26,8 @@ The list has four groups:
   opens.
 - **Data & privacy** has the history (how long it is kept, clearing it),
   the import from another browser or a bookmarks file, the servers
-  Magnetite talks to, each with what for, and where the data lives.
+  Magnetite talks to, each with what for, what websites are told
+  (`global-privacy-control.md`), and where the data lives.
 
 The address names the section: `magnetite://ui/settings#links`.
 
