@@ -565,16 +565,19 @@ function DefaultBrowserCard({ state }: { state: DefaultBrowser }) {
 function ClearBrowsingData({ info }: { info: Info }) {
   const logins = info.profiles.filter((p) => !p.ephemeral);
   const inFront = info.spaces.find((s) => s.id === info.active_space)?.profile_id;
-  const [profile, setProfile] = useState(() => (logins.find((p) => p.id === inFront) ?? logins.find((p) => p.is_default))?.id);
+  const [chosen, setChosen] = useState<string | undefined>(undefined);
+  // The logins chosen while they still exist (another window may have
+  // deleted them), else those of the space in front, else the main ones.
+  const profile = (logins.find((p) => p.id === chosen) ?? logins.find((p) => p.id === inFront) ?? logins.find((p) => p.is_default))?.id;
   return (
     <Field side label="Cookies, site data and cache" hint="Delete what websites have stored on this computer, for the last hour or for all time. Deleting cookies signs you out of websites. The dialog is Chromium's own; the history it names is not the one above.">
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {logins.length > 1 && (
-          <select className="field" value={profile} onChange={(e) => setProfile(e.target.value)} aria-label="Logins">
+          <select className="field" value={profile} onChange={(e) => setChosen(e.target.value)} aria-label="Logins">
             {logins.map((p) => <option key={p.id} value={p.id}>{p.is_default ? "Shared (your main logins)" : p.name}</option>)}
           </select>
         )}
-        <button className="btn" onClick={() => void send({ cmd: "open_engine_page", page: "clear_data", profile })}>Delete…</button>
+        <button className="btn" disabled={!profile} onClick={() => void send({ cmd: "open_engine_page", page: "clear_data", profile })}>Delete…</button>
       </div>
     </Field>
   );
