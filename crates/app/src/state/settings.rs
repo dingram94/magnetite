@@ -97,6 +97,9 @@ pub struct Settings {
     /// Where downloads go, and whether to ask each time. Not synced: a
     /// folder is this computer's.
     pub downloads: magnetite_engine::DownloadPrefs,
+    /// The zoom, in percent, a site has until it is zoomed on its own: one
+    /// of Chromium's steps. Not synced: screens differ.
+    pub page_zoom: u32,
     /// Smart folders allowed to fetch on this device (`smart_key`): those made
     /// or edited here, or turned on here. A folder another device synced
     /// waits, so the words alone cannot make this device's accounts run a
@@ -537,6 +540,9 @@ impl Settings {
         if !std::path::Path::new(&self.downloads.folder).is_absolute() {
             self.downloads.folder.clear();
         }
+        if !magnetite_engine::ZOOM_STEPS.contains(&self.page_zoom) {
+            self.page_zoom = defaults.page_zoom;
+        }
         self
     }
 }
@@ -633,6 +639,7 @@ impl Default for Settings {
             autofill: magnetite_engine::AutofillPrefs::default(),
             global_privacy_control: false,
             downloads: magnetite_engine::DownloadPrefs::default(),
+            page_zoom: 100,
             smart_allowed: None,
             adblock: AdblockSettings::default(),
             developer: crate::dev::DeveloperSettings::default(),
@@ -763,6 +770,22 @@ mod tests {
         let mut odd = Settings::default();
         odd.downloads.folder = "Downloads".into();
         assert_eq!(odd.sanitised().downloads.folder, "");
+    }
+
+    #[test]
+    fn the_page_zoom_is_one_of_chromiums_steps() {
+        let zoom = |pct: u32| {
+            let s = Settings {
+                page_zoom: pct,
+                ..Settings::default()
+            };
+            s.sanitised().page_zoom
+        };
+        assert_eq!(Settings::default().page_zoom, 100);
+        assert_eq!(zoom(125), 125);
+        assert_eq!(zoom(0), 100);
+        assert_eq!(zoom(123), 100);
+        assert_eq!(zoom(5000), 100);
     }
 
     #[test]

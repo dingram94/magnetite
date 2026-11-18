@@ -431,7 +431,9 @@ wrap_load_handler! {
             if let (Some(b), Some(f)) = (browser.as_deref(), frame.as_deref())
                 && f.is_main() != 0
             {
-                engine.note_loaded_url(b.identifier(), CefString::from(&f.url()).to_string());
+                let url = CefString::from(&f.url()).to_string();
+                Engine::keep_own_page_unzoomed(b, &url);
+                engine.note_loaded_url(b.identifier(), url);
             }
             if self.kind != Kind::Content { return; }
             if let (Some(id), Some(f)) = (engine.content_id_for(browser.as_deref()), frame) {

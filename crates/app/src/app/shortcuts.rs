@@ -108,9 +108,9 @@ impl MagnetiteApp {
             Shortcut::Forward => engine.content_go_forward(c),
             Shortcut::ZoomIn | Shortcut::ZoomOut => {
                 let up = shortcut == Shortcut::ZoomIn;
-                engine.set_content_zoom(c, magnetite_engine::zoom_step(zoom(), up));
+                engine.set_content_zoom(c, Some(magnetite_engine::zoom_step(zoom(), up)));
             }
-            Shortcut::ZoomReset => engine.set_content_zoom(c, 100),
+            Shortcut::ZoomReset => engine.set_content_zoom(c, None),
             Shortcut::Find | Shortcut::FindNext | Shortcut::FindPrevious => {
                 engine.content_find(c, shortcut);
             }
