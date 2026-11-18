@@ -75,6 +75,7 @@ pub use config::EngineConfig;
 pub use content::SPLIT_GAP;
 pub use default_browser::DefaultBrowser;
 pub use devdock::{DevToolsDock, DevToolsSize};
+pub use downloads::DownloadPrefs;
 pub use engine::{ContextProfile, Engine, EngineDelegate, WindowId};
 pub use events::{
     ContentId, DevPanel, DevToolsAction, DividerAction, DownloadReport, DownloadState, EngineEvent,

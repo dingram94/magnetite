@@ -36,6 +36,7 @@ impl EngineDelegate for MagnetiteApp {
                 magnetite_engine::set_global_privacy_control(
                     self.with_state(|s| s.settings.global_privacy_control),
                 );
+                engine.set_downloads(&self.with_state(|s| s.settings.downloads.clone()));
                 engine.set_sidebar_width(width);
                 engine.set_top_bar_visible(self.with_state(|s| s.settings.appearance.top_bar));
                 if toolbar {

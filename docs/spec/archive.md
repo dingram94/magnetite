@@ -82,6 +82,25 @@ which the icon at the end of the row does too. "All downloads…" stays above
 the list and opens the same entries as a page (`magnetite://ui/downloads`)
 with a search by file name.
 
+### Where downloads are saved
+
+| Setting | Values | Default |
+|---|---|---|
+| Settings → General → "Save downloads to" | the Downloads folder of the system, or a folder chosen in the system's dialog | the system's |
+| Settings → General → "Ask where to save each file" | off, on | off |
+
+- "Choose…" opens the system's dialog for a folder. Only a folder chosen
+  there is used: the page cannot name one, it can only take the choice
+  away ("Reset", back to the system's folder).
+- With "Ask where to save each file" every download opens a dialog for the
+  file's name and folder.
+- Both hold for every profile and take effect at once.
+- A chosen folder that is not there is said so in Settings.
+- Neither is synced: a folder is this computer's.
+
+Chromium saves the files; the settings are its preferences
+(`download.default_directory`, `download.prompt_for_download`).
+
 ## Data
 
 The archive is the `archive` list in `<data-dir>/state.json`, oldest first.

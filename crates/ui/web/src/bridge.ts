@@ -359,6 +359,8 @@ export interface Settings {
   autofill: { passwords: boolean; addresses: boolean; cards: boolean; breach_check: boolean };
   /** Tell websites not to sell or share the user's data: Global Privacy Control (Settings → Data & privacy). */
   global_privacy_control: boolean;
+  /** Where downloads go (Settings → General): `folder` as a whole path, empty for the system's Downloads folder; `ask` to be asked for each file. A patch can empty `folder`; a new one comes from `choose_download_folder`. */
+  downloads: DownloadPrefs;
   /** The ad blocker (Settings → Ad blocking); this device's own choice, never synced. */
   /** Developer features (Settings → Developer). */
   developer: { enabled: boolean; hosts: string[] };
@@ -398,6 +400,11 @@ export interface SiteSearch {
   keyword: string;
   name: string;
   url: string;
+}
+
+export interface DownloadPrefs {
+  folder: string;
+  ask: boolean;
 }
 
 /** How the sidebar and Magnetite's own pages look (Settings → Appearance). */
@@ -549,6 +556,8 @@ export type Command =
   | { cmd: "open_mini"; url: string }
   /** The system asks the user; answers once they did. */
   | { cmd: "make_default_browser" }
+  /** The system's dialog for the folder downloads are saved to; answers with the settings' `downloads` once it is closed. */
+  | { cmd: "choose_download_folder" }
   | { cmd: "set_settings"; settings: Partial<Settings> }
   /** Store an own image (WebP as base64) for `slot` of space `space`, or remove it (`null`). Settings page only. */
   | { cmd: "set_appearance_image"; slot: "empty" | "sidebar"; space: Id; data: string | null }
@@ -751,6 +760,7 @@ interface Replies {
   archive: { items: ArchiveItem[] };
   history: { items: Visit[] };
   make_default_browser: { default_browser: DefaultBrowser };
+  choose_download_folder: { downloads: DownloadPrefs };
   dev_emulate: Emulation;
   dev_servers: { servers: DevServer[] };
   dev_record_start: { id: number };

@@ -94,6 +94,9 @@ pub struct Settings {
     /// Tell websites not to sell or share the user's data (Global Privacy
     /// Control). Not synced, as the other settings of this kind.
     pub global_privacy_control: bool,
+    /// Where downloads go, and whether to ask each time. Not synced: a
+    /// folder is this computer's.
+    pub downloads: magnetite_engine::DownloadPrefs,
     /// Smart folders allowed to fetch on this device (`smart_key`): those made
     /// or edited here, or turned on here. A folder another device synced
     /// waits, so the words alone cannot make this device's accounts run a
@@ -530,6 +533,10 @@ impl Settings {
         }
         self.site_code = code;
         self.shortcuts = self.shortcuts.sanitised();
+        // A folder is a whole path; anything else means Chromium's own.
+        if !std::path::Path::new(&self.downloads.folder).is_absolute() {
+            self.downloads.folder.clear();
+        }
         self
     }
 }
@@ -560,6 +567,8 @@ impl Settings {
     /// is here whatever the patch says: everything about sync, the pinned
     /// extensions, the smart folders allowed on this device, and the
     /// shortcuts' keys, which have commands of their own (`set_shortcut`).
+    /// The download folder too, which only the system's dialog names
+    /// (`choose_download_folder`); a patch can only take it away.
     pub fn patched(
         &self,
         patch: serde_json::Map<String, serde_json::Value>,
@@ -577,13 +586,17 @@ impl Settings {
         let mut merged = serde_json::to_value(self).map_err(|e| e.to_string())?;
         lay_over(&mut merged, serde_json::Value::Object(patch));
         let wanted: Self = serde_json::from_value(merged).map_err(|e| e.to_string())?;
+        let mut wanted = wanted.sanitised();
+        if !wanted.downloads.folder.is_empty() {
+            wanted.downloads.folder.clone_from(&self.downloads.folder);
+        }
         Ok(Self {
             sync: self.sync.clone(),
             pinned_extensions: self.pinned_extensions.clone(),
             chromium_pins_seen: self.chromium_pins_seen.clone(),
             smart_allowed: self.smart_allowed.clone(),
             shortcuts: self.shortcuts.clone(),
-            ..wanted.sanitised()
+            ..wanted
         })
     }
 }
@@ -619,6 +632,7 @@ impl Default for Settings {
             tab_order: TabOrder::Recent,
             autofill: magnetite_engine::AutofillPrefs::default(),
             global_privacy_control: false,
+            downloads: magnetite_engine::DownloadPrefs::default(),
             smart_allowed: None,
             adblock: AdblockSettings::default(),
             developer: crate::dev::DeveloperSettings::default(),
@@ -723,6 +737,32 @@ mod tests {
             site_host("archive.example/https://target.example").as_deref(),
             Some("archive.example")
         );
+    }
+
+    #[test]
+    fn a_patch_can_take_the_download_folder_away_but_not_name_one() {
+        let mut start = Settings::default();
+        assert_eq!(start.downloads, magnetite_engine::DownloadPrefs::default());
+        start.downloads.folder = "/tmp/chosen".into();
+        let patch = |value: serde_json::Value| {
+            let serde_json::Value::Object(patch) = value else {
+                panic!("an object");
+            };
+            start.patched(patch).unwrap().downloads
+        };
+        let asked = patch(serde_json::json!({ "downloads": { "ask": true } }));
+        assert_eq!((asked.folder.as_str(), asked.ask), ("/tmp/chosen", true));
+        let named = patch(serde_json::json!({ "downloads": { "folder": "/etc" } }));
+        assert_eq!(
+            named.folder, "/tmp/chosen",
+            "only the dialog names a folder"
+        );
+        let reset = patch(serde_json::json!({ "downloads": { "folder": "" } }));
+        assert_eq!(reset.folder, "");
+        // A path that is not whole is none.
+        let mut odd = Settings::default();
+        odd.downloads.folder = "Downloads".into();
+        assert_eq!(odd.sanitised().downloads.folder, "");
     }
 
     #[test]
