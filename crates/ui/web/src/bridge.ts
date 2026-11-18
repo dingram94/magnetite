@@ -355,6 +355,8 @@ export interface Settings {
   tab_order: "recent" | "sidebar";
   /** Chromium's password manager and autofill: which parts are on (Settings → Passwords & autofill). */
   autofill: { passwords: boolean; addresses: boolean; cards: boolean; breach_check: boolean };
+  /** Tell websites not to sell or share the user's data: Global Privacy Control (Settings → Data & privacy). */
+  global_privacy_control: boolean;
   /** The ad blocker (Settings → Ad blocking); this device's own choice, never synced. */
   /** Developer features (Settings → Developer). */
   developer: { enabled: boolean; hosts: string[] };

@@ -10,6 +10,7 @@ changes them ([shortcuts.md](shortcuts.md)).
 | Spec | Covers |
 |---|---|
 | [first-start.md](first-start.md) | the welcome page: what a new installation asks before it does anything |
+| [global-privacy-control.md](global-privacy-control.md) | The signal that tells websites not to sell or share the user's data: header and page property |
 | [sidebar.md](sidebar.md) | layout, favorites, pinned and Today tabs, folders, hiding |
 | [spaces.md](spaces.md) | spaces, profiles and how sites are kept apart |
 | [command-bar.md](command-bar.md) | addresses, search, site search, open tabs, bookmarks, history, the archive and commands in one input |
