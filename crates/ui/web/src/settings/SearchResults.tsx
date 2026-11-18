@@ -4,6 +4,7 @@
 // anywhere.
 import { useLayoutEffect, useRef } from "react";
 import type { IconComponent } from "../Icons";
+import { Unfolded } from "./fields";
 
 export type SearchSection = { id: string; title: string; Icon: IconComponent };
 
@@ -41,7 +42,12 @@ function filter(root: HTMLElement, query: string): string[] {
         // rows without a name of its own is found by its rows only.
         const named = [...unit.querySelectorAll(".set-label, .set-hint")].filter((n) => !n.closest("[data-search-row]"));
         const own = whole || (named.length > 0 ? has(named.map((n) => n.textContent).join(" ")) : all.length === 0 && has(unit.textContent));
-        const byName = (row: Element) => has((row.querySelector("[data-search-name]") ?? row).textContent);
+        // A row's name: what it marks as such (its label and description,
+        // the words on its buttons), not that of a row inside it.
+        const byName = (row: Element) => {
+          const names = [...row.querySelectorAll("[data-search-name]")].filter((n) => n.closest("[data-search-row]") === row);
+          return has(names.length > 0 ? names.map((n) => n.textContent).join(" ") : row.textContent);
+        };
         let rows = 0;
         for (const row of all) {
           // A row inside a row (the spaces listed by a setting) is found with it.
@@ -111,7 +117,7 @@ function useMarked(query: string, onFound?: (ids: string[]) => void) {
     };
     apply();
     // Other words, other settings: back to the top of the page.
-    el.closest("main")?.scrollTo(0, 0);
+    if (query.trim()) el.closest("main")?.scrollTo(0, 0);
     const changes = new MutationObserver(apply);
     changes.observe(el, { childList: true, subtree: true, characterData: true });
     return () => {
@@ -123,15 +129,18 @@ function useMarked(query: string, onFound?: (ids: string[]) => void) {
 }
 
 /**
- * One section opened while a search is typed: all its settings, those the
- * search did not find greyed out.
+ * One section on the page: all its settings, and while a search is typed
+ * (`query`) those it did not find greyed out. The same with and without a
+ * search, so that emptying the field leaves what was typed into a setting.
  */
 export function SearchedSection({ query, section, children }: { query: string; section: SearchSection; children: React.ReactNode }) {
   const root = useMarked(query);
   return (
     <div ref={root}>
       <section data-search-id={section.id} data-search-section={section.title} data-search-keep>
-        <div className="space-y-4" data-search-body>{children}</div>
+        <Unfolded.Provider value={query.trim() !== ""}>
+          <div className="space-y-4" data-search-body>{children}</div>
+        </Unfolded.Provider>
       </section>
     </div>
   );
@@ -154,7 +163,7 @@ export function SearchResults({ query, sections, body, open, onFound, none }: { 
               <s.Icon width={15} height={15} />
               {s.title}
             </button>
-            <div className="space-y-4" data-search-body>{body(s.id)}</div>
+            <Unfolded.Provider value={true}><div className="space-y-4" data-search-body>{body(s.id)}</div></Unfolded.Provider>
           </section>
         ))}
       </div>

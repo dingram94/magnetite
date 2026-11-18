@@ -22,7 +22,7 @@ const POLL_MS = 500;
  */
 function SpacesOnThisDevice({ info, reload }: { info: Info; reload: () => Promise<Info> }) {
   return (
-    <Field label="Spaces" hint="A space that is only on this device is not synced and leaves your other devices with their next sync. Logins and favorites that only such spaces use stay here too.">
+    <Field label="Spaces" hint="A space that is only on this device is not synced: devices that still sync it lose it with their next sync. Logins and favorites that only such spaces use stay here too.">
       <div className="iso-list">
         {info.spaces.map((sp) => (
           <label key={sp.id} className="iso-row" data-search-row>
@@ -167,8 +167,8 @@ export function SyncSection({ info, reload, job, setJob, spaces = true, only }: 
             : "Free to use, run by StackForge on servers in Germany. Starting a chain needs no account."}
         >
           <div className="seg">
-            <button data-on={!own || undefined} onClick={() => setOwn(false)}>Magnetite Sync</button>
-            <button data-on={own || undefined} onClick={() => setOwn(true)}>Your own server</button>
+            <button data-on={!own || undefined} aria-pressed={!own} onClick={() => setOwn(false)}>Magnetite Sync</button>
+            <button data-on={own || undefined} aria-pressed={own} onClick={() => setOwn(true)}>Your own server</button>
           </div>
         </Field>
         {own && (

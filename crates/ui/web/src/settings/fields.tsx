@@ -6,14 +6,25 @@ import { ChevronDown } from "../Icons";
 /** Whether a setting is drawn inside a `Group`: then it is a row of it, else a card of its own. */
 const InGroup = createContext(false);
 
+/** Whether a search marks the settings around: then every group shows its rows, folded or not. */
+export const Unfolded = createContext(false);
+
 /**
  * Settings that belong together, as one card: an optional name and a line
  * about them, then one row per setting. With `fold` the name is a button
  * that shows and hides the rows ("closed": hidden at first), and `count`
- * says what is behind it. The search shows folded rows all the same.
+ * says what is behind it; `onFold` hears when the rows are hidden. While a
+ * search marks the settings (`Unfolded`) the rows show whatever the fold,
+ * and the button says so.
  */
-export function Group({ title, hint, fold, count, children }: { title?: string; hint?: string; fold?: "open" | "closed"; count?: string; children: React.ReactNode }) {
-  const [open, setOpen] = useState(fold !== "closed");
+export function Group({ title, hint, fold, count, onFold, children }: { title?: string; hint?: string; fold?: "open" | "closed"; count?: string; onFold?: () => void; children: React.ReactNode }) {
+  const [folded, setFolded] = useState(fold === "closed");
+  const unfolded = useContext(Unfolded);
+  const open = !folded || unfolded;
+  const toggle = () => {
+    if (open) onFold?.();
+    setFolded(open);
+  };
   return (
     <section className="set-card set-group" data-folded={!open || undefined}>
       {(title || hint) && (
@@ -21,7 +32,7 @@ export function Group({ title, hint, fold, count, children }: { title?: string; 
           {title && !fold && <h2 className="set-label set-group-title">{title}</h2>}
           {title && fold && (
             <h2 className="set-label set-group-title">
-              <button className="set-fold" aria-expanded={open} onClick={() => setOpen(!open)}>
+              <button className="set-fold" aria-expanded={open} onClick={toggle}>
                 <ChevronDown width={14} height={14} />
                 <span className="flex-1 text-left">{title}</span>
                 {count && <span className="font-normal text-[var(--muted)]">{count}</span>}

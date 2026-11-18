@@ -29,7 +29,7 @@ const GROUPS: { label: string; sections: Section[] }[] = [
   {
     label: "Basics",
     sections: [
-      { id: "general", label: "General", Icon: SettingsIcon, title: "General", intro: "Windows, the command bar and the first start. Magnetite keeps everything on this computer; no account is needed." },
+      { id: "general", label: "General", Icon: SettingsIcon, title: "General", intro: "Windows, the command bar and the first start. No account is needed." },
       { id: "appearance", label: "Appearance", Icon: PaletteIcon, title: "Appearance", intro: "How the sidebar and Magnetite's own pages look. Web pages keep their own design." },
       { id: "shortcuts", label: "Shortcuts", Icon: KeyboardIcon, title: "Shortcuts", intro: "The keys that run Magnetite's commands. Give any of them other keys, or none." },
     ],
@@ -37,7 +37,7 @@ const GROUPS: { label: string; sections: Section[] }[] = [
   {
     label: "Browsing",
     sections: [
-      { id: "tabs", label: "Tabs & archive", Icon: Archive, title: "Tabs & archive", intro: "Closing a tab never deletes it. Today tabs you stop using move to the archive on their own." },
+      { id: "tabs", label: "Tabs & archive", Icon: Archive, title: "Tabs & archive", intro: "A closed tab goes to the archive, and Today tabs you stop using move there on their own. It can be opened again for as long as the archive keeps it." },
       { id: "links", label: "Links", Icon: LinkIcon, title: "Links", intro: "What happens to a link you click in another app, and to a link you copy." },
       { id: "search", label: "Search", Icon: Search, title: "Search", intro: "Used when what you type in the command bar is not a web address. A keyword and a space search one site instead." },
       { id: "adblock", label: "Ad blocking", Icon: AdblockIcon, title: "Ad blocking", intro: "Magnetite can stop ads and trackers before they load, with filter lists you choose. Off until you turn it on." },
@@ -100,8 +100,6 @@ export function SettingsPage() {
   // A section opened while a search is typed: the page shows it alone, with
   // what the search found still marked, until other words are typed.
   const [picked, setPicked] = useState(false);
-  // The address this page gave itself: not a call from the app to follow.
-  const ownHash = useRef<string | null>(null);
   const type = (text: string) => {
     setQuery(text);
     setPicked(false);
@@ -109,8 +107,9 @@ export function SettingsPage() {
   const openSection = (id: string) => {
     setPicked(true);
     setPlace({ id });
-    if (location.hash !== `#${id}`) ownHash.current = `#${id}`;
-    location.hash = id;
+    // The address follows without a `hashchange`: that event is the app,
+    // or Back, sending the page elsewhere.
+    if (location.hash !== `#${id}`) history.pushState(null, "", `#${id}`);
   };
   // Changes made on this page. What the app answered to a question from
   // before the last one is older than what the page shows: asked again.
@@ -127,9 +126,6 @@ export function SettingsPage() {
   useEffect(() => {
     const follow = () => {
       if (!SECTIONS.some((s) => `#${s.id}` === location.hash.split("=")[0])) return;
-      const own = ownHash.current === location.hash;
-      ownHash.current = null;
-      if (own) return;
       // The section asked for, not what a search was showing.
       setQuery("");
       setPicked(false);
@@ -218,7 +214,7 @@ export function SettingsPage() {
       )}
       {sectionId === "tabs" && (
         <>
-          <Group title="Tidying up" hint="What Magnetite does with tabs you leave alone. Nothing is lost: an archived tab can be found again.">
+          <Group title="Tidying up" hint="What Magnetite does with tabs you leave alone. An archived tab can be opened again for as long as the archive keeps it.">
           <Field side label="Archive Today tabs after" hint="Pinned tabs and favorites are never archived.">
             <select className="field" value={settings.auto_archive_hours} onChange={(e) => update({ auto_archive_hours: Number(e.target.value) })}>
               {ARCHIVE_AFTER.map((t) => <option key={t.hours} value={t.hours}>{t.label}</option>)}
@@ -238,7 +234,7 @@ export function SettingsPage() {
           <Field side label="Ctrl+Tab goes through the tabs" hint="By last use: one press goes to the tab used before this one; hold Ctrl and press Tab again to go further back. In sidebar order: down the sidebar, row by row.">
             <div className="seg">
               {([["recent", "By last use"], ["sidebar", "In sidebar order"]] as const).map(([order, label]) => (
-                <button key={order} data-on={settings.tab_order === order || undefined} onClick={() => update({ tab_order: order })}>{label}</button>
+                <button key={order} data-on={settings.tab_order === order || undefined} aria-pressed={settings.tab_order === order} onClick={() => update({ tab_order: order })}>{label}</button>
               ))}
             </div>
           </Field>
@@ -408,19 +404,13 @@ export function SettingsPage() {
                   <p className="mt-1 max-w-[560px] text-[14px] leading-5 text-[var(--muted)]">{section.intro}</p>
                 </div>
               </header>
-              {searching ? (
-                <>
-                  <button className="set-found" onClick={() => setPicked(false)} title="Back to everything the search found">
-                    <Back width={15} height={15} />
-                    Everything for “{query.trim()}”
-                  </button>
-                  <SearchedSection query={query} section={section}>{body(sectionId)}</SearchedSection>
-                </>
-              ) : (
-                <div className="space-y-4">
-                  {body(sectionId)}
-                </div>
+              {searching && (
+                <button className="set-found" onClick={() => setPicked(false)} title="Back to everything the search found">
+                  <Back width={15} height={15} />
+                  Everything for “{query.trim()}”
+                </button>
               )}
+              <SearchedSection key={sectionId} query={searching ? query : ""} section={section}>{body(sectionId)}</SearchedSection>
             </>
           )}
         </div>

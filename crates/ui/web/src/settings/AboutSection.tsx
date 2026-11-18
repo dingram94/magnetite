@@ -42,7 +42,7 @@ export function About({ info, update }: { info: Info; update: (patch: SettingsPa
           {links.map(({ label, url, Icon }) => (
             <button key={label} className="link-tile" disabled={!url} onClick={() => url && open(url)}>
               <Icon width={16} height={16} />
-              <span className="flex-1 text-left">{label}</span>
+              <span className="flex-1 text-left" data-search-name>{label}</span>
               <ExternalIcon width={13} height={13} className="text-[var(--muted)]" />
             </button>
           ))}
@@ -51,9 +51,9 @@ export function About({ info, update }: { info: Info; update: (patch: SettingsPa
 
       <Field label="Licence" hint="Magnetite is free software under the European Union Public Licence 1.2 (EUPL-1.2): use, study, share and change it; changed versions you share stay under the same licence. It builds on open-source software whose licences travel with it. This software uses code of FFmpeg licensed under the LGPLv2.1; how to get its source is in the open-source licences.">
         <div className="flex flex-wrap gap-2">
-          <button className="btn" onClick={() => open("magnetite://ui/licenses#magnetite")}>EUPL-1.2 licence</button>
-          <button className="btn" onClick={() => open("magnetite://ui/licenses#notices")}>Open-source licences</button>
-          <button className="btn" onClick={() => open("chrome://credits")}>Chromium licences</button>
+          <button className="btn" data-search-name onClick={() => open("magnetite://ui/licenses#magnetite")}>EUPL-1.2 licence</button>
+          <button className="btn" data-search-name onClick={() => open("magnetite://ui/licenses#notices")}>Open-source licences</button>
+          <button className="btn" data-search-name onClick={() => open("chrome://credits")}>Chromium licences</button>
         </div>
       </Field>
       </Group>

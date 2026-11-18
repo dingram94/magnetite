@@ -128,7 +128,7 @@ export function ShortcutsSection({ info, reload }: { info: Info; reload: () => v
   return (
     <>
       {SHORTCUT_GROUPS.map((group) => (
-        <Group key={group.label} title={group.label} fold={first === group ? "open" : "closed"} count={`${Object.keys(group.actions).length} commands`}>
+        <Group key={group.label} title={group.label} fold={first === group ? "open" : "closed"} onFold={() => setRecording(null)} count={`${Object.keys(group.actions).length} commands`}>
           <div className="set-list">
             {(Object.keys(group.actions) as ShortcutAction[]).map((action) =>
               row({ kind: "action", action }, action, <span className="min-w-0 flex-1 truncate" data-search-name>{SHORTCUT_LABEL[action]}</span>),
@@ -136,7 +136,7 @@ export function ShortcutsSection({ info, reload }: { info: Info; reload: () => v
           </div>
         </Group>
       ))}
-      <Group title="Spaces" fold="closed" count={`${info.spaces.length} ${info.spaces.length === 1 ? "space" : "spaces"}`} hint="Keys that go straight to one space. The first nine also have the digits of their place.">
+      <Group title="Spaces" fold="closed" onFold={() => setRecording(null)} count={`${info.spaces.length} ${info.spaces.length === 1 ? "space" : "spaces"}`} hint="Keys that go straight to one space. The first nine also have the digits of their place.">
         <div className="set-list">
           {info.spaces.map((space) =>
             row(

@@ -575,8 +575,6 @@ button:disabled, select:disabled, [aria-disabled="true"] { cursor: default; }
 .set-fold svg { flex: none; transition: transform 120ms; }
 .set-fold[aria-expanded="false"] svg { transform: rotate(-90deg); }
 .set-fold:hover { color: var(--fg); }
-/* The search shows what a folded group holds. */
-[data-search-body] .set-group-body[hidden] { display: block; }
 /* A list of rows of its own kind inside a group (shortcuts, isolation). */
 .set-group .set-list { padding: 0 18px 6px; }
 .set-group-body > .iso-list { border-width: 1px 0 0; border-radius: 0; margin-top: 8px; }
@@ -586,9 +584,9 @@ button:disabled, select:disabled, [aria-disabled="true"] { cursor: default; }
 .set-sided { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
 .set-sided > :first-child { flex: 1 1 240px; }
 .set-side { flex: none; max-width: 100%; }
-.set-side .field { width: auto; min-width: 190px; max-width: 100%; }
+.set-side .field { max-width: 100%; }
 .set-side > .flex:has(.range) { width: 320px; max-width: 100%; }
-.set-side select.field { padding-right: 30px; }
+.set-side select.field { width: auto; min-width: 190px; padding-right: 30px; }
 .link-tile { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px; border-radius: 9px; background: rgba(255,255,255,0.05); color: var(--secondary); }
 .link-tile:hover:not(:disabled) { background: rgba(255,255,255,0.09); color: var(--fg); }
 .link-tile:disabled { opacity: 0.45; }
