@@ -88,7 +88,8 @@ pub use scheme::user_image_dir;
 pub use site::{SiteState, ZOOM_STEPS, zoom_step};
 pub use sitecode::SiteCode;
 pub use sitedata::{
-    ClearReport, PermissionKind, PermissionRow, PermissionValue, in_domain, registrable_domain,
+    ClearReport, PermissionEntry, PermissionKind, PermissionRow, PermissionValue, in_domain,
+    registrable_domain,
 };
 
 /// The Chromium and CEF versions Magnetite is built on (Settings → About):
