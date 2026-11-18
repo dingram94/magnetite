@@ -613,7 +613,7 @@ export type Command =
   | { cmd: "clear_downloads" }
   | { cmd: "show_downloads" }
   /** One of Chromium's own pages (saved passwords, addresses, cards) as a peek, in the logins of `profile`. */
-  | { cmd: "open_engine_page"; page: "passwords" | "addresses" | "cards"; profile?: Id }
+  | { cmd: "open_engine_page"; page: "passwords" | "addresses" | "cards" | "clear_data"; profile?: Id }
   | { cmd: "show_bookmarks" }
   /** Save a tab's page to the bookmarks of its space; without `id`, the active tab's. */
   | { cmd: "add_bookmark"; id?: Id }
