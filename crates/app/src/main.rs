@@ -107,6 +107,8 @@ fn main() {
         ui_url,
         sidebar_width: 264,
         use_mock_keychain: keychain_mode(&data_dir, cli.mock_keychain),
+        // Filled in below, once the settings are read.
+        accept_languages: String::new(),
         load_extensions: cli.load_extension,
         chrome_toolbar: cli.chrome_toolbar,
         helper: helper_path(),
@@ -130,6 +132,10 @@ fn main() {
         launch_urls,
     ));
     app::install_global(&delegate);
+    let config = EngineConfig {
+        accept_languages: delegate.accept_languages(),
+        ..config
+    };
     std::process::exit(magnetite_engine::run(config, delegate));
 }
 

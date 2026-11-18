@@ -220,6 +220,12 @@ impl PaletteMode {
 }
 
 impl MagnetiteApp {
+    /// The languages websites are asked for, as the engine takes them at
+    /// its start.
+    pub fn accept_languages(&self) -> String {
+        self.with_state(|s| s.settings.languages.accept_languages())
+    }
+
     pub fn new(
         data_dir: PathBuf,
         scriptlets: Option<PathBuf>,

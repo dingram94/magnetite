@@ -122,6 +122,9 @@ pub(crate) struct Inner {
     /// Which parts of Chromium's password manager and autofill are on
     /// (`autofill.rs`), for the profiles made from now on.
     pub autofill: crate::AutofillPrefs,
+    /// Spell check and the languages websites are asked for
+    /// (`languages.rs`), for the profiles made from now on.
+    pub languages: crate::LanguagePrefs,
     /// Pages the app muted. Kept here because a page gets its browser a
     /// moment after it is asked for: the mute is applied once it has one.
     pub muted: HashSet<ContentId>,
@@ -263,6 +266,7 @@ impl Engine {
                 quitting: false,
                 locks: HashMap::new(),
                 autofill: crate::AutofillPrefs::default(),
+                languages: crate::LanguagePrefs::default(),
                 muted: HashSet::new(),
                 shares: crate::tabshare::Shares::default(),
                 mobile: HashSet::new(),
@@ -560,7 +564,10 @@ impl Engine {
         }
         let settings = if profile.ephemeral {
             // An empty cache path makes CEF create an in-memory context.
-            RequestContextSettings::default()
+            RequestContextSettings {
+                accept_language_list: CefString::from(self.config.accept_languages.as_str()),
+                ..Default::default()
+            }
         } else {
             let dir = self.config.profile_dir(&profile.id);
             if let Err(e) = std::fs::create_dir_all(&dir) {
@@ -569,6 +576,7 @@ impl Engine {
             RequestContextSettings {
                 cache_path: CefString::from(dir.to_string_lossy().as_ref()),
                 persist_session_cookies: 1,
+                accept_language_list: CefString::from(self.config.accept_languages.as_str()),
                 ..Default::default()
             }
         };
@@ -776,6 +784,11 @@ pub(crate) fn prepare_context(ctx: &RequestContext) -> bool {
         crate::trace("cannot set the password and autofill preferences");
     }
     crate::autofill::watch(ctx);
+    // Spell check and languages as the user's settings have them.
+    let languages = Engine::global().lock().languages.clone();
+    if languages != crate::LanguagePrefs::default() && !languages.apply(ctx) {
+        crate::trace("cannot set the language preferences");
+    }
     set
 }
 

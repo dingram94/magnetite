@@ -205,6 +205,10 @@ export function SettingsPage() {
           <Toggle label="Web panels close by themselves" hint="A web panel (a favorite with &quot;Open as panel&quot;) closes when you click into the page behind it. Off: it stays until you close it." checked={settings.panel_autoclose} onChange={(v) => update({ panel_autoclose: v })} />
           <Toggle label="Pop out playing videos" hint="When you leave a tab with a playing video, it continues in a floating picture-in-picture window. Coming back puts it into the page again." checked={settings.auto_pip} onChange={(v) => update({ auto_pip: v })} />
           </Group>
+          <Group title="Text and languages">
+            <Toggle label="Check spelling as you type" hint="Marks words the spell checker does not know, in the text fields of web pages." checked={settings.languages.spellcheck} onChange={(spellcheck) => update({ languages: { ...settings.languages, spellcheck } })} />
+            <WebLanguages key={settings.languages.languages.join()} saved={settings.languages.languages} save={(languages) => update({ languages: { ...settings.languages, languages } })} />
+          </Group>
           <Group title="Command bar">
           <Toggle label="Quick search from anywhere (⌥⌘N)" hint="Opens the command bar over any app; what you pick opens in a mini window. Only that key combination reaches Magnetite, no other typing." checked={settings.quick_search} onChange={(v) => update({ quick_search: v })} />
           </Group>
@@ -553,6 +557,37 @@ function DefaultBrowserCard({ state }: { state: DefaultBrowser }) {
   return (
     <Field side label="Default browser" hint={now === "yes" ? "Magnetite opens links from other apps." : "Links from other apps open in another browser."}>
       {now === "no" && <button className="btn" disabled={asking} onClick={ask}>{asking ? "Waiting for macOS…" : "Make default"}</button>}
+    </Field>
+  );
+}
+
+/** A language tag as the app keeps one (`is_tag` in the engine's `languages.rs`). */
+const LANGUAGE_TAG = /^[a-z]{2,3}(-[a-z0-9]{1,8})*$/i;
+
+/**
+ * The languages websites are asked for, typed as tags in the order of
+ * preference and saved when the field is left. Empty means the system's.
+ */
+function WebLanguages({ saved, save }: { saved: string[]; save: (languages: string[]) => void }) {
+  const [text, setText] = useState(saved.join(", "));
+  const typed = text.split(/[\s,;]+/).filter(Boolean);
+  const wrong = typed.filter((t) => !LANGUAGE_TAG.test(t));
+  return (
+    <Field label="Languages websites are asked for" hint="In the order you prefer them, as language codes: de, en-US, en. A website with several languages answers in the first one it knows. Empty: the languages of your system. A change counts from the next start of Magnetite.">
+      <input
+        className="field mono"
+        value={text}
+        placeholder="de, en-US, en"
+        aria-label="Languages websites are asked for"
+        aria-invalid={wrong.length > 0 || undefined}
+        spellCheck={false}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={() => {
+          if (wrong.length === 0 && typed.join() !== saved.join()) save(typed);
+        }}
+        onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+      />
+      {wrong.length > 0 && <p className="set-hint" style={{ color: "var(--danger)" }}>Not saved: {wrong.join(", ")} {wrong.length === 1 ? "is no language code" : "are no language codes"}.</p>}
     </Field>
   );
 }

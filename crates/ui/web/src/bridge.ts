@@ -355,6 +355,8 @@ export interface Settings {
   tab_order: "recent" | "sidebar";
   /** Chromium's password manager and autofill: which parts are on (Settings → Passwords & autofill). */
   autofill: { passwords: boolean; addresses: boolean; cards: boolean; breach_check: boolean };
+  /** Spell check in text fields, and the languages websites are asked for, the preferred one first, as language tags; empty for the system's (Settings → General). */
+  languages: { spellcheck: boolean; languages: string[] };
   /** The ad blocker (Settings → Ad blocking); this device's own choice, never synced. */
   /** Developer features (Settings → Developer). */
   developer: { enabled: boolean; hosts: string[] };
