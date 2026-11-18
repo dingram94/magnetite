@@ -67,6 +67,15 @@ button offers all four and, below a line, Settings.
 The downloads list every file a page downloads, except the package of an
 extension being installed from the Chrome Web Store: that is part of the
 install, as in Chrome, and Chromium deletes it once the extension is in.
+
+A download also shows as a card in the notification panel at the top right
+of the page: while it runs, and for six seconds after it ended or failed. At
+most three show, the newest first. The pointer on the panel holds the cards
+that are there, and they stay two more seconds after it has left. A card
+that is gone does not come back: when the panel opens for something else (a
+new version, a permission a page asks for), the pointer on it brings no
+earlier download with it. The download list keeps them all.
+
 A click on a finished download opens the file; a right click offers "Copy
 file", "Copy file path" (both on macOS) and showing it in the file manager,
 which the icon at the end of the row does too. "All downloads…" stays above
