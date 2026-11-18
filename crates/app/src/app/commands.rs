@@ -1381,18 +1381,23 @@ impl MagnetiteApp {
                                 return engine
                                     .finish_reply(ticket, Err("Magnetite is closing".into()));
                             };
-                            let downloads = app.with_state(|s| {
+                            let (downloads, changed) = app.with_state(|s| {
+                                let before = s.settings.downloads.folder.clone();
                                 if let Some(folder) =
                                     chosen.filter(|f| f.is_absolute() && f.is_dir())
                                 {
                                     s.settings.downloads.folder =
                                         folder.to_string_lossy().into_owned();
                                 }
-                                s.settings.downloads.clone()
+                                let changed = s.settings.downloads.folder != before;
+                                (s.settings.downloads.clone(), changed)
                             });
-                            engine.set_downloads(&downloads);
-                            // Kept also if the app ends without a proper quit.
-                            app.save_soon();
+                            // A dialog closed without a choice changes nothing.
+                            if changed {
+                                engine.set_downloads(&downloads);
+                                // Kept also if the app ends without a proper quit.
+                                app.save_soon();
+                            }
                             let reply = json!({ "downloads": downloads }).to_string();
                             engine.finish_reply(ticket, Ok(reply));
                         }),
