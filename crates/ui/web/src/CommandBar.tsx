@@ -35,7 +35,7 @@ const ACTIONS: Action[] = [
   { id: "copy_link", title: "Copy link without trackers", keywords: ["copy", "link", "url", "clean"], cmd: { cmd: "copy_link", variant: "clean", notify: true } },
   { id: "copy_original", title: "Copy original link", keywords: ["copy", "link", "url", "raw"], cmd: { cmd: "copy_link", variant: "original", notify: true } },
   { id: "copy_markdown", title: "Copy link as Markdown", keywords: ["copy", "markdown", "md"], cmd: { cmd: "copy_link", variant: "markdown", notify: true } },
-  { id: "zoom_reset", title: "Reset zoom", keywords: ["zoom", "100"], cmd: { cmd: "set_zoom", percent: 100 } },
+  { id: "zoom_reset", title: "Reset zoom", keywords: ["zoom", "100"], cmd: { cmd: "set_zoom", percent: 0 } },
   { id: "split_right", title: "Add right split…", keywords: ["split", "right", "side"], cmd: { cmd: "open_palette", mode: "split", side: "right" } },
   { id: "split_left", title: "Add left split…", keywords: ["split", "left", "side"], cmd: { cmd: "open_palette", mode: "split", side: "left" } },
   { id: "split_top", title: "Add top split…", keywords: ["split", "top", "above"], cmd: { cmd: "open_palette", mode: "split", side: "top" } },

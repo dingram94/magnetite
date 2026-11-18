@@ -15,7 +15,7 @@ export function siteStates(rt: TabRuntime | undefined): { key: string; label: st
   if (rt.shared) out.push({ key: "capture", label: "This tab is being shared" });
   if (rt.site?.cert_error) out.push({ key: "connection", label: "Certificate problem" });
   else if (rt.site?.secure === false) out.push({ key: "connection", label: "Not encrypted" });
-  if (rt.site && rt.site.zoom !== 100) out.push({ key: "zoom", label: `Zoom ${rt.site.zoom}%` });
+  if (rt.site && rt.site.zoom !== (rt.site.base_zoom || 100)) out.push({ key: "zoom", label: `Zoom ${rt.site.zoom}%` });
   if (rt.muted) out.push({ key: "muted", label: "Muted" });
   return out;
 }

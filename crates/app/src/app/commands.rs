@@ -1718,6 +1718,7 @@ impl MagnetiteApp {
                 Self::apply_devtools_dock(engine, settings.devtools_dock);
                 engine.set_autofill(settings.autofill);
                 engine.set_downloads(&settings.downloads);
+                engine.set_default_zoom(settings.page_zoom);
                 engine.set_quick_search_key(settings.quick_search);
                 self.dev_settings_changed(engine);
                 // Open pages get changed CSS at once.
@@ -2243,7 +2244,8 @@ impl MagnetiteApp {
             }
             UiCommand::SetZoom { percent } => {
                 if let Some(c) = self.focused_content(None) {
-                    engine.set_content_zoom(c, percent.clamp(25, 500));
+                    // 0: the zoom every site starts with (Settings → Appearance).
+                    engine.set_content_zoom(c, (percent != 0).then_some(percent.clamp(25, 500)));
                 }
             }
         }

@@ -185,6 +185,8 @@ export function SitePanel({ state, item, rt, onClose, inWindow = false }: { stat
   const internal = item.url.startsWith("magnetite://");
   const conn = connection(item, rt);
   const zoom = rt?.site?.zoom ?? 100;
+  // The zoom the site has without one of its own (Settings → Appearance).
+  const baseZoom = rt?.site?.base_zoom || 100;
   const step = (dir: 1 | -1) => {
     const next = dir > 0 ? ZOOM_STEPS.find((z) => z > zoom) : [...ZOOM_STEPS].reverse().find((z) => z < zoom);
     if (next) send({ cmd: "set_zoom", percent: next });
@@ -249,7 +251,7 @@ export function SitePanel({ state, item, rt, onClose, inWindow = false }: { stat
             <div className="panel-row">
               <span className="flex-1">Zoom</span>
               <button className="ib sm" aria-label="Zoom out" disabled={zoom <= ZOOM_STEPS[0]!} onClick={() => step(-1)}><Minus width={14} height={14} /></button>
-              <button className="zoom-value" aria-label="Reset zoom to 100%" title="Reset to 100%" onClick={() => send({ cmd: "set_zoom", percent: 100 })}>{zoom}%</button>
+              <button className="zoom-value" aria-label={`Reset zoom to ${baseZoom}%`} title={`Reset to ${baseZoom}%`} onClick={() => send({ cmd: "set_zoom", percent: 0 })}>{zoom}%</button>
               <button className="ib sm" aria-label="Zoom in" disabled={zoom >= ZOOM_STEPS[ZOOM_STEPS.length - 1]!} onClick={() => step(1)}><Plus width={14} height={14} /></button>
             </div>
             {/* Asked again when the tab goes to another site; the app takes the host from the address (without port). */}
