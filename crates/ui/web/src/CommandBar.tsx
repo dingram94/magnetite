@@ -31,6 +31,7 @@ const ACTIONS: Action[] = [
   { id: "web_panel", title: "Open or close the web panel", keywords: ["panel", "side", "web"], cmd: { cmd: "shortcut", shortcut: "web_panel" } },
   { id: "toggle_top_bar", title: "Toggle top bar", keywords: ["top", "bar", "address", "layout", "toolbar"], cmd: { cmd: "toggle_top_bar" } },
   { id: "import", title: "Import from another browser…", keywords: ["import", "chrome", "firefox", "zen", "arc", "brave", "edge"], cmd: { cmd: "new_tab", url: "magnetite://ui/settings#data" } },
+  { id: "welcome", title: "Show the welcome page again", keywords: ["welcome", "setup", "wizard", "first", "start", "onboarding"], cmd: { cmd: "new_tab", url: "magnetite://ui/welcome" } },
   { id: "copy_link", title: "Copy link without trackers", keywords: ["copy", "link", "url", "clean"], cmd: { cmd: "copy_link", variant: "clean", notify: true } },
   { id: "copy_original", title: "Copy original link", keywords: ["copy", "link", "url", "raw"], cmd: { cmd: "copy_link", variant: "original", notify: true } },
   { id: "copy_markdown", title: "Copy link as Markdown", keywords: ["copy", "markdown", "md"], cmd: { cmd: "copy_link", variant: "markdown", notify: true } },

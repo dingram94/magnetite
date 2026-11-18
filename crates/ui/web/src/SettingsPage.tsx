@@ -175,6 +175,9 @@ export function SettingsPage() {
           <Toggle label="Several windows" hint="New Window opens another window on the same sidebar. Choosing a tab in one window moves it there; with Magnetite's own engine build it keeps playing, otherwise it loads again. Windows open again after a restart. New, and untested on macOS and Windows." checked={settings.several_windows} onChange={(v) => update({ several_windows: v })} />
           <Toggle label="Remove trackers from copied links" hint="Copy Link drops tracking parameters such as utm_source and fbclid." checked={settings.strip_trackers} onChange={(v) => update({ strip_trackers: v })} />
           <Toggle label="Web panels close by themselves" hint="A web panel (a favorite with &quot;Open as panel&quot;) closes when you click into the page behind it. Off: it stays until you close it." checked={settings.panel_autoclose} onChange={(v) => update({ panel_autoclose: v })} />
+          <Field label="Welcome page" hint="The questions of the first start: import from another browser, search engine, ad blocking, tabs and sync. Nothing you have set changes until you choose something there.">
+            <button className="btn" onClick={() => void send({ cmd: "new_tab", url: "magnetite://ui/welcome" })}>Show it again</button>
+          </Field>
         </>
       )}
       {sectionId === "tabs" && (

@@ -14,8 +14,10 @@ along.
   button for every browser found on this computer. A click imports; the
   line below says how many spaces and tabs were added, or why nothing was.
   The command bar's "Import from another browser…" opens this section.
-- On the welcome page of the first start the browsers are chosen first and
-  imported when the page is left (`first-start.md`).
+- On the welcome page a chosen browser is read to show what it would add,
+  space by space; there the spaces can be given other names and icons,
+  and single ones left out. It is read again and imported when the page is
+  left (`first-start.md`).
 - An import **adds**. The new spaces follow the existing ones and Magnetite
   switches to the first of them; nothing already in the sidebar changes.
   Importing twice gives the spaces twice. A space whose name is taken gets a
@@ -124,7 +126,7 @@ instead of standard output; `--summary` prints the tab counts per space.
 ## Privacy
 
 Everything happens on this computer. Magnetite reads another browser's files
-only when you click its button, and keeps what ends up in the sidebar:
+only when you click its button or choose it on the welcome page, and keeps what ends up in the sidebar:
 addresses and titles of tabs, when they were created and last used, and
 names, icons and colours of spaces and folders. It is stored in `state.json` in Magnetite's data folder.
 

@@ -43,9 +43,11 @@ function SpacesOnThisDevice({ info, reload }: { info: Info; reload: () => Promis
 
 /**
  * `job` lives in the page, so leaving this section and coming back does not
- * forget it. `spaces` false leaves out the list of spaces (the welcome page).
+ * forget it. `spaces` false leaves out the list of spaces, and `only` offers
+ * just starting a chain or just joining one, in the words of a first start
+ * (both: the welcome page).
  */
-export function SyncSection({ info, reload, job, setJob, spaces = true }: { info: Info; reload: () => Promise<Info>; job: SyncJob | null; setJob: (job: SyncJob | null) => void; spaces?: boolean }) {
+export function SyncSection({ info, reload, job, setJob, spaces = true, only }: { info: Info; reload: () => Promise<Info>; job: SyncJob | null; setJob: (job: SyncJob | null) => void; spaces?: boolean; only?: SyncJob }) {
   const sy = info.settings.sync;
   const ownAtStart = !!sy.server_url && sy.server_url !== PUBLIC_SYNC;
   const [own, setOwn] = useState(ownAtStart);
@@ -160,19 +162,19 @@ export function SyncSection({ info, reload, job, setJob, spaces = true }: { info
         </div>
         {own && <input className="field mt-3" value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="https://sync.example.org" spellCheck={false} />}
       </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="set-card">
-          <div className="font-semibold">First device</div>
-          <p className="hint" style={{ marginTop: 4 }}>Magnetite creates a sync code for you to use on your other devices.</p>
+      <div className={`grid gap-3 ${only ? "" : "grid-cols-2"}`}>
+        {only !== "join" && <div className="set-card">
+          <div className="font-semibold">{only ? "Start a sync chain" : "First device"}</div>
+          <p className="hint" style={{ marginTop: 4 }}>{only ? "Magnetite gives you 24 words, your sync code. Enter them on your other computers and they show the same sidebar." : "Magnetite creates a sync code for you to use on your other devices."}</p>
           {own && <input className="field mt-3" value={invite} onChange={(e) => setInvite(e.target.value)} placeholder="Invite code, if the server needs one" spellCheck={false} />}
           <button className="btn mt-3" disabled={job !== null || !server} onClick={() => begin("create", send({ cmd: "sync_create", server, invite: (own && invite) || undefined }))}>{job === "create" ? "Starting…" : "Start syncing"}</button>
-        </div>
-        <div className="set-card">
-          <div className="font-semibold">Another device</div>
-          <p className="hint" style={{ marginTop: 4 }}>Enter the 24 words from Settings → Sync on a device that already syncs.</p>
+        </div>}
+        {only !== "create" && <div className="set-card">
+          <div className="font-semibold">{only ? "Your sync code" : "Another device"}</div>
+          <p className="hint" style={{ marginTop: 4 }}>{only ? "The 24 words that Settings → Sync shows on a device that already syncs." : "Enter the 24 words from Settings → Sync on a device that already syncs."}</p>
           <textarea className="field mono mt-3 resize-none" style={{ height: 72, padding: 8 }} value={words} onChange={(e) => setWords(e.target.value)} placeholder="24 words" spellCheck={false} autoComplete="off" />
           <button className="btn mt-3" disabled={job !== null || !server || wordCount !== 24} onClick={() => { begin("join", send({ cmd: "sync_join", server, words })); setWords(""); }}>{job === "join" ? "Joining…" : wordCount > 0 && wordCount !== 24 ? `${wordCount} of 24 words` : "Join"}</button>
-        </div>
+        </div>}
       </div>
       {(refused ?? sy.last_error) && <div className="hint" style={{ color: "var(--danger)" }}>{refused ?? sy.last_error}</div>}
       {spaces && <SpacesOnThisDevice info={info} reload={reload} />}

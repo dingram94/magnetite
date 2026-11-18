@@ -17,6 +17,112 @@ pub struct Imported {
     pub bookmarks: usize,
 }
 
+/// One space an import would add (`preview`).
+#[derive(Debug, PartialEq, Eq, serde::Serialize)]
+pub struct SpacePreview {
+    pub title: String,
+    /// The icon it comes with, if any.
+    pub icon: Option<String>,
+    /// Its pinned and Today tabs.
+    pub tabs: usize,
+    pub bookmarks: usize,
+}
+
+/// What the welcome page chose for one imported space: the space at
+/// `index` of what `preview` listed, if it is still called `from`.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct SpaceChoice {
+    pub index: usize,
+    pub from: String,
+    /// Another name for it.
+    #[serde(default)]
+    pub to: Option<String>,
+    /// Another icon for it, by the name of a glyph.
+    #[serde(default)]
+    pub icon: Option<String>,
+    /// Leave it out of the import.
+    #[serde(default)]
+    pub skip: bool,
+}
+
+/// The longest name the welcome page can give an imported space.
+const MAX_SPACE_NAME: usize = 80;
+/// The longest name of an icon it can give one.
+const MAX_ICON_NAME: usize = 40;
+
+/// What `add_import` would add from `snap`, space by space, and how many
+/// favorites; nothing is added. Counted after `fresh_import`, so tabs
+/// Magnetite would not open do not count.
+pub fn preview(snap: SidebarSnapshot) -> (Vec<SpacePreview>, usize) {
+    let snap = fresh_import(snap);
+    let favorites = snap.favorites.iter().map(|f| f.items.len()).sum();
+    let spaces = (snap.spaces.iter())
+        .map(|s| SpacePreview {
+            title: s.title.clone(),
+            icon: s.icon.clone(),
+            tabs: s.today.len() + s.pinned.iter().flat_map(SidebarNode::tabs).count(),
+            bookmarks: s.bookmarks.iter().flat_map(SidebarNode::tabs).count(),
+        })
+        .collect();
+    (spaces, favorites)
+}
+
+/// Apply what the welcome page chose for the spaces of `snap`: names, icons
+/// and which ones stay out. `snap` is read again after the preview: a
+/// choice only goes to the space that is still at its place under its old
+/// name. A name without a letter to show changes nothing, nor does an icon
+/// name that is not one. A profile that only spaces left out used stays
+/// out too, with its favorites.
+pub fn choose_spaces(snap: SidebarSnapshot, choices: &[SpaceChoice]) -> SidebarSnapshot {
+    let mut snap = fresh_import(snap);
+    let mut skipped = HashSet::new();
+    for c in choices {
+        let Some(space) = snap.spaces.get_mut(c.index) else {
+            continue;
+        };
+        if space.title != c.from {
+            continue;
+        }
+        if c.skip {
+            skipped.insert(c.index);
+            continue;
+        }
+        if let Some(to) = &c.to {
+            let to: String = (to.chars().filter(|ch| !ch.is_control()))
+                .take(MAX_SPACE_NAME)
+                .collect();
+            let to = to.trim();
+            if !to.is_empty() {
+                space.title = to.into();
+            }
+        }
+        if let Some(icon) = &c.icon {
+            let named = !icon.is_empty()
+                && icon.len() <= MAX_ICON_NAME
+                && icon
+                    .chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || ch == '-');
+            if named {
+                space.icon = Some(icon.clone());
+            }
+        }
+    }
+    if skipped.is_empty() {
+        return snap;
+    }
+    let mut index = 0;
+    snap.spaces.retain(|_| {
+        index += 1;
+        !skipped.contains(&(index - 1))
+    });
+    let used: HashSet<Id> = (snap.spaces.iter().map(|s| s.profile_id.clone())).collect();
+    snap.profiles
+        .retain(|p| p.is_default || used.contains(&p.id));
+    let kept: HashSet<Id> = snap.profiles.iter().map(|p| p.id.clone()).collect();
+    snap.favorites.retain(|f| kept.contains(&f.profile_id));
+    snap
+}
+
 /// Gives imported items fresh IDs and our profile IDs (`AppState::add_import`).
 pub(super) struct Fresh {
     /// Imported profile ID to ours.
@@ -400,6 +506,133 @@ mod tests {
                     .all(|t| !["b", "c"].contains(&t.id.as_str()))
         });
         assert!(renamed, "imported IDs replaced");
+    }
+
+    #[test]
+    fn a_preview_counts_what_an_import_would_add() {
+        let mut snap = state().sidebar;
+        snap.spaces.truncate(1);
+        snap.spaces[0].title = "Google Chrome".into();
+        snap.spaces[0].icon = None;
+        snap.spaces[0].pinned = vec![SidebarNode::Folder(Folder {
+            id: "f".into(),
+            title: "Group".into(),
+            icon: None,
+            children: vec![SidebarNode::Tab(tab("a")), SidebarNode::Tab(tab("b"))],
+            smart: None,
+        })];
+        snap.spaces[0].today = vec![
+            tab("c"),
+            TabItem {
+                url: "javascript:alert(1)".into(),
+                ..tab("evil")
+            },
+        ];
+        snap.spaces[0].bookmarks = vec![SidebarNode::Tab(tab("d"))];
+        let (spaces, _) = preview(snap);
+        assert_eq!(
+            spaces,
+            [SpacePreview {
+                title: "Google Chrome".into(),
+                icon: None,
+                tabs: 3,
+                bookmarks: 1,
+            }],
+            "the tab Magnetite would not open does not count"
+        );
+    }
+
+    #[test]
+    fn a_new_name_goes_to_the_space_it_was_chosen_for() {
+        let mut snap = state().sidebar;
+        snap.spaces.truncate(1);
+        snap.spaces[0].title = "Google Chrome".into();
+        let rename = |index, from: &str, to: &str| SpaceChoice {
+            index,
+            from: from.into(),
+            to: Some(to.into()),
+            ..SpaceChoice::default()
+        };
+        let named =
+            |choices: &[SpaceChoice]| choose_spaces(snap.clone(), choices).spaces[0].title.clone();
+        assert_eq!(
+            named(&[rename(0, "Google Chrome", "  Personal\n ")]),
+            "Personal"
+        );
+        // The browser changed since the preview: another space is there now.
+        assert_eq!(named(&[rename(0, "Work", "Personal")]), "Google Chrome");
+        assert_eq!(
+            named(&[rename(3, "Google Chrome", "Personal")]),
+            "Google Chrome"
+        );
+        assert_eq!(named(&[rename(0, "Google Chrome", "  ")]), "Google Chrome");
+        assert_eq!(
+            named(&[rename(0, "Google Chrome", &"x".repeat(200))]).len(),
+            80
+        );
+    }
+
+    #[test]
+    fn a_space_left_out_stays_out_with_what_only_it_used() {
+        let mut snap = state().sidebar;
+        let mut work = snap.spaces[0].clone();
+        work.id = "work".into();
+        work.title = "Work".into();
+        work.profile_id = "work".into();
+        let mut play = snap.spaces[0].clone();
+        play.id = "play".into();
+        play.title = "Play".into();
+        snap.spaces.truncate(1);
+        snap.spaces[0].title = "Personal".into();
+        snap.spaces.extend([work, play]);
+        snap.profiles.push(Profile {
+            id: "work".into(),
+            name: "Work".into(),
+            is_default: false,
+            ephemeral: false,
+        });
+        snap.favorites.push(magnetite_core::FavoriteSet {
+            profile_id: "work".into(),
+            items: vec![tab("fav")],
+        });
+        let choice = |index, from: &str| SpaceChoice {
+            index,
+            from: from.into(),
+            ..SpaceChoice::default()
+        };
+        let chosen = choose_spaces(
+            snap.clone(),
+            &[
+                SpaceChoice {
+                    skip: true,
+                    ..choice(1, "Work")
+                },
+                SpaceChoice {
+                    icon: Some("briefcase".into()),
+                    ..choice(2, "Play")
+                },
+                // Not the space the page showed there: it stays.
+                SpaceChoice {
+                    skip: true,
+                    ..choice(0, "Work")
+                },
+            ],
+        );
+        let titles: Vec<&str> = chosen.spaces.iter().map(|s| s.title.as_str()).collect();
+        assert_eq!(titles, ["Personal", "Play"]);
+        assert_eq!(chosen.spaces[1].icon.as_deref(), Some("briefcase"));
+        assert!(chosen.profiles.iter().all(|p| p.id != "work"));
+        assert!(chosen.favorites.iter().all(|f| f.profile_id != "work"));
+
+        // An icon name that is none changes nothing.
+        let odd = choose_spaces(
+            snap,
+            &[SpaceChoice {
+                icon: Some("<b>".into()),
+                ..choice(0, "Personal")
+            }],
+        );
+        assert_eq!(odd.spaces[0].icon, state().sidebar.spaces[0].icon);
     }
 
     #[test]

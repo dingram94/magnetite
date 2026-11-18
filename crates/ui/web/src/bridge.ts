@@ -600,8 +600,8 @@ export type Command =
   | { cmd: "dev_record_end"; id: number; failed?: boolean }
   | { cmd: "dev_record_file"; reveal: boolean }
   | { cmd: "open_palette"; mode: PaletteMode; side?: Side; tab?: Id }
-  /** The welcome page is done: the app reads the chosen browsers (`import_sources` keys) and closes the page. */
-  | { cmd: "finish_welcome"; import: string[]; default_browser?: boolean }
+  /** The welcome page is done: the app reads the chosen browsers (`import_sources` keys) again, applies what was chosen for their spaces (`spaces`, per browser) and closes the page. */
+  | { cmd: "finish_welcome"; import: string[]; spaces?: Record<string, SpaceChoice[]>; default_browser?: boolean }
   | { cmd: "palette_resize"; height: number }
   | { cmd: "palette_close" }
   | { cmd: "get_state" }
@@ -640,6 +640,8 @@ export type Command =
   | { cmd: "set_muted"; id: Id; muted: boolean }
   | { cmd: "picture_in_picture"; id: Id }
   | { cmd: "import_sources" }
+  /** Read browser `key` and say what an import would add; nothing is added. */
+  | { cmd: "import_preview"; key: string }
   | { cmd: "import_from"; key: string }
   /** The text of a bookmarks file (the HTML browsers export): its bookmarks join the current space's. */
   | { cmd: "import_bookmarks"; html: string }
@@ -653,6 +655,21 @@ export type Command =
 export interface ImportSource {
   key: string;
   name: string;
+}
+
+/** What an import would add: its spaces in order, and how many favorites. */
+export interface ImportPreview {
+  spaces: { title: string; icon?: string | null; tabs: number; bookmarks: number }[];
+  favorites: number;
+}
+
+/** What was chosen for the imported space at `index` of the preview, while it is still called `from`: a new name, an icon (a glyph name), or leaving it out. */
+export interface SpaceChoice {
+  index: number;
+  from: string;
+  to?: string;
+  icon?: string;
+  skip?: boolean;
 }
 
 export interface SearchResult {
@@ -744,6 +761,7 @@ interface Replies {
   update_status: UpdateInfo;
   check_updates: UpdateInfo;
   import_sources: { sources: ImportSource[] };
+  import_preview: ImportPreview;
   import_from: { spaces: number; tabs: number; bookmarks: number };
   import_bookmarks: { bookmarks: number };
   add_bookmark: { saved: boolean };

@@ -14,7 +14,7 @@ mod adopt;
 mod bookmarks;
 mod folders;
 mod history;
-mod import;
+pub mod import;
 mod panels;
 mod persist;
 mod private;

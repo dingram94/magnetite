@@ -10,8 +10,10 @@ own next to the app.
 
 ## Turning it on
 
-Settings → Ad blocking, and the "Block ads and trackers?" step of the
-welcome page (`first-start.md`), show the same controls:
+Settings → Ad blocking shows these controls. The welcome page asks first
+whether to block with a recommended set of lists, with lists of one's own
+choice or not at all, and sets the same two things when that step is left
+(`first-start.md`):
 
 - **Block ads and trackers** (off at first). Off, nothing is blocked and
   nothing is downloaded.

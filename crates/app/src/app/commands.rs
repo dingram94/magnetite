@@ -1,6 +1,7 @@
 //! What the sidebar and Magnetite's own pages can ask for: the list of
 //! commands and what each one does.
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use magnetite_core::sidebar::Section;
@@ -11,6 +12,7 @@ use magnetite_engine::{Engine, MediaAction, Shortcut};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+use crate::state::import::{SpaceChoice, choose_spaces, preview};
 use crate::state::{AppState, ArcImport, SidebarEffect, new_id};
 use crate::sync::{self, Job};
 use crate::{capture, downloads, lock, url_policy};
@@ -703,13 +705,18 @@ pub(super) enum UiCommand {
         show: bool,
     },
     /// The welcome page is done. The browsers chosen there (`import`, keys
-    /// of `ImportSources`) are read now, not when they were picked; then the
-    /// page closes. If one cannot be read nothing changes, and the answer
-    /// names it (`failed`) for the page to show. Making Magnetite the
-    /// default browser, if chosen there, is asked for once it closes.
+    /// of `ImportSources`) are read again now, so what comes in is as new
+    /// as it can be; then the page closes. `spaces` has what was chosen
+    /// there for imported spaces (a name, an icon, leaving it out), per
+    /// browser. If a browser cannot be read
+    /// nothing changes, and the answer names it (`failed`) for the page to
+    /// show. Making Magnetite the default browser, if chosen there, is
+    /// asked for once it closes.
     FinishWelcome {
         #[serde(default)]
         import: Vec<String>,
+        #[serde(default)]
+        spaces: HashMap<String, Vec<SpaceChoice>>,
         /// Also ask the system to make Magnetite the default browser.
         #[serde(default)]
         default_browser: bool,
@@ -825,6 +832,11 @@ pub(super) enum UiCommand {
     OpenUpdatePage,
     /// Browsers on this computer we can import from.
     ImportSources,
+    /// Read the browser `key` (see `ImportSources`) and say what an import
+    /// would add, space by space. Nothing is added.
+    ImportPreview {
+        key: String,
+    },
     /// Add the spaces, tabs and bookmarks of the browser `key` (see
     /// `ImportSources`) next to ours.
     ImportFrom {
@@ -1750,6 +1762,7 @@ impl MagnetiteApp {
             }
             UiCommand::FinishWelcome {
                 import,
+                spaces,
                 default_browser,
             } => {
                 // Read everything first: a browser that cannot be read
@@ -1764,7 +1777,10 @@ impl MagnetiteApp {
                         .ok_or_else(|| "it is not on this computer".to_string())
                         .and_then(|b| magnetite_importer::import(b).map_err(|e| e.to_string()));
                     match result {
-                        Ok(snap) => read.push(snap),
+                        Ok(snap) => read.push(match spaces.get(key) {
+                            Some(chosen) => choose_spaces(snap, chosen),
+                            None => snap,
+                        }),
                         Err(error) => {
                             failed.push(json!({ "key": key, "name": name, "error": error }));
                         }
@@ -2004,6 +2020,15 @@ impl MagnetiteApp {
                     .map(|b| json!({ "key": b.key, "name": b.name }))
                     .collect();
                 return Ok(json!({ "sources": sources }));
+            }
+            UiCommand::ImportPreview { key } => {
+                let browser = magnetite_importer::installed()
+                    .into_iter()
+                    .find(|b| b.key == key)
+                    .ok_or("That browser is not on this computer.")?;
+                let snap = magnetite_importer::import(&browser).map_err(|e| e.to_string())?;
+                let (spaces, favorites) = preview(snap);
+                return Ok(json!({ "spaces": spaces, "favorites": favorites }));
             }
             UiCommand::ImportFrom { key } => {
                 let browser = magnetite_importer::installed()

@@ -623,3 +623,104 @@ textarea.field.code { display: block; width: 100%; height: auto; min-height: 96p
 .shared-tab { display: flex; align-items: baseline; gap: 12px; padding: 7px 10px; border-radius: 8px; font-size: 13.5px; }
 .shared-tab > :first-child { min-width: 0; flex: 1; }
 .shared-folder { display: flex; align-items: center; gap: 8px; padding: 7px 10px; font-size: 13.5px; font-weight: 600; color: var(--secondary); }
+
+/* The welcome page: the steps by name on the left, one step on the right.
+   A soft glow of the accent behind it all, and each step slides in. */
+.wel { display: flex; height: 100%; background: radial-gradient(900px 520px at 0% 0%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 70%), radial-gradient(700px 480px at 100% 100%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 70%), var(--bg); }
+.wel-rail { display: flex; flex-direction: column; width: 232px; flex: none; padding: 28px 16px 24px; border-right: 1px solid var(--line); background: rgba(255,255,255,0.015); }
+.wel-main { flex: 1; min-width: 0; display: flex; justify-content: center; }
+.wel-body { display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 712px; margin: auto 0; padding: 48px 36px; animation: wel-in 260ms cubic-bezier(0.2, 0.7, 0.2, 1); }
+@keyframes wel-in { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { .wel-body { animation: none; } }
+/* The first step: the words on the left, a drawing of the window on the right. */
+.wel-body[data-wide] { max-width: 1000px; }
+.wel-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr); gap: 40px; align-items: stretch; }
+.wel-sketch { display: flex; min-height: 420px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); box-shadow: 0 24px 60px rgba(0,0,0,0.35); overflow: hidden; }
+.wel-sketch i { display: block; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.14); }
+.wel-sk-side { display: flex; flex-direction: column; gap: 5px; width: 138px; flex: none; padding: 12px 10px; }
+.wel-sk-side > span { margin-top: 8px; padding: 0 5px; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.wel-sk-side > .wel-sk-end { margin-top: auto; }
+.wel-sk-lights { display: flex; gap: 5px; padding: 0 4px 6px; }
+.wel-sk-lights b { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.14); }
+.wel-sk-addr { height: 24px; border-radius: 7px; background: rgba(255,255,255,0.07); }
+.wel-sk-favs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.wel-sk-favs b { aspect-ratio: 1; border-radius: 8px; background: rgba(255,255,255,0.07); }
+.wel-sk-row { display: flex; align-items: center; gap: 7px; height: 24px; padding: 0 6px; border-radius: 7px; }
+.wel-sk-row::before { content: ""; width: 10px; height: 10px; flex: none; border-radius: 3px; background: rgba(255,255,255,0.18); }
+.wel-sk-row[data-now] { background: var(--row-active); }
+.wel-sk-spaces { display: flex; gap: 8px; padding: 2px 5px; }
+.wel-sk-spaces b { width: 16px; height: 16px; border-radius: 5px; background: rgba(255,255,255,0.1); }
+.wel-sk-spaces b[data-now] { background: var(--accent); }
+.wel-sk-page { flex: 1; display: flex; flex-direction: column; gap: 12px; margin: 8px 8px 8px 0; padding: 30px 26px; border-radius: 10px; background: var(--bg); }
+.wel-sk-page i:first-child { height: 12px; margin-bottom: 6px; background: rgba(255,255,255,0.2); }
+@media (max-width: 900px) { .wel-body[data-wide] { max-width: 712px; } .wel-hero { grid-template-columns: minmax(0, 1fr); } .wel-sketch { display: none; } }
+/* A narrow window has no room for the list: the steps become a row of dots on top. */
+@media (max-width: 760px) {
+  .wel { flex-direction: column; }
+  .wel-rail { width: auto; flex-direction: row; align-items: center; gap: 16px; padding: 12px 20px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .wel-rail ol { flex-direction: row; margin: 0 0 0 auto; }
+  .wel-rail p { display: none; }
+  .wel-step { font-size: 0; gap: 0; padding: 0 3px; }
+  .wel-body { padding: 32px 20px; }
+}
+.wel-step { display: flex; align-items: center; gap: 10px; width: 100%; height: 36px; padding: 0 8px; border-radius: 9px; font-size: 13.5px; color: var(--muted); text-align: left; transition: background-color 120ms, color 120ms; }
+.wel-step[data-done] { color: var(--secondary); }
+.wel-step[data-done]:hover { background: var(--row-hover); color: var(--fg); }
+.wel-step[data-now] { background: var(--row-active); color: var(--fg); font-weight: 500; }
+.wel-dot { display: grid; place-items: center; width: 24px; height: 24px; flex: none; border-radius: 50%; border: 1px solid var(--line); color: var(--muted); }
+.wel-step[data-now] .wel-dot { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.wel-step[data-done] .wel-dot { border-color: transparent; background: var(--accent); color: #1b1b1e; }
+/* The two ways in, on the first step. */
+.wel-pick { display: flex; align-items: flex-start; gap: 16px; padding: 18px 20px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); text-align: left; transition: border-color 140ms, background-color 140ms; }
+.wel-pick:hover { border-color: color-mix(in srgb, var(--accent) 60%, transparent); background: var(--surface-2); }
+/* A browser to import from; an answer in a row; an answer with a line of text. */
+.wel-tile, .wel-option, .wel-answer { display: flex; align-items: center; gap: 12px; border-radius: 11px; border: 1px solid var(--line); background: var(--surface); text-align: left; transition: border-color 120ms, background-color 120ms; }
+.wel-tile { padding: 12px 14px; }
+.wel-option { height: 36px; padding: 0 14px; background: rgba(255,255,255,0.03); }
+.wel-answer { align-items: flex-start; padding: 12px 14px; background: rgba(255,255,255,0.03); }
+.wel-tile:hover, .wel-option:hover, .wel-answer:hover { border-color: rgba(255,255,255,0.2); }
+.wel-tile[data-active], .wel-option[data-active], .wel-answer[data-active] { border-color: var(--accent); background: var(--accent-soft); }
+/* A browser's first letter: Magnetite ships no other browser's icon. */
+.wel-initial { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 9px; background: rgba(255,255,255,0.07); font-size: 15px; font-weight: 600; color: var(--secondary); }
+.wel-tile[data-active] .wel-initial { background: var(--accent); color: #1b1b1e; }
+.wel-radio { width: 16px; height: 16px; margin-top: 2px; flex: none; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.28); }
+.wel-answer[data-active] .wel-radio { border: 5px solid var(--accent); }
+.wel-chosen { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+.wel-chosen:first-child { border-top: 0; padding-top: 0; }
+.wel-chosen:last-child { padding-bottom: 0; }
+.btn.lg { height: 38px; padding: 0 18px; border-radius: 10px; font-size: 14px; }
+/* The filter lists behind an answer about ad blocking, set in from it. */
+.wel-lists { display: flex; flex-direction: column; gap: 8px; margin: 2px 0 6px 14px; padding: 4px 0 4px 26px; border-left: 2px solid var(--line); font-size: 13px; line-height: 19px; color: var(--secondary); }
+.wel-lists b { font-weight: 500; color: var(--fg); }
+/* The spaces an import brings, as the sidebar will list them, with names to change. */
+.wel-side { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; padding: 10px; border-radius: 12px; border: 1px solid var(--line); background: rgba(0,0,0,0.18); }
+.wel-side-from { padding: 2px 8px 6px; font-size: 12.5px; line-height: 18px; color: var(--muted); }
+.wel-space { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 40px; padding: 4px 12px 4px 8px; border-radius: 9px; }
+.wel-space:hover, .wel-space:focus-within { background: var(--row-hover); }
+.wel-space-icon { display: grid; place-items: center; width: 26px; height: 26px; flex: none; border-radius: 8px; background: var(--accent-soft); color: var(--accent); }
+.wel-name { flex: 0 1 300px; min-width: 120px; height: 30px; padding: 0 8px; border-radius: 7px; border: 1px solid rgba(255,255,255,0.09); background: transparent; color: var(--fg); font: inherit; font-weight: 500; outline: none; text-overflow: ellipsis; }
+.wel-name + span { margin-left: auto; }
+.wel-name:focus { border-color: var(--accent); background: var(--surface); }
+/* One setting of several in a card: its value on the line, the answers behind "Change". */
+.wel-setting + .wel-setting { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.wel-space[data-out] .wel-space-icon, .wel-space[data-out] .wel-name, .wel-space[data-out] .wel-name + span { opacity: 0.45; }
+.wel-space[data-out] .wel-name { text-decoration: line-through; }
+button.wel-space-icon:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+/* Three keys for the first day, in a line. */
+.wel-keys { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; font-size: 13px; color: var(--secondary); }
+.wel-keys kbd { margin-right: 4px; padding: 3px 8px; border-radius: 6px; background: rgba(255,255,255,0.1); font: inherit; color: var(--fg); }
+/* The two layouts of the window, each a small drawing to choose. */
+.wel-layout { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 11px; border: 1px solid var(--line); background: rgba(255,255,255,0.03); text-align: left; transition: border-color 120ms, background-color 120ms; }
+.wel-layout:hover { border-color: rgba(255,255,255,0.2); }
+.wel-layout[data-active] { border-color: var(--accent); background: var(--accent-soft); }
+.wel-mini { display: grid; grid-template-columns: 30% 1fr; gap: 4px; height: 92px; padding: 5px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); }
+.wel-mini[data-top] { grid-template-rows: 12px 1fr; }
+.wel-mini[data-top] > b[data-bar] { grid-column: 1 / -1; }
+.wel-mini > span { display: flex; flex-direction: column; gap: 4px; }
+.wel-mini b { display: block; flex: 1; border-radius: 4px; background: rgba(255,255,255,0.08); }
+.wel-mini b[data-bar] { flex: none; height: 12px; background: color-mix(in srgb, var(--accent) 60%, transparent); }
+/* The icons to choose from for an imported space, below its line. */
+.wel-glyphs { display: flex; flex-wrap: wrap; gap: 2px; width: 100%; margin: 2px 0 6px 36px; }
+.wel-glyphs button { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; color: var(--secondary); }
+.wel-glyphs button:hover { background: rgba(255,255,255,0.1); color: var(--fg); }
+.wel-glyphs button[data-active] { background: var(--accent-soft); color: var(--accent); }
