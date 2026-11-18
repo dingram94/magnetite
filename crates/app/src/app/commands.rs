@@ -1381,11 +1381,20 @@ impl MagnetiteApp {
                                 return engine
                                     .finish_reply(ticket, Err("Magnetite is closing".into()));
                             };
+                            // Chosen, and gone or no folder by now: said, where
+                            // a dialog closed without a choice is not.
+                            if chosen
+                                .as_ref()
+                                .is_some_and(|f| !(f.is_absolute() && f.is_dir()))
+                            {
+                                return engine.finish_reply(
+                                    ticket,
+                                    Err("That folder cannot be used.".into()),
+                                );
+                            }
                             let (downloads, changed) = app.with_state(|s| {
                                 let before = s.settings.downloads.folder.clone();
-                                if let Some(folder) =
-                                    chosen.filter(|f| f.is_absolute() && f.is_dir())
-                                {
+                                if let Some(folder) = chosen {
                                     s.settings.downloads.folder =
                                         folder.to_string_lossy().into_owned();
                                 }
@@ -1725,8 +1734,7 @@ impl MagnetiteApp {
                     .set_chrome_toolbar(settings.chrome_toolbar || engine.config().chrome_toolbar);
                 Self::apply_devtools_dock(engine, settings.devtools_dock);
                 engine.set_autofill(settings.autofill);
-                // Only when they changed: setting them also moves the
-                // folder "Save as" starts in back to this one.
+                // Only when they changed.
                 if settings.downloads != downloads_before {
                     engine.set_downloads(&settings.downloads);
                 }

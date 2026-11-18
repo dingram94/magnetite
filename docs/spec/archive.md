@@ -85,15 +85,17 @@ with a search by file name.
   away ("Reset", back to the system's folder).
 - With "Ask where to save each file" every download opens a dialog for the
   file's name and folder.
-- Both hold for every profile and take effect at once. The folder is
-  given to Chromium when it changes and for each new profile, not with
-  every change of another setting: Chromium also starts "Save as" there,
-  and otherwise remembers the folder last used for that.
+- Both hold for every profile and take effect at once. "Save as" for a
+  page keeps starting in the folder it was last used with: that is another
+  preference of Chromium's, which Magnetite leaves alone.
 - A chosen folder that is not there is said so in Settings.
 - Neither is synced: a folder is this computer's.
 
 Chromium saves the files; the settings are its preferences
 (`download.default_directory`, `download.prompt_for_download`).
+
+A folder chosen in the dialog that is gone, or no folder, by the time the
+app looks is refused, and Settings says that it did not work.
 
 ## Data
 
