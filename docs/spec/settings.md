@@ -11,7 +11,7 @@ The list has four groups:
 | Group | Sections |
 |---|---|
 | Basics | General, Appearance, Shortcuts |
-| Browsing | Tabs & archive, Links, Search, Ad blocking, Passwords & autofill |
+| Browsing | Tabs & archive, Links, Search, Ad blocking, Permissions, Passwords & autofill |
 | Spaces | Isolation, Sync, Smart folders |
 | Advanced | Extensions, Custom CSS & JS, Developer, Data & privacy, About |
 
@@ -24,6 +24,9 @@ The list has four groups:
 - **Tabs & archive** has when tabs are archived and suspended, how long the
   archive keeps them, the order of Ctrl+Tab and what the archive button
   opens.
+- **Permissions** lists every site with a choice of its own for the
+  camera, microphone, location, notifications, pop-ups or the clipboard
+  (`site-controls.md`).
 - **Data & privacy** has the history (how long it is kept, clearing it),
   the import from another browser or a bookmarks file, the servers
   Magnetite talks to, each with what for, and where the data lives.

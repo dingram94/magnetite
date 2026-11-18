@@ -203,6 +203,8 @@ export type LinkVariant = "clean" | "original" | "markdown";
 
 export type PermissionKind = "camera" | "microphone" | "location" | "notifications" | "popups" | "clipboard";
 export type PermissionValue = "allow" | "ask" | "block";
+/** A site's own choice for one permission, as Settings → Permissions lists them. */
+export interface PermissionEntry { origin: string; kind: PermissionKind; value: PermissionValue }
 export interface PermissionRow { kind: PermissionKind; origin: string; value: PermissionValue; requested: boolean }
 export interface CaptureInfo { width: number; height: number; thumb: string; cut_at: number | null; /** The element's description went to the clipboard as text. */ context: boolean }
 
@@ -477,6 +479,10 @@ export type Command =
   | { cmd: "capture_share"; x: number; y: number }
   | { cmd: "capture_dismiss" }
   | { cmd: "site_permissions" }
+  /** Every site with a choice of its own, in the logins of `profile` (none: the default). */
+  | { cmd: "all_permissions"; profile?: Id }
+  /** Set what site `origin` may do in the logins of `profile`; "ask" takes the choice back. */
+  | { cmd: "set_profile_permission"; profile?: Id; origin: string; kind: PermissionKind; value: PermissionValue }
   | { cmd: "device_get"; page: number }
   | { cmd: "device_set"; page: number; config: DeviceConfig | null }
   | { cmd: "site_ads"; url: string }
@@ -773,6 +779,7 @@ interface Replies {
   capture_save: { saved: string | null };
   split_drop_frame: SplitDropFrame | { tab?: undefined };
   site_permissions: { rows: PermissionRow[] };
+  all_permissions: { rows: PermissionEntry[] };
   /** `null` once device mode is off. */
   device_get: DeviceConfig | null;
   /** `site`: the registrable domain of the page asked about; null for no web page. */
