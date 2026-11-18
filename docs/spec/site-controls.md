@@ -19,7 +19,7 @@ open, the peek's own row takes its place.
 
 The chip shows the first state that applies: camera or microphone in use, or
 the tab being shared (red dot), certificate problem or unencrypted connection (warning shield), zoom
-other than 100 % (dot), tab muted (crossed speaker). The first two also
+other than the default page zoom (dot), tab muted (crossed speaker). The first two also
 outline the row. The chip's tooltip lists every state.
 
 - "Copy link" (click, `Cmd+Shift+C`) copies the URL without tracking

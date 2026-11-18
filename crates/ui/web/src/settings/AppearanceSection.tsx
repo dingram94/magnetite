@@ -19,10 +19,10 @@ const toHex = (c?: Color | null) => "#" + channels(c ?? DEFAULT_ACCENT).map((v) 
 const fromHex = (h: string) => toColor(parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16));
 const sameColour = (a: Color | null | undefined, b: Color) => !!a && channels(a).join() === channels(b).join();
 
-/** The built-in sidebar effects; the user's own picture is offered once one is stored. */
 /** Chromium's zoom steps, in percent (`ZOOM_STEPS` in the engine). */
 const PAGE_ZOOM = [25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500];
 
+/** The built-in sidebar effects; the user's own picture is offered once one is stored. */
 const EFFECTS = [["None", "none"], ["Grain", "grain"], ["Glow", "glow"], ["Aurora", "aurora"], ["Fade", "fade"]] as const;
 
 /**
