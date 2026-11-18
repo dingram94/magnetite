@@ -122,6 +122,9 @@ pub(crate) struct Inner {
     /// Which parts of Chromium's password manager and autofill are on
     /// (`autofill.rs`), for the profiles made from now on.
     pub autofill: crate::AutofillPrefs,
+    /// Where downloads go (`downloads.rs`), for the profiles made from
+    /// now on.
+    pub downloads: crate::DownloadPrefs,
     /// Pages the app muted. Kept here because a page gets its browser a
     /// moment after it is asked for: the mute is applied once it has one.
     pub muted: HashSet<ContentId>,
@@ -263,6 +266,7 @@ impl Engine {
                 quitting: false,
                 locks: HashMap::new(),
                 autofill: crate::AutofillPrefs::default(),
+                downloads: crate::DownloadPrefs::default(),
                 muted: HashSet::new(),
                 shares: crate::tabshare::Shares::default(),
                 mobile: HashSet::new(),
@@ -477,6 +481,11 @@ impl Engine {
             .frame
             .as_ref()
             .and_then(|f| f.dev_bar_browser.clone())
+    }
+
+    /// The browser a dialog of the system's opens over: the sidebar's.
+    pub(crate) fn dialog_host(&self) -> Option<BrowserHost> {
+        self.docked_sidebar_browser().and_then(|b| b.host())
     }
 
     fn docked_sidebar_browser(&self) -> Option<Browser> {
@@ -776,6 +785,11 @@ pub(crate) fn prepare_context(ctx: &RequestContext) -> bool {
         crate::trace("cannot set the password and autofill preferences");
     }
     crate::autofill::watch(ctx);
+    // Downloads where the user's settings send them.
+    let downloads = Engine::global().lock().downloads.clone();
+    if !downloads.apply(ctx) {
+        crate::trace("cannot set the download preferences");
+    }
     set
 }
 

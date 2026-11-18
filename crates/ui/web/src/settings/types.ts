@@ -24,6 +24,8 @@ export interface Info {
   repository: string;
   engine: { chromium: string; cef: string };
   data_dir: string;
+  /** The chosen download folder is not there (any more). */
+  download_folder_missing: boolean;
   /** Installed extensions of the page in front's profile. */
   extensions: ExtensionInfo[];
   /** The filter lists one can subscribe to, and whether downloads are under way. */

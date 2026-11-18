@@ -133,6 +133,23 @@ pub(crate) fn set_bool_pref(ctx: &RequestContext, name: &str, on: bool) -> bool 
     ctx.set_preference(Some(&name), Some(&mut value), Some(&mut error)) != 0
 }
 
+/// Set Chromium preference `name` of `ctx` to the text `text`, or back to
+/// Chromium's own value with `None`.
+pub(crate) fn set_string_pref(ctx: &RequestContext, name: &str, text: Option<&str>) -> bool {
+    let mut error = CefString::from(" ");
+    let name = CefString::from(name);
+    match text {
+        Some(text) => {
+            let Some(mut value) = value_create() else {
+                return false;
+            };
+            value.set_string(Some(&CefString::from(text)));
+            ctx.set_preference(Some(&name), Some(&mut value), Some(&mut error)) != 0
+        }
+        None => ctx.set_preference(Some(&name), None, Some(&mut error)) != 0,
+    }
+}
+
 impl Engine {
     /// Use `prefs` from now on: in every profile that exists, and in those
     /// made later.
