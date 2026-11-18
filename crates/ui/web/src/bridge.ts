@@ -365,6 +365,8 @@ export interface Settings {
   downloads: DownloadPrefs;
   /** The zoom, in percent, a site has until it is zoomed on its own (Settings → Appearance): one of Chromium's steps. */
   page_zoom: number;
+  /** Spell check in text fields, and the languages websites are asked for, the preferred one first, as language tags; empty for the system's (Settings → General). */
+  languages: { spellcheck: boolean; languages: string[] };
   /** The ad blocker (Settings → Ad blocking); this device's own choice, never synced. */
   /** Developer features (Settings → Developer). */
   developer: { enabled: boolean; hosts: string[] };

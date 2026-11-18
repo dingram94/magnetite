@@ -42,6 +42,7 @@ mod frame;
 mod glyphs;
 mod keymap;
 mod keys;
+mod languages;
 #[cfg(target_os = "macos")]
 mod mac;
 mod media;
@@ -83,6 +84,7 @@ pub use events::{
 };
 pub use extensions::ExtensionInfo;
 pub use keymap::{Action, Combo, KeysError, Overrides};
+pub use languages::LanguagePrefs;
 pub use media::{MediaAction, MediaState};
 pub use privacy::set_global_privacy_control;
 pub use prompts::{PermissionPrompt, PromptAnswer, PromptKind};

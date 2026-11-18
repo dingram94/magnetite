@@ -16,8 +16,9 @@ The list has four groups:
 | Advanced | Extensions, Custom CSS & JS, Developer, Data & privacy, About |
 
 - **General** has what belongs to no feature of its own: windows (several
-  windows, web panels, playing videos), where downloads are saved, the
-  quick search from anywhere and the welcome page.
+  windows, web panels, playing videos), where downloads are saved, spell
+  check and the languages websites are asked for, the quick search from
+  anywhere and the welcome page.
 - **Links** has what happens to a link from another app (the default
   browser, where such a link opens, the sites whose links open in a space
   of their own) and to a link that is copied (trackers removed).
