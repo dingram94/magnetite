@@ -113,6 +113,9 @@ export function SettingsPage() {
   // The section's name takes the keyboard when a result opens it: the
   // button that was pressed is gone with the results.
   const heading = useRef<HTMLHeadingElement>(null);
+  // Back at the results, the keyboard is in the search field again: the
+  // button that led back is gone with the section.
+  const searchField = useRef<HTMLInputElement>(null);
   const toHeading = useRef(false);
   useEffect(() => {
     if (toHeading.current && picked) heading.current?.focus();
@@ -396,7 +399,7 @@ export function SettingsPage() {
         <div className="px-2 pb-2 pt-1 text-[16px] font-semibold">Settings</div>
         <label className="set-search">
           <Search width={14} height={14} />
-          <input type="search" className="field" placeholder="Search settings" aria-label="Search settings" value={query} onChange={(e) => type(e.target.value)} onKeyDown={(e) => e.key === "Escape" && type("")} spellCheck={false} />
+          <input ref={searchField} type="search" className="field" placeholder="Search settings" aria-label="Search settings" value={query} onChange={(e) => type(e.target.value)} onKeyDown={(e) => e.key === "Escape" && type("")} spellCheck={false} />
         </label>
         {GROUPS.map((g) => (
           <div key={g.label} className="mt-3">
@@ -424,7 +427,7 @@ export function SettingsPage() {
                 </div>
               </header>
               {searching && (
-                <button className="set-found" onClick={() => setPicked(false)} title="Back to everything the search found">
+                <button className="set-found" onClick={() => { setPicked(false); searchField.current?.focus(); }} title="Back to everything the search found">
                   <Back width={15} height={15} />
                   Everything for “{query.trim()}”
                 </button>

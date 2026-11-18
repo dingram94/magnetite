@@ -130,6 +130,8 @@ export function SyncSection({ info, reload, job, setJob, spaces = true, only }: 
         {spaces && <SpacesOnThisDevice info={info} reload={reload} />}
 
         <Field label="Your sync code" hint="Enter these 24 words on another computer to sync it. They are the only key to your synced data: the server cannot read it, and nobody can recover the words for you.">
+          {/* Found by the buttons that lead here, also once the code shows and they are gone. */}
+          <span hidden data-search-name>Show sync code Start syncing</span>
           {code ? (
             <div className="rounded-xl border p-4" style={{ borderColor: justCreated ? "var(--accent)" : "var(--line)" }}>
               {justCreated && <p className="mb-3 text-[14px]" style={{ color: "var(--accent)" }}>Write these words down or keep them in your password manager now.</p>}
