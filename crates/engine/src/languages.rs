@@ -51,10 +51,15 @@ fn is_tag(tag: &str) -> bool {
     }
     parts.next_if(|p| letters(p, 4));
     parts.next_if(|p| letters(p, 2) || (p.len() == 3 && p.bytes().all(|b| b.is_ascii_digit())));
+    // Variants, each once whatever its case.
+    let mut seen: Vec<&str> = Vec::new();
     parts.all(|p| {
         let b = p.as_bytes();
-        b.iter().all(u8::is_ascii_alphanumeric)
-            && ((5..=8).contains(&b.len()) || (b.len() == 4 && b[0].is_ascii_digit()))
+        let variant = b.iter().all(u8::is_ascii_alphanumeric)
+            && ((5..=8).contains(&b.len()) || (b.len() == 4 && b[0].is_ascii_digit()));
+        let again = seen.iter().any(|s| s.eq_ignore_ascii_case(p));
+        seen.push(p);
+        variant && !again
     })
 }
 
@@ -133,6 +138,7 @@ mod tests {
                 "es-419",
                 "de-1996",
                 "en-US-US",
+                "sl-rozaj-ROZAJ",
                 "e",
                 "en\r\nX-Evil: 1",
                 "english",
