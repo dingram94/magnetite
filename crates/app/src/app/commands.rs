@@ -34,13 +34,15 @@ pub(super) enum DownloadCopy {
     Path,
 }
 
-/// Chromium's own pages for what its password manager and autofill hold.
+/// Chromium's own pages: for what its password manager and autofill hold,
+/// and its dialog that deletes cookies, site data and the cache.
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum EnginePage {
     Passwords,
     Addresses,
     Cards,
+    ClearData,
 }
 
 impl EnginePage {
@@ -49,6 +51,7 @@ impl EnginePage {
             Self::Passwords => "chrome://password-manager/passwords",
             Self::Addresses => "chrome://settings/contactInfo",
             Self::Cards => "chrome://settings/payments",
+            Self::ClearData => "chrome://settings/clearBrowserData",
         }
     }
 }
@@ -686,8 +689,8 @@ pub(super) enum UiCommand {
         id: String,
         profile: Option<String>,
     },
-    /// Show one of Chromium's own pages (saved passwords, addresses, cards)
-    /// as a peek, in the logins of `profile` (none: the default profile).
+    /// Show one of Chromium's own pages (saved passwords, addresses, cards,
+    /// deleting browsing data) as a peek, in the logins of `profile` (none: the default profile).
     OpenEnginePage {
         page: EnginePage,
         #[serde(default)]
