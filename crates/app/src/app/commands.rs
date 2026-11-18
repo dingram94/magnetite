@@ -1369,6 +1369,11 @@ impl MagnetiteApp {
                 }
             }
             UiCommand::ChooseDownloadFolder => {
+                // No window to open the dialog over is no choice made, and
+                // is said: a dialog closed without one is not.
+                if !engine.can_open_dialog() {
+                    return Err("The dialog could not be opened.".into());
+                }
                 if let Some(ticket) = engine.defer_reply() {
                     let now = self.with_state(|s| s.settings.downloads.folder.clone());
                     let start = (!now.is_empty()).then(|| std::path::PathBuf::from(now));
