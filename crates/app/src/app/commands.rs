@@ -1720,6 +1720,7 @@ impl MagnetiteApp {
                 engine.set_downloads(&settings.downloads);
                 engine.set_default_zoom(settings.page_zoom);
                 magnetite_engine::set_global_privacy_control(settings.global_privacy_control);
+                engine.set_languages(&settings.languages);
                 engine.set_quick_search_key(settings.quick_search);
                 self.dev_settings_changed(engine);
                 // Open pages get changed CSS at once.

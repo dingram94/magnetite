@@ -363,6 +363,8 @@ export interface Settings {
   page_zoom: number;
   /** Tell websites not to sell or share the user's data: Global Privacy Control (Settings → Data & privacy). */
   global_privacy_control: boolean;
+  /** Spell check in text fields, and the languages websites are asked for, the preferred one first, as language tags; empty for the system's (Settings → General). */
+  languages: { spellcheck: boolean; languages: string[] };
   /** The ad blocker (Settings → Ad blocking); this device's own choice, never synced. */
   /** Developer features (Settings → Developer). */
   developer: { enabled: boolean; hosts: string[] };

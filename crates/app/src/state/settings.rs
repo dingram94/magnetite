@@ -100,6 +100,9 @@ pub struct Settings {
     /// Tell websites not to sell or share the user's data (Global Privacy
     /// Control). Not synced, as the other settings of this kind.
     pub global_privacy_control: bool,
+    /// Spell check, and the languages websites are asked for. Not synced:
+    /// a device has its own keyboard and reader.
+    pub languages: magnetite_engine::LanguagePrefs,
     /// Smart folders allowed to fetch on this device (`smart_key`): those made
     /// or edited here, or turned on here. A folder another device synced
     /// waits, so the words alone cannot make this device's accounts run a
@@ -542,6 +545,7 @@ impl Settings {
         if !magnetite_engine::ZOOM_STEPS.contains(&self.page_zoom) {
             self.page_zoom = defaults.page_zoom;
         }
+        self.languages = self.languages.sanitised();
         self
     }
 }
@@ -639,6 +643,7 @@ impl Default for Settings {
             downloads: magnetite_engine::DownloadPrefs::default(),
             page_zoom: 100,
             global_privacy_control: false,
+            languages: magnetite_engine::LanguagePrefs::default(),
             smart_allowed: None,
             adblock: AdblockSettings::default(),
             developer: crate::dev::DeveloperSettings::default(),
