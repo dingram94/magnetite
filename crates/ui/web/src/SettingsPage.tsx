@@ -213,8 +213,8 @@ export function SettingsPage() {
             <Toggle label="Ask where to save each file" hint="A dialog for every download, to name the file and its folder." checked={settings.downloads.ask} onChange={(ask) => void send({ cmd: "set_settings", settings: { downloads: { ask } } }).then(reload, reload).catch(() => {})} />
           </Group>
           <Group title="Text and languages">
-            <Toggle label="Check spelling as you type" hint="Marks words the spell checker does not know, in the text fields of web pages." checked={settings.languages.spellcheck} onChange={(spellcheck) => update({ languages: { ...settings.languages, spellcheck } })} />
-            <WebLanguages key={settings.languages.languages.join()} saved={settings.languages.languages} save={(languages) => update({ languages: { ...settings.languages, languages } })} />
+            <Toggle label="Check spelling as you type" hint="Marks words the spell checker does not know, in the text fields of web pages." checked={settings.languages.spellcheck} onChange={(spellcheck) => void send({ cmd: "set_settings", settings: { languages: { spellcheck } } }).then(reload)} />
+            <WebLanguages key={settings.languages.languages.join()} saved={settings.languages.languages} save={(languages) => void send({ cmd: "set_settings", settings: { languages: { languages } } }).then(reload)} />
           </Group>
           <Group title="Command bar">
           <Toggle label="Quick search from anywhere (⌥⌘N)" hint="Opens the command bar over any app; what you pick opens in a mini window. Only that key combination reaches Magnetite, no other typing." checked={settings.quick_search} onChange={(v) => update({ quick_search: v })} />
@@ -637,7 +637,9 @@ function ClearBrowsingData({ info, reload }: { info: Info; reload: () => Promise
 }
 
 /** A language tag as the app keeps one (`is_tag` in the engine's `languages.rs`). */
-const LANGUAGE_TAG = /^[a-z]{2,3}(-[a-z0-9]{1,8})*$/i;
+const LANGUAGE_TAG = /^[a-z]{2,3}(-[a-z0-9]{2,8})*$/i;
+/** The most languages the app keeps (`MAX_LANGUAGES`). */
+const MAX_LANGUAGES = 10;
 
 /**
  * The languages websites are asked for, typed as tags in the order of
@@ -645,24 +647,27 @@ const LANGUAGE_TAG = /^[a-z]{2,3}(-[a-z0-9]{1,8})*$/i;
  */
 function WebLanguages({ saved, save }: { saved: string[]; save: (languages: string[]) => void }) {
   const [text, setText] = useState(saved.join(", "));
-  const typed = text.split(/[\s,;]+/).filter(Boolean);
+  // As the app keeps them: each once, whatever its case, and no more than it takes.
+  const typed = text.split(/[\s,;]+/).filter((tag, i, all) => tag && all.findIndex((t) => t.toLowerCase() === tag.toLowerCase()) === i);
+  const many = typed.length > MAX_LANGUAGES;
   const wrong = typed.filter((t) => !LANGUAGE_TAG.test(t));
   return (
-    <Field label="Languages websites are asked for" hint="In the order you prefer them, as language codes: de, en-US, en. A website with several languages answers in the first one it knows. Empty: the languages of your system. A change counts from the next start of Magnetite.">
+    <Field label="Languages websites are asked for" hint="In the order you prefer them, as language codes: de, en-US, en. A website with several languages can choose by them. Empty: the languages of your system. A change counts from the next start of Magnetite.">
       <input
         className="field mono"
         value={text}
         placeholder="de, en-US, en"
         aria-label="Languages websites are asked for"
-        aria-invalid={wrong.length > 0 || undefined}
+        aria-invalid={wrong.length > 0 || many || undefined}
         spellCheck={false}
         onChange={(e) => setText(e.target.value)}
         onBlur={() => {
-          if (wrong.length === 0 && typed.join() !== saved.join()) save(typed);
+          if (wrong.length === 0 && !many && typed.join() !== saved.join()) save(typed);
         }}
         onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
       />
       {wrong.length > 0 && <p className="set-hint" style={{ color: "var(--danger)" }}>Not saved: {wrong.join(", ")} {wrong.length === 1 ? "is no language code" : "are no language codes"}.</p>}
+      {wrong.length === 0 && many && <p className="set-hint" style={{ color: "var(--danger)" }}>Not saved: no more than {MAX_LANGUAGES} languages.</p>}
     </Field>
   );
 }

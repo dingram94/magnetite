@@ -38,14 +38,15 @@ impl Default for LanguagePrefs {
 const SPELLCHECK: &str = "browser.enable_spellchecking";
 
 /// Whether `tag` is a language tag as websites are sent them: a language
-/// of two or three letters, then parts of letters and digits (`en-US`,
-/// `zh-Hant-TW`).
+/// of two or three letters, then parts of two to eight letters and digits
+/// (`en-US`, `zh-Hant-TW`). A part of one letter starts an extension, which
+/// no website is asked for.
 fn is_tag(tag: &str) -> bool {
     let mut parts = tag.split('-');
     let language = parts.next().unwrap_or_default();
     (2..=3).contains(&language.len())
         && language.bytes().all(|b| b.is_ascii_alphabetic())
-        && parts.all(|p| (1..=8).contains(&p.len()) && p.bytes().all(|b| b.is_ascii_alphanumeric()))
+        && parts.all(|p| (2..=8).contains(&p.len()) && p.bytes().all(|b| b.is_ascii_alphanumeric()))
 }
 
 impl LanguagePrefs {
@@ -113,6 +114,7 @@ mod tests {
                 "",
                 "x",
                 "de;q=0.5",
+                "en-a",
                 "en\r\nX-Evil: 1",
                 "english",
             ]
