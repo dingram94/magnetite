@@ -364,6 +364,9 @@ export function SettingsPage() {
           <ImportBrowsers />
           <ImportBookmarksFile />
           </Group>
+          <Group title="What websites are told">
+            <Toggle label="Tell websites not to sell or share my data" hint="Global Privacy Control: every request to a website carries the signal, and its pages can read it. Some laws oblige a website to honour it; whether one does is up to the website." checked={settings.global_privacy_control} onChange={(v) => update({ global_privacy_control: v })} />
+          </Group>
           <Group title="What Magnetite talks to" hint="Nothing else leaves this computer: no telemetry, no usage data, no account.">
             <ul className="set-list set-talks">
               <li data-search-row><b>The sites you open</b><span>and what their pages load, less what ad blocking stops.</span></li>
