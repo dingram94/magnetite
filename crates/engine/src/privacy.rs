@@ -32,11 +32,15 @@ pub(crate) fn with_signal(
     request: Option<&Request>,
     handler: Option<ResourceRequestHandler>,
 ) -> Option<ResourceRequestHandler> {
+    // Off, as at first: nothing to look at.
+    if !on() {
+        return handler;
+    }
     let web = request.is_some_and(|r| {
         let url = CefString::from(&r.url()).to_string();
         url.starts_with("https://") || url.starts_with("http://")
     });
-    if on() && web {
+    if web {
         Some(Signal::new(handler))
     } else {
         handler
