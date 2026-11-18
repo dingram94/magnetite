@@ -19,7 +19,8 @@ Neither is synced.
 
 ## Languages
 
-- The languages are language codes such as `de`, `en-US` or `zh-Hant-TW`,
+- The languages are language codes such as `de`, `en-US`, `es-419` or
+  `zh-Hant-TW` (a language, then if wanted a script, a region and variants),
   typed with commas between and saved when the field is left. Up to ten
   are kept, each once. While one of them is no language code, or there are
   more than ten, nothing is saved and the field says why: the whole list

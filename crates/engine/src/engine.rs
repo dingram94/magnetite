@@ -809,9 +809,9 @@ pub(crate) fn prepare_context(ctx: &RequestContext) -> bool {
         crate::trace("cannot set the default zoom");
     }
     // Spell check and languages as the user's settings have them.
-    let languages = Engine::global().lock().languages.clone();
+    let spellcheck = Engine::global().lock().languages.spellcheck;
     // Also when it is on, as at first: a profile may still hold "off".
-    if !languages.apply(ctx) {
+    if !crate::languages::apply_spellcheck(ctx, spellcheck) {
         crate::trace("cannot set the language preferences");
     }
     set
