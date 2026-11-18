@@ -787,7 +787,7 @@ pub(crate) fn prepare_context(ctx: &RequestContext) -> bool {
     crate::autofill::watch(ctx);
     // Downloads where the user's settings send them.
     let downloads = Engine::global().lock().downloads.clone();
-    if !downloads.apply(ctx) {
+    if !downloads.apply(ctx, true) {
         crate::trace("cannot set the download preferences");
     }
     set

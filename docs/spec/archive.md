@@ -94,7 +94,10 @@ with a search by file name.
   away ("Reset", back to the system's folder).
 - With "Ask where to save each file" every download opens a dialog for the
   file's name and folder.
-- Both hold for every profile and take effect at once.
+- Both hold for every profile and take effect at once. The folder is
+  given to Chromium when it changes and for each new profile, not with
+  every change of another setting: Chromium also starts "Save as" there,
+  and otherwise remembers the folder last used for that.
 - A chosen folder that is not there is said so in Settings.
 - Neither is synced: a folder is this computer's.
 
