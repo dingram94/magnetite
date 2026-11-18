@@ -121,20 +121,24 @@ pub struct PermissionEntry {
 
 /// The origin a pattern of Chromium's exceptions names, as the site panel
 /// writes them: `https://example.org:443,*` is `https://example.org`. `None`
-/// for a pattern that is no single site (a wildcard, an extension).
+/// for a pattern that is no single site (every site, the sites below a
+/// name, an extension).
 fn pattern_origin(pattern: &str) -> Option<String> {
     let site = pattern.split(',').next()?;
-    let origin = origin_of(site)?;
+    // `https://[*.]example.org:443` is every site below a name, not one.
+    if site.contains('*') {
+        return None;
+    }
+    let mut origin = origin_of(site)?;
     let default_port = if origin.starts_with("https://") {
         ":443"
     } else {
         ":80"
     };
-    Some(
-        origin
-            .strip_suffix(default_port)
-            .map_or(origin.clone(), str::to_string),
-    )
+    if origin.ends_with(default_port) {
+        origin.truncate(origin.len() - default_port.len());
+    }
+    Some(origin)
 }
 
 /// Outcome of "Clear cookies and site storage".
@@ -348,16 +352,17 @@ impl Engine {
     }
 
     /// Set what `origin` may do in `profile` (none: the default profile),
-    /// wherever it is open.
+    /// wherever it is open. False when there was nothing to set it on:
+    /// `origin` is no site, or the profile has no context.
     pub fn set_permission(
         &self,
         profile: Option<&crate::ContextProfile>,
         origin: &str,
         kind: PermissionKind,
         value: PermissionValue,
-    ) {
+    ) -> bool {
         let (Some(ctx), Some(origin)) = (self.context_of(profile), origin_of(origin)) else {
-            return;
+            return false;
         };
         let setting = match value {
             PermissionValue::Allow => ContentSettingValues::ALLOW,
@@ -366,6 +371,7 @@ impl Engine {
         };
         let url = CefString::from(format!("{origin}/").as_str());
         ctx.set_content_setting(Some(&url), Some(&url), kind.setting(), setting);
+        true
     }
 
     /// Set what `origin` may do on page `id` (in the page's profile).
@@ -603,6 +609,11 @@ mod tests {
         );
         // No single site: every site, an extension.
         assert_eq!(origin("*,*"), None);
+        assert_eq!(origin("https://[*.]example.org:443,*"), None);
+        assert_eq!(
+            origin("http://[::1]:8080,*").as_deref(),
+            Some("http://[::1]:8080")
+        );
         assert_eq!(origin("chrome-extension://abcdefgh,*"), None);
         assert_eq!(origin(""), None);
     }

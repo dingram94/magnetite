@@ -474,9 +474,14 @@ impl EngineDelegate for MagnetiteApp {
             return Err("only the Settings page may do that".into());
         }
         // Pictures are stored from Settings alone: the welcome page has no
-        // use for them.
-        if matches!(cmd, UiCommand::SetAppearanceImage { .. })
-            && !origin.starts_with("magnetite://ui/settings")
+        // use for them. Nor for the list of every site's permissions, which
+        // no other page may read or change.
+        if matches!(
+            cmd,
+            UiCommand::SetAppearanceImage { .. }
+                | UiCommand::AllPermissions { .. }
+                | UiCommand::SetProfilePermission { .. }
+        ) && !origin.starts_with("magnetite://ui/settings")
         {
             return Err("only the Settings page may do that".into());
         }

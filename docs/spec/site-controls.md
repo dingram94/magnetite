@@ -234,7 +234,13 @@ question a page asked.
   profile is not offered, it keeps nothing.
 - A site that was never asked and never set is not listed: the section
   says so while there is none.
-- The list is read again when the page comes back to the front.
+- The list is read again when the page comes back to the front. If it
+  cannot be read, or a change is refused, the section says so and offers
+  to try again; logins deleted meanwhile are an error, not the main
+  logins in their place.
+- Only the Settings page may read or change the list.
+- A choice made for every site below a name (a pattern with a wildcard) is
+  not one site's and is not listed.
 
 The choices are Chromium's site settings of the profile; the list reads
 them from its preferences (`profile.content_settings.exceptions.…`).
