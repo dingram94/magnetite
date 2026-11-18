@@ -31,7 +31,10 @@ export function PermissionsSection({ info }: { info: Info }) {
   const [chosen, setChosen] = useState<string | undefined>(undefined);
   const profile = (logins.find((p) => p.id === chosen) ?? logins.find((p) => p.id === inFront) ?? logins.find((p) => p.is_default))?.id;
   const [read, setRead] = useState<Read | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
+  // Reading the list failed; and a change that failed, kept with the logins
+  // it was for, to try it again.
+  const [unread, setUnread] = useState(false);
+  const [failed, setFailed] = useState<{ profile: string | undefined; row: PermissionEntry; value: PermissionEntry["value"] } | null>(null);
   // The last read asked for: an answer to an earlier one is out of date.
   const asked = useRef(0);
   const load = useCallback(() => {
@@ -40,10 +43,10 @@ export function PermissionsSection({ info }: { info: Info }) {
       (r) => {
         if (mine !== asked.current) return;
         setRead({ profile, rows: r.rows ?? [] });
-        setProblem(null);
+        setUnread(false);
       },
       () => {
-        if (mine === asked.current) setProblem("The permissions could not be read.");
+        if (mine === asked.current) setUnread(true);
       },
     );
   }, [profile]);
@@ -56,11 +59,17 @@ export function PermissionsSection({ info }: { info: Info }) {
   // The rows of the logins chosen now: those of other logins are not shown
   // while theirs are read.
   const rows = read && read.profile === profile ? read.rows : null;
-  const set = (row: PermissionEntry, value: PermissionEntry["value"]) =>
+  const set = (row: PermissionEntry, value: PermissionEntry["value"]) => {
+    setFailed(null);
     void send({ cmd: "set_profile_permission", profile, origin: row.origin, kind: row.kind, value }).then(load, () => {
-      setProblem(`${PERMISSION_LABEL[row.kind]} for ${siteName(row.origin)} could not be changed.`);
+      // Said until it is tried again or another change is made; the list
+      // is read anew to show what holds.
+      setFailed({ profile, row, value });
       void load();
     });
+  };
+  // A change that failed for other logins is not this list's to try again.
+  const retry = failed && failed.profile === profile ? failed : null;
   const sites = [...new Set((rows ?? []).map((r) => r.origin))];
   return (
     <>
@@ -73,10 +82,17 @@ export function PermissionsSection({ info }: { info: Info }) {
           </Field>
         </Group>
       )}
-      {problem && (
+      {unread && (
         <Group>
-          <Field side label={problem} hint="Nothing was changed.">
+          <Field side label="The permissions could not be read" hint="What shows below may be out of date.">
             <button className="btn" onClick={() => void load()}>Try again</button>
+          </Field>
+        </Group>
+      )}
+      {retry && (
+        <Group>
+          <Field side label={`${PERMISSION_LABEL[retry.row.kind]} for ${siteName(retry.row.origin)} could not be changed`} hint="Nothing was changed.">
+            <button className="btn" onClick={() => set(retry.row, retry.value)}>Try again</button>
           </Field>
         </Group>
       )}
