@@ -91,6 +91,9 @@ pub struct Settings {
     /// Chromium's password manager and autofill: which parts are on. Not
     /// synced: what a device saves is that device's.
     pub autofill: magnetite_engine::AutofillPrefs,
+    /// Spell check, and the languages websites are asked for. Not synced:
+    /// a device has its own keyboard and reader.
+    pub languages: magnetite_engine::LanguagePrefs,
     /// Smart folders allowed to fetch on this device (`smart_key`): those made
     /// or edited here, or turned on here. A folder another device synced
     /// waits, so the words alone cannot make this device's accounts run a
@@ -527,6 +530,7 @@ impl Settings {
         }
         self.site_code = code;
         self.shortcuts = self.shortcuts.sanitised();
+        self.languages = self.languages.sanitised();
         self
     }
 }
@@ -615,6 +619,7 @@ impl Default for Settings {
             library_opens: LibraryView::Archive,
             tab_order: TabOrder::Recent,
             autofill: magnetite_engine::AutofillPrefs::default(),
+            languages: magnetite_engine::LanguagePrefs::default(),
             smart_allowed: None,
             adblock: AdblockSettings::default(),
             developer: crate::dev::DeveloperSettings::default(),
