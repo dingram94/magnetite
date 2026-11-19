@@ -312,14 +312,17 @@ impl AppState {
         }
         let mut tabs = self.tabs_by_last_use();
         tabs.truncate(SWITCH_TABS);
-        if tabs.len() < 2 {
+        // The round begins on the active tab, the first of the list: unless
+        // that tab is not in the list (a favorite this space does not
+        // show). Then it begins on the tab used before, and one tab is
+        // enough to switch to.
+        let active = self.active_tab_id();
+        let unlisted =
+            active.is_some_and(|a| self.find_tab(a).is_some() && !tabs.iter().any(|t| t == a));
+        if tabs.len() < if unlisted { 1 } else { 2 } {
             return false;
         }
-        // The round begins on the active tab, the first of the list: unless
-        // it is not in the list (a favorite this space does not show).
-        let active = self.active_tab_id();
-        let from_active =
-            usize::from(active.is_some() && active == tabs.first().map(String::as_str));
+        let from_active = usize::from(active.is_some() && !unlisted);
         let at = if forward { from_active } else { tabs.len() - 1 };
         static ROUNDS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let round = ROUNDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);

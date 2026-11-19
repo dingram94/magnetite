@@ -109,8 +109,17 @@ mod tests {
         assert_eq!(s.latest_web_panel(), None);
         s.sidebar.favorites[0].items[0].panel = false;
 
-        s.sidebar.favorites[0].items[0].only_in = vec!["other".into(), here];
+        s.sidebar.favorites[0].items[0].only_in = vec!["other".into(), here.clone()];
         assert!(shows(&s), "for both");
+
+        // In front, but not this space's any more: Ctrl+Tab goes on to the
+        // tab used before it, and one such tab is enough for a round.
+        s.active_tab.insert(here, "f".into());
+        s.sidebar.favorites[0].items[0].only_in = vec!["other".into()];
+        let first = s.tabs_by_last_use().first().cloned();
+        assert!(first.is_some() && first.as_deref() != Some("f"));
+        assert!(s.switch_tab(true));
+        assert_eq!(s.end_tab_switch(), first);
     }
 
     #[test]
