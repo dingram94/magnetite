@@ -32,8 +32,8 @@ by all spaces unless it is for some only (`sidebar.md`). The profile decides whi
   colour strength, background and own pictures ("Look" below). Each
   change applies at once; Esc, Done or a click elsewhere closes the
   dialog. The private space has no such dialog.
-- **Own icon**: the dialog takes a picture of your own, a PNG or an SVG
-  for one, in place of the glyph. It is drawn into a square of 64 px (it
+- **Own icon**: the dialog and the space's page in Settings take a
+  picture of your own, a PNG or an SVG for one, in place of the glyph. It is drawn into a square of 64 px (it
   shows at 15 to 18 points) and kept as WebP in the space itself, never as
   the SVG itself and without the file's metadata. So it syncs with the
   space, and it is small for that reason: at most 4 KB, an icon and not a

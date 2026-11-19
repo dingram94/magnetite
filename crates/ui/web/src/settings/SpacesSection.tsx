@@ -4,11 +4,12 @@
 // with the spaces and favorites that share its logins.
 import { useEffect, useState, useRef } from "react";
 import { Favicon } from "../Favicon";
-import { Glyph, GLYPH_NAMES, glyphFor, SpaceGlyph } from "../Glyphs";
+import { iconUrl, storeIcon } from "../backgrounds";
+import { Glyph, GLYPH_NAMES, glyphFor, SpaceIcon } from "../Glyphs";
 import { Back, Forward } from "../Icons";
 import { accentCss, hostOf, send } from "../bridge";
 import { useArmed } from "../dismiss";
-import { SpaceLookFields } from "./AppearanceSection";
+import { OwnImage, SpaceLookFields } from "./AppearanceSection";
 import { Field, Group, Switch } from "./fields";
 import { keysLabel } from "./shortcutKeys";
 import type { Info, SettingsPatch } from "./types";
@@ -84,6 +85,9 @@ function SpacePage({ info, space, update, reload, open }: { info: Info; space: S
   const sharing = info.spaces.filter((s) => s.id !== space.id && s.profile_id === space.profile_id).map((s) => s.title);
   const rules = info.settings.link_rules.filter((r) => r.space === space.id);
   const current = space.id === info.active_space;
+  // The own picture shown in place of the glyph, and the glyph marked while there is none.
+  const ownIcon = space.icon_image ? iconUrl(space.icon_image) : null;
+  const glyph = ownIcon == null ? glyphFor(space.icon) : null;
   return (
     <>
       <button className="set-found" onClick={() => open("spaces")}>
@@ -96,18 +100,24 @@ function SpacePage({ info, space, update, reload, open }: { info: Info; space: S
         </Field>
         <Field side label="Icon" hint="Shows on the space's button in the sidebar.">
           <button className="btn inline-flex items-center gap-2" aria-expanded={icons} onClick={() => setIcons(!icons)}>
-            <span style={{ color: accentCss(space.accent ?? undefined) }}><SpaceGlyph icon={space.icon} title={space.title} size={15} /></span>
+            <span style={{ color: accentCss(space.accent ?? undefined) }}><SpaceIcon space={space} size={15} /></span>
             {icons ? "Done" : "Change"}
           </button>
         </Field>
         {icons && (
           <div className="set-row set-glyphs" role="group" aria-label="Icons">
+            {/* A glyph takes the place of the own picture (`rename_space`). */}
             {GLYPH_NAMES.map((g) => (
-              <button key={g} title={g} aria-label={g} aria-pressed={glyphFor(space.icon) === g} data-active={glyphFor(space.icon) === g || undefined} onClick={() => void send({ cmd: "rename_space", id: space.id, title: "", icon: g }).then(reload)}>
+              <button key={g} title={g} aria-label={g} aria-pressed={glyph === g} data-active={glyph === g || undefined} onClick={() => void send({ cmd: "rename_space", id: space.id, icon: g }).then(reload)}>
                 <Glyph name={g} size={15} />
               </button>
             ))}
           </div>
+        )}
+        {icons && (
+          <Field side label="Your own icon" hint="A picture such as a PNG or an SVG, in place of the icons above. It syncs with the space, so it is kept small.">
+            <OwnImage square preview={ownIcon} store={(file) => storeIcon(space.id, file)} reload={() => void reload()} />
+          </Field>
         )}
       </Group>
       <Group title="Look">
@@ -250,7 +260,7 @@ function SpaceList({ info, reload, open }: { info: Info; reload: () => Promise<u
               <Grip />
             </span>
             <button className="set-space-open" onClick={() => open("spaces", sp.id)} title={`Everything about ${sp.title}`}>
-              <span className="set-space-icon" style={{ color: accentCss(sp.accent ?? undefined) }}><SpaceGlyph icon={sp.icon} title={sp.title} size={16} /></span>
+              <span className="set-space-icon" style={{ color: accentCss(sp.accent ?? undefined) }}><SpaceIcon space={sp} size={16} /></span>
               <span className="min-w-0 flex-1">
                 <span className="set-label block truncate" data-search-name>{sp.title}</span>
                 <span className="set-hint block truncate" style={{ marginTop: 0 }}>

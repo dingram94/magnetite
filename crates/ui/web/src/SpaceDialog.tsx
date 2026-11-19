@@ -180,6 +180,19 @@ function Form({ space, appearance: opened }: { space: Space; appearance: Appeara
       </Row>
 
       <footer className="sf-foot">
+        {/* The space's page in Settings: its profile, bookmarks, keys and the rest. */}
+        <button
+          type="button"
+          className="btn ghost"
+          onClick={() => {
+            void rename();
+            unsaved.current?.();
+            void send({ cmd: "new_tab", url: `magnetite://ui/settings#spaces=${encodeURIComponent(space.id)}` });
+            void send({ cmd: "palette_close" });
+          }}
+        >
+          All settings…
+        </button>
         <span className="flex-1" />
         <button type="submit" className="btn primary">Done</button>
       </footer>

@@ -63,7 +63,8 @@ The section starts with three groups:
 
 The page of a space (`magnetite://ui/settings#spaces=<id>`, headed by the
 space's name, "All spaces" and the browser's Back lead to the list) has
-all that is the space's own: its name and icon, its look (`spaces.md`),
+all that is the space's own: its name and icon (a glyph, or a picture of
+your own), its look (`spaces.md`),
 its profile, its bookmarks (how many, deleting them all, and its pinned
 tabs copied or moved to them, `bookmarks.md`), whether it stays on this
 device (`sync.md`), where its keys and its links from other apps are set,
