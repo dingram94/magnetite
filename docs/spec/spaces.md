@@ -123,6 +123,10 @@ share one. The default profile always exists.
   (Profile, or New profile for this favorite…).
 - A tab or peek opened from a page keeps the profile of that page.
 - Magnetite's own pages (`magnetite://`) always run in the default profile.
+- The default profile is the same at every start: Chromium's `Default`
+  folder, whichever profile a window was last used in. (Chromium by
+  itself starts with the profile used last, which would run every space
+  of the default profile in another profile's cookies and extensions.)
 
 ### Isolation levels
 

@@ -155,6 +155,15 @@ wrap_app! {
             if config.use_mock_keychain {
                 cmd.append_switch(Some(&CefString::from("use-mock-keychain")));
             }
+            // The global context is the `Default` profile, always. Without
+            // this Chromium starts with the profile used last: after a
+            // click in a window of another profile that one would be the
+            // default context, and every space of the main profile would
+            // run in it, its cookies and extensions shared.
+            cmd.append_switch_with_value(
+                Some(&CefString::from("profile-directory")),
+                Some(&CefString::from(crate::config::DEFAULT_PROFILE_DIR)),
+            );
             if !config.load_extensions.is_empty() {
                 let list = config
                     .load_extensions

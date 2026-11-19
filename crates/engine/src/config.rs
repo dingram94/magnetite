@@ -42,7 +42,7 @@ impl EngineConfig {
     /// `Default`: CEF ignores any other child folder given as `cache_path`.
     /// The capital matters on case-sensitive file systems (Linux).
     pub(crate) fn default_profile_dir(&self) -> PathBuf {
-        self.cef_root().join("Default")
+        self.cef_root().join(DEFAULT_PROFILE_DIR)
     }
 
     /// Chromium's folder for profile `id`: directly below the root, the only
@@ -53,6 +53,10 @@ impl EngineConfig {
             .join(format!("{PROFILE_DIR_PREFIX}{}", profile_dir_name(id)))
     }
 }
+
+/// The folder of the default context below Chromium's root, and the name
+/// Chromium is started with as its profile (`cef_app.rs`).
+pub(crate) const DEFAULT_PROFILE_DIR: &str = "Default";
 
 /// Start of every profile folder's name, which nothing else in Chromium's
 /// root folder has.
