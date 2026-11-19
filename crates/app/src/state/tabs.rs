@@ -331,12 +331,18 @@ impl AppState {
     }
 
     /// End the round of `Ctrl+Tab`: the tab it stands on, if it is still
-    /// there and a tab to go to (not made a web panel meanwhile). `None`
+    /// there and a tab to go to (not made a web panel meanwhile, nor a
+    /// favorite of other spaces only). `None`
     /// without a round.
     pub fn end_tab_switch(&mut self) -> Option<Id> {
         let round = self.switcher.take()?;
         let chosen = round.tabs.get(round.at)?;
-        let still = self.find_tab(chosen).is_some() && !self.is_web_panel(chosen);
+        // Still there, and still one this space shows: a favorite may have
+        // been given to other spaces while the round went on.
+        let shown = self.find_tab(chosen).is_some_and(|(space, tab)| {
+            space.is_some() || self.sidebar.favorite_shows(tab, &self.active_space)
+        });
+        let still = shown && !self.is_web_panel(chosen);
         still.then(|| chosen.clone())
     }
 

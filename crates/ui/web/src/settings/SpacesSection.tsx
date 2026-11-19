@@ -2,7 +2,7 @@
 // and sort; a page per space with all that is the space's own (name, icon,
 // look, profile, what stays on this device, keys); and the profiles, each
 // with the spaces and favorites that share its logins.
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Favicon } from "../Favicon";
 import { Glyph, GLYPH_NAMES, glyphFor, SpaceGlyph } from "../Glyphs";
 import { Back, Forward } from "../Icons";
@@ -359,14 +359,18 @@ function FavoriteList({ info, reload }: { info: Info; reload: () => Promise<unkn
     if (list.indexOf(from) < to) to -= 1;
     return to === list.indexOf(from) ? null : to;
   };
-  // The spaces just chosen for a favorite, until the page has read them
-  // back: two quick clicks both count, the second on top of the first.
-  const [picked, setPicked] = useState<Record<string, string[]>>({});
-  const read = info.favorites.map((f) => `${f.id}:${f.only_in.join()}`).join(";");
-  useEffect(() => {
-    setPicked((p) => Object.fromEntries(Object.entries(p).filter(([id, list]) => info.favorites.find((f) => f.id === id)?.only_in.join() !== list.join())));
-    // Only when what was read changes: `info` is a new object with every read.
-  }, [read]);
+  // The spaces just chosen for a favorite, until its save is done and the
+  // page has read the answer: two quick clicks both count, the second on
+  // top of the first. Each choice has a number, so the answer to an older
+  // one does not end a newer one.
+  const [picked, setPicked] = useState<Record<string, { spaces: string[]; turn: number }>>({});
+  const turns = useRef(0);
+  const choose = (id: string, spaces: string[]) => {
+    const turn = ++turns.current;
+    setPicked((p) => ({ ...p, [id]: { spaces, turn } }));
+    const done = () => setPicked((p) => (p[id]?.turn === turn ? Object.fromEntries(Object.entries(p).filter(([key]) => key !== id)) : p));
+    void send({ cmd: "set_favorite_spaces", id, spaces }).then(reload).then(done, done);
+  };
   // The favorites whose spaces are being chosen one by one.
   const [choosing, setChoosing] = useState<Set<string>>(new Set());
   const [url, setUrl] = useState("");
@@ -386,7 +390,7 @@ function FavoriteList({ info, reload }: { info: Info; reload: () => Promise<unkn
         const name = f.title || hostOf(f.url);
         const list = listOf(f);
         const place = list.indexOf(f);
-        const shows = picked[f.id] ?? f.only_in;
+        const shows = picked[f.id]?.spaces ?? f.only_in;
         const some = shows.length > 1 || choosing.has(f.id);
         return (
           <div
@@ -463,11 +467,7 @@ function FavoriteList({ info, reload }: { info: Info; reload: () => Promise<unkn
                 if (to === SOME) next.add(f.id);
                 else next.delete(f.id);
                 setChoosing(next);
-                if (to === SOME) return;
-                // The same list here and in the command, as for the chips below.
-                const spaces = to ? [to] : [];
-                setPicked((p) => ({ ...p, [f.id]: spaces }));
-                void send({ cmd: "set_favorite_spaces", id: f.id, spaces }).then(reload);
+                if (to !== SOME) choose(f.id, to ? [to] : []);
               }}
             >
               <option value="">Every space</option>
@@ -494,11 +494,7 @@ function FavoriteList({ info, reload }: { info: Info; reload: () => Promise<unkn
                       key={sp.id}
                       className="set-chip"
                       aria-pressed={on}
-                      onClick={() => {
-                        const next = on ? shows.filter((x) => x !== sp.id) : [...shows, sp.id];
-                        setPicked((p) => ({ ...p, [f.id]: next }));
-                        void send({ cmd: "set_favorite_spaces", id: f.id, spaces: next }).then(reload);
-                      }}
+                      onClick={() => choose(f.id, on ? shows.filter((x) => x !== sp.id) : [...shows, sp.id])}
                     >
                       {sp.title}
                     </button>
