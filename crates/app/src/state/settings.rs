@@ -770,7 +770,8 @@ mod tests {
         };
         let asked = patch(serde_json::json!({ "downloads": { "ask": true } }));
         assert_eq!((asked.folder.as_str(), asked.ask), (chosen, true));
-        let named = patch(serde_json::json!({ "downloads": { "folder": "/etc" } }));
+        let other = if cfg!(windows) { r"C:\other" } else { "/etc" };
+        let named = patch(serde_json::json!({ "downloads": { "folder": other } }));
         assert_eq!(named.folder, chosen, "only the dialog names a folder");
         let reset = patch(serde_json::json!({ "downloads": { "folder": "" } }));
         assert_eq!(reset.folder, "");

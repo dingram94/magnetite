@@ -699,6 +699,7 @@ mod tests {
     #[test]
     fn launch_arguments_that_are_existing_files_become_file_addresses() {
         let dir = crate::files::test_dir("launch-url");
+        std::fs::create_dir_all(&dir).unwrap();
         // Windows has no folder names with a colon.
         #[cfg(unix)]
         std::fs::create_dir_all(dir.join("https:").join("a.example")).unwrap();
