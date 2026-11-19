@@ -1178,6 +1178,7 @@ impl MagnetiteApp {
                 });
                 if stay {
                     self.push_state(engine);
+                    self.tell_settings_pages(engine);
                     return Ok(json!({ "id": id }));
                 }
                 self.activate_space(engine, &id);
@@ -1786,13 +1787,7 @@ impl MagnetiteApp {
                 let (added, pinned) = self.with_state(|s| {
                     let added = s.pinned_to_bookmarks(&space);
                     // What leaves Pinned: its tabs, not a smart folder's items.
-                    let pinned: Vec<String> = (s.space(&space).into_iter())
-                        .flat_map(|sp| sp.pinned.iter())
-                        .filter(|n| !matches!(n, SidebarNode::Folder(f) if f.smart.is_some()))
-                        .flat_map(SidebarNode::tabs)
-                        .map(|t| t.id.clone())
-                        .collect();
-                    (added, pinned)
+                    (added, s.plain_pinned(&space))
                 });
                 if remove {
                     // As if each was unpinned and closed: it is in the
@@ -1806,7 +1801,7 @@ impl MagnetiteApp {
                                 folder: None,
                                 profile: None,
                             };
-                            move_tab(s, id, &to);
+                            move_tabs(s, std::slice::from_ref(id), &to);
                         });
                         self.close_tab(engine, id);
                     }
@@ -1933,7 +1928,7 @@ impl MagnetiteApp {
                             profile["synced"] = json!(!kept_profiles.contains(&p.id));
                             profile
                         }).collect::<Vec<_>>(),
-                        "spaces": s.sidebar.spaces.iter().filter(|sp| !s.is_private_space(&sp.id)).map(|sp| json!({"id": sp.id, "title": sp.title, "icon": sp.icon, "icon_image": sp.icon_image, "accent": sp.accent, "profile_id": sp.profile_id, "bookmarks": sp.bookmarks.iter().flat_map(SidebarNode::tabs).count(), "pinned": sp.pinned.iter().filter(|n| !matches!(n, SidebarNode::Folder(f) if f.smart.is_some())).flat_map(SidebarNode::tabs).count(), "synced": !s.unsynced_spaces.contains(&sp.id), "keys": space_keys.iter().find_map(|(own, keys)| (own.id == sp.id).then(|| keys.to_string())), "shortcut": sp.shortcut})).collect::<Vec<_>>(),
+                        "spaces": s.sidebar.spaces.iter().filter(|sp| !s.is_private_space(&sp.id)).map(|sp| json!({"id": sp.id, "title": sp.title, "icon": sp.icon, "icon_image": sp.icon_image, "accent": sp.accent, "profile_id": sp.profile_id, "bookmarks": sp.bookmarks.iter().flat_map(SidebarNode::tabs).count(), "pinned": s.plain_pinned(&sp.id).len(), "synced": !s.unsynced_spaces.contains(&sp.id), "keys": space_keys.iter().find_map(|(own, keys)| (own.id == sp.id).then(|| keys.to_string())), "shortcut": sp.shortcut})).collect::<Vec<_>>(),
                         "active_space": s.active_space,
                         "favorites": s.sidebar.favorites.iter().flat_map(|f| f.items.iter()).map(|t| json!({"id": t.id, "title": t.title, "url": t.url, "profile_id": s.profile_for_tab(&t.id), "only_in": t.only_in.iter().filter(|sp| s.space(sp).is_some()).collect::<Vec<_>>()})).collect::<Vec<_>>(),
                         "archive_count": s.archive.len(),
@@ -2230,6 +2225,13 @@ impl MagnetiteApp {
                 pinned,
                 profile,
             } => {
+                // A profile named and gone meanwhile: not the default
+                // profile's pins in its place.
+                if let Some(p) = &profile
+                    && self.with_state(|s| s.profile_for_context(p).is_none())
+                {
+                    return Err("That profile is gone.".into());
+                }
                 self.pin_extension(engine, &id, pinned, profile.as_deref());
                 self.tell_settings_pages(engine);
             }

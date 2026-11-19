@@ -103,7 +103,7 @@ function SpacePage({ info, space, update, reload, open }: { info: Info; space: S
         {icons && (
           <div className="set-row set-glyphs" role="group" aria-label="Icons">
             {GLYPH_NAMES.map((g) => (
-              <button key={g} title={g} aria-label={g} aria-pressed={glyphFor(space.icon) === g} data-active={glyphFor(space.icon) === g || undefined} onClick={() => void send({ cmd: "rename_space", id: space.id, title: space.title, icon: g }).then(reload)}>
+              <button key={g} title={g} aria-label={g} aria-pressed={glyphFor(space.icon) === g} data-active={glyphFor(space.icon) === g || undefined} onClick={() => void send({ cmd: "rename_space", id: space.id, title: "", icon: g }).then(reload)}>
                 <Glyph name={g} size={15} />
               </button>
             ))}
@@ -284,6 +284,7 @@ function SpaceList({ info, reload, open }: { info: Info; reload: () => Promise<u
               )}
               {!p.is_default && (
                 <input
+                  key={p.name}
                   className="field"
                   style={{ width: 200 }}
                   defaultValue={p.name}
@@ -358,6 +359,14 @@ function FavoriteList({ info, reload }: { info: Info; reload: () => Promise<unkn
     if (list.indexOf(from) < to) to -= 1;
     return to === list.indexOf(from) ? null : to;
   };
+  // The spaces just chosen for a favorite, until the page has read them
+  // back: two quick clicks both count, the second on top of the first.
+  const [picked, setPicked] = useState<Record<string, string[]>>({});
+  const read = info.favorites.map((f) => `${f.id}:${f.only_in.join()}`).join(";");
+  useEffect(() => {
+    setPicked((p) => Object.fromEntries(Object.entries(p).filter(([id, list]) => info.favorites.find((f) => f.id === id)?.only_in.join() !== list.join())));
+    // Only when what was read changes: `info` is a new object with every read.
+  }, [read]);
   // The favorites whose spaces are being chosen one by one.
   const [choosing, setChoosing] = useState<Set<string>>(new Set());
   const [url, setUrl] = useState("");
@@ -377,7 +386,8 @@ function FavoriteList({ info, reload }: { info: Info; reload: () => Promise<unkn
         const name = f.title || hostOf(f.url);
         const list = listOf(f);
         const place = list.indexOf(f);
-        const some = f.only_in.length > 1 || choosing.has(f.id);
+        const shows = picked[f.id] ?? f.only_in;
+        const some = shows.length > 1 || choosing.has(f.id);
         return (
           <div
             key={f.id}
@@ -446,7 +456,7 @@ function FavoriteList({ info, reload }: { info: Info; reload: () => Promise<unkn
               className="field"
               style={{ width: 170 }}
               aria-label={`Where ${name} shows`}
-              value={some ? SOME : (f.only_in[0] ?? "")}
+              value={some ? SOME : (shows[0] ?? "")}
               onChange={(e) => {
                 const to = e.target.value;
                 const next = new Set(choosing);
@@ -474,19 +484,23 @@ function FavoriteList({ info, reload }: { info: Info; reload: () => Promise<unkn
             {some && (
               <span className="flex basis-full flex-wrap items-center gap-1.5 pl-[58px]" role="group" aria-label={`Spaces ${name} shows in`}>
                 {info.spaces.map((sp) => {
-                  const on = f.only_in.includes(sp.id);
+                  const on = shows.includes(sp.id);
                   return (
                     <button
                       key={sp.id}
                       className="set-chip"
                       aria-pressed={on}
-                      onClick={() => void send({ cmd: "set_favorite_spaces", id: f.id, spaces: on ? f.only_in.filter((x) => x !== sp.id) : [...f.only_in, sp.id] }).then(reload)}
+                      onClick={() => {
+                        const next = on ? shows.filter((x) => x !== sp.id) : [...shows, sp.id];
+                        setPicked((p) => ({ ...p, [f.id]: next }));
+                        void send({ cmd: "set_favorite_spaces", id: f.id, spaces: next }).then(reload);
+                      }}
                     >
                       {sp.title}
                     </button>
                   );
                 })}
-                {f.only_in.length === 0 && <span className="set-hint" style={{ marginTop: 0 }}>None chosen: it shows in every space.</span>}
+                {shows.length === 0 && <span className="set-hint" style={{ marginTop: 0 }}>None chosen: it shows in every space.</span>}
               </span>
             )}
           </div>

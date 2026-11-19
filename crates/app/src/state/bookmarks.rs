@@ -141,6 +141,25 @@ impl AppState {
         self.add_bookmarks(space, pinned)
     }
 
+    /// The ids of the pinned tabs of space `space` that `pinned_to_bookmarks`
+    /// takes: all but the items of smart folders, wherever those stand.
+    pub fn plain_pinned(&self, space: &str) -> Vec<Id> {
+        fn walk(nodes: &[SidebarNode], out: &mut Vec<Id>) {
+            for node in nodes {
+                match node {
+                    SidebarNode::Tab(t) => out.push(t.id.clone()),
+                    SidebarNode::Folder(f) if f.smart.is_none() => walk(&f.children, out),
+                    SidebarNode::Folder(_) => {}
+                }
+            }
+        }
+        let mut out = Vec::new();
+        if let Some(sp) = self.space(space) {
+            walk(&sp.pinned, &mut out);
+        }
+        out
+    }
+
     /// Remove every bookmark of space `space`; returns how many there were.
     pub fn clear_bookmarks(&mut self, space: &str) -> usize {
         let Some(space) = self.space_mut(space) else {

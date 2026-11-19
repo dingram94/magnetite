@@ -68,9 +68,12 @@ The command bar finds bookmarks too (`command-bar.md`).
   - **JSON**: a list of spaces, each with its bookmarks and folders
     (`title` and `url`, or `folder` and `children`).
   - **CSV**: a row per bookmark (`space`, `folder`, `title`, `url`), the
-    folders of a nested bookmark joined with " / ". Every field is quoted,
-    and a title a spreadsheet would run as a formula (it starts with `=`,
-    `+`, `-` or `@`) gets a `'` in front.
+    folders of a nested bookmark joined with " / " (a `/` or `\` inside a
+    folder's name has a `\` before it). Every field is quoted, and one a
+    spreadsheet would run as a formula (it starts with `=`, `+`, `-` or
+    `@`) gets a `'` in front, as does one that starts with `'` itself:
+    the import takes that `'` off again, so every name comes back as it
+    was.
   The private space is never exported. Nothing is sent anywhere.
 - The page of a space in Settings → Spaces has, for that space's
   bookmarks:

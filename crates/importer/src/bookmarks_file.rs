@@ -238,26 +238,49 @@ fn csv_bookmarks(text: &str) -> Result<Vec<SidebarNode>, ImportError> {
         if !importable(url) {
             continue;
         }
-        let path: Vec<&str> = (path.split(" / ").map(str::trim))
-            .filter(|p| !p.is_empty())
-            .collect();
+        let (space, title) = (unguarded(space), unguarded(title));
+        let path = path_steps(unguarded(path));
+        let path: Vec<&str> = path.iter().map(String::as_str).collect();
         if path.len() >= MAX_DEPTH {
             return Err(ImportError::TooDeep(MAX_DEPTH));
         }
         let at = if let Some(at) = spaces.iter().position(|(name, _)| name == space) {
             at
         } else {
-            spaces.push((space.clone(), Vec::new()));
+            spaces.push((space.to_string(), Vec::new()));
             spaces.len() - 1
         };
-        let guarded = title
-            .strip_prefix('\'')
-            .filter(|t| t.starts_with(['=', '+', '-', '@']));
-        let title = guarded.unwrap_or(title);
         let id = ids.next()?;
         place(&mut spaces[at].1, &path, &mut ids)?.push(bookmark(id, url, title));
     }
     by_space(spaces, &mut ids)
+}
+
+/// A CSV field without the `'` the export puts before what a spreadsheet
+/// would take for a formula, and before a `'` of the field's own.
+fn unguarded(field: &str) -> &str {
+    let rest = field.strip_prefix('\'');
+    rest.filter(|r| r.starts_with(['=', '+', '-', '@', '\'']))
+        .unwrap_or(field)
+}
+
+/// The folders of a path as the export writes it: steps parted by `/`
+/// (with blanks around it), a `/` or `\` of a name behind a `\`.
+fn path_steps(path: &str) -> Vec<String> {
+    let mut steps = vec![String::new()];
+    let mut chars = path.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => steps
+                .last_mut()
+                .into_iter()
+                .for_each(|s| s.extend(chars.next())),
+            '/' => steps.push(String::new()),
+            c => steps.last_mut().into_iter().for_each(|s| s.push(c)),
+        }
+    }
+    let steps = steps.iter().map(|s| s.trim().to_string());
+    steps.filter(|s| !s.is_empty()).collect()
 }
 
 /// The fields of one CSV line without line breaks inside fields: enough to
