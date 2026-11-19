@@ -122,11 +122,15 @@ Code: `crates/engine/src/tabshare.rs`, `tabshare_hook.js`;
 - Drag a tab to reorder it, or to a favorites list, Pinned, a folder or
   Today. Dropped on the middle of another tab's row or on the page area, it
   opens in split view (`split-view.md`).
-- Over a favorites list the dragged tab or favorite shows as a tile where it
-  would land, and the other tiles make room: over another tile it takes
-  that tile's place. Dropped on the list's title, it is added at the end.
+- Over a favorites list the tiles stay where they are. On a tile, the
+  dragged tab or favorite joins it in a split (`split-view.md`). Between two
+  tiles, which is their facing edges (10 points each) and the gap, a line
+  marks where it would go. Dropped on the list's title, it is added at the
+  end. A split's tile, and a tab on a tile that takes no further page, go
+  before or after the tile by the half under the pointer.
 - `Cmd+D` pins the active Today tab at the top of Pinned, or moves the active
-  pinned tab to the top of Today. It does nothing for a favorite.
+  pinned tab to the top of Today. It does nothing for a favorite. With a
+  split in front, the split is pinned or unpinned (`split-view.md`).
 - A tab that comes to Today from Pinned or the favorites counts as used at
   that moment, so auto-archive does not take it for the time before.
 - Closing the tab in front shows the next one of the space (a favorite:
@@ -156,6 +160,8 @@ Code: `crates/engine/src/tabshare.rs`, `tabshare_hook.js`;
   profile's list, and "New profile for this favorite…" makes a profile and
   a list for it. "Duplicate favorite" plus another profile gives two
   accounts of one site, each in its list.
+- The favorites of one split show as one tile with an icon per page
+  (`split-view.md`).
 - "Open as panel" makes a favorite or a pinned tab a web panel: a click then opens it
   over the page in front instead of in its place (`web-panels.md`).
 
