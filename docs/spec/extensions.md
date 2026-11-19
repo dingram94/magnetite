@@ -10,17 +10,24 @@ Settings.
 
 | Place | What it offers |
 |---|---|
-| Sidebar, top row | Pinned extensions, after the sidebar button. Click: open the extension. Right-click: "Options" (if it has some), "Remove from Sidebar" |
+| Sidebar, top row | Pinned extensions, after the sidebar button. Click: open the extension. Right-click: "Options" (if it has some), "Remove from Sidebar" ("Remove from Top Bar" while the top bar holds the icons) |
 | Menu bar → Extensions (macOS) | Every extension (click opens it), "Show in Sidebar" to pin or unpin each, "Manage Extensions…", "Chrome Web Store…" |
 | Settings → Extensions | An "In the sidebar" switch per extension, "Chrome Web Store", "Manage extensions", "Show the Chrome toolbar inside pages" |
 
 - The lists hold enabled extensions that have a toolbar action, sorted by
   name. Chromium's built-in extensions are left out.
 - Extensions are per profile. The lists show those of the profile the page
-  in front uses: the active tab's profile, else the active space's. A
-  private profile lists none.
-- The sidebar shows as many pinned icons as fit: one at the default width,
-  four at the widest. The menu bar has them all.
+  in front uses: the active tab's profile, else the active space's.
+- A private profile (the "Private" isolation level and the tabs of the
+  private space, `spaces.md`) has no extensions of its own. Those of the
+  default profile with "Allow in Incognito" switched on (Manage extensions
+  → Details) run in it and are listed, without "Options"; the others do not
+  run there. Such an extension works on its own data as everywhere else: a
+  password manager stays unlocked. It sees the pages of every private tab it
+  runs in.
+- The sidebar shows as many pinned icons as fit: on macOS, where the row
+  keeps room for the window's buttons, one at the default width and four
+  at the widest; elsewhere four and seven. The menu bar has them all.
 - Installing happens on the Chrome Web Store page; removing, turning off
   and site access on Chromium's own page, `chrome://extensions`. Both open
   as tabs. `--load-extension <dir>` (repeatable) loads an unpacked one.
@@ -32,7 +39,8 @@ Settings.
 
 - A click runs the extension's action for the page in front: the open peek,
   else the active tab (in a split, the focused page). Its popup opens at
-  that page's top-left corner, next to the sidebar, and acts on that page:
+  that page's top-left corner, next to the sidebar (with the top bar on, at
+  its top-right corner, below the top bar's buttons), and acts on that page:
   a password manager fills it, a blocker's switch applies to its site.
 - With no page open, a notice asks to open one first.
 - "Options" opens the extension's options page as a tab, in the profile of
@@ -95,8 +103,8 @@ Settings.
 
 ## Limits
 
-- Popup placement follows Chromium: at the page's top-left corner, not
-  under the sidebar icon.
+- Popup placement follows Chromium: at a top corner of the page, not
+  under the icon itself.
 - Popups open two seconds or more late: CEF holds each popup's page until a
   timeout ([CEF #4350](https://github.com/chromiumembedded/cef/issues/4350),
   see `docs/development/upstream.md`). A second click during the wait would

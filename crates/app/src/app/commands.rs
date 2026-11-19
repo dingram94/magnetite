@@ -1,6 +1,7 @@
 //! What the sidebar and Magnetite's own pages can ask for: the list of
 //! commands and what each one does.
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use magnetite_core::sidebar::Section;
@@ -11,7 +12,8 @@ use magnetite_engine::{Engine, MediaAction, Shortcut};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use crate::state::{AppState, ArcImport, new_id};
+use crate::state::import::{SpaceChoice, choose_spaces, preview};
+use crate::state::{AppState, ArcImport, SidebarEffect, new_id};
 use crate::sync::{self, Job};
 use crate::{capture, downloads, lock, url_policy};
 
@@ -24,13 +26,23 @@ use super::{
 /// The largest bookmarks file `ImportBookmarks` reads: 16 MiB.
 const MAX_BOOKMARKS_FILE: usize = 16 << 20;
 
-/// Chromium's own pages for what its password manager and autofill hold.
+/// What `CopyDownload` puts on the clipboard.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum DownloadCopy {
+    File,
+    Path,
+}
+
+/// Chromium's own pages: for what its password manager and autofill hold,
+/// and its dialog that deletes cookies, site data and the cache.
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum EnginePage {
     Passwords,
     Addresses,
     Cards,
+    ClearData,
 }
 
 impl EnginePage {
@@ -39,6 +51,64 @@ impl EnginePage {
             Self::Passwords => "chrome://password-manager/passwords",
             Self::Addresses => "chrome://settings/contactInfo",
             Self::Cards => "chrome://settings/payments",
+            Self::ClearData => "chrome://settings/clearBrowserData",
+        }
+    }
+}
+
+/// The most an own image may weigh as base64: about 6 MB of WebP.
+const MAX_IMAGE_BASE64: usize = 8 * 1024 * 1024;
+
+/// Where an own image of the user goes (Settings → Appearance).
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ImageSlot {
+    /// Behind the empty window.
+    Empty,
+    /// Over the sidebar's colour.
+    Sidebar,
+}
+
+impl ImageSlot {
+    /// The file of this slot's image for space `space`, served as
+    /// `magnetite://ui/user-images/<slot>-<space>`. `None` for an id that
+    /// would not make a plain file name.
+    fn file(self, data_dir: &Path, space: &str) -> Option<std::path::PathBuf> {
+        let plain = |c: char| c.is_ascii_alphanumeric() || c == '-' || c == '_';
+        let slot = match self {
+            Self::Empty => "empty",
+            Self::Sidebar => "sidebar",
+        };
+        (!space.is_empty() && space.chars().all(plain)).then(|| {
+            magnetite_engine::user_image_dir(data_dir).join(format!("{slot}-{space}.webp"))
+        })
+    }
+}
+
+/// The top bar's pop-ups (`magnetite://ui/popup?kind=…`).
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum TopBarPopup {
+    /// Site controls for the page in front.
+    Site,
+    /// Copy link, original link or Markdown.
+    Copy,
+    /// A pinned extension's menu.
+    Extension,
+    /// What the page in front is shown as (the developer tools).
+    Emulate,
+    /// The time zone the page in front sees.
+    Timezone,
+}
+
+impl TopBarPopup {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Site => "site",
+            Self::Copy => "copy",
+            Self::Extension => "extension",
+            Self::Emulate => "emulate",
+            Self::Timezone => "timezone",
         }
     }
 }
@@ -97,6 +167,12 @@ pub(super) enum UiCommand {
     SwitchSpace {
         id: String,
     },
+    /// Open the private space, or go to it if it is open.
+    OpenPrivateSpace,
+    /// Close the private space with everything opened from it.
+    ClosePrivateSpace,
+    /// Hide the private space: open, but shown nowhere until it is opened again.
+    HidePrivateSpace,
     NextSpace,
     PrevSpace,
     Pin {
@@ -113,6 +189,20 @@ pub(super) enum UiCommand {
     SetKeepActive {
         id: String,
         keep: bool,
+    },
+    /// A favorite opens as a web panel from now on, or as a tab again.
+    SetWebPanel {
+        id: String,
+        panel: bool,
+    },
+    /// Web panel `id`'s page is shown as on a phone, or as itself again.
+    SetPanelMobile {
+        id: String,
+        mobile: bool,
+    },
+    /// Open favorite `id`'s web panel, or close it if it is the open one.
+    ToggleWebPanel {
+        id: String,
     },
     RenameTab {
         id: String,
@@ -143,8 +233,11 @@ pub(super) enum UiCommand {
         id: String,
         index: usize,
     },
+    /// A new folder inside folder `parent`, else at the top of Pinned.
     NewFolder {
         title: String,
+        #[serde(default)]
+        parent: Option<String>,
     },
     RenameFolder {
         id: String,
@@ -153,6 +246,19 @@ pub(super) enum UiCommand {
     /// Remove folder `id`; its tabs stay (a smart folder's items go with it).
     DeleteFolder {
         id: String,
+    },
+    /// Copy the link that shares folder `id` and its tabs.
+    ShareFolder {
+        id: String,
+    },
+    /// The folder shared link `url` carries, for its page; `null` if unreadable.
+    ReadShared {
+        url: String,
+    },
+    /// Add the folder of shared link `url` to the active space's pinned tabs;
+    /// answers whether it was added.
+    AddShared {
+        url: String,
     },
     /// Give folder `id` a glyph as its icon, or the default one back (`None`).
     SetFolderIcon {
@@ -172,9 +278,13 @@ pub(super) enum UiCommand {
         #[serde(default)]
         profile: Option<String>,
     },
+    /// Put folder `id` at `index` (counted without it) of folder `folder`,
+    /// else of the top level of Pinned.
     MoveFolder {
         id: String,
         index: usize,
+        #[serde(default)]
+        folder: Option<String>,
     },
     /// Show tab `id` beside the active tab (`side`, default right).
     AddSplit {
@@ -189,16 +299,25 @@ pub(super) enum UiCommand {
         tab: String,
         side: Side,
     },
+    /// A page dragged inside its split's sidebar row: `tab` goes before
+    /// (`left`) or after `target` in reading order, the layout stays.
+    SplitReorder {
+        target: String,
+        tab: String,
+        side: Side,
+    },
     /// A sidebar tab started dragging: show drop zones over the pages.
     SplitDragStart {
         tab: String,
     },
     /// The drop-zone page asks what to draw.
     SplitDropFrame,
-    /// Dropped on a zone: `tab` (the dragged one) beside `target` on `side`.
+    /// Dropped on a zone: `tab` (the dragged one) beside `target` on `side`,
+    /// or without a side in `target`'s place, which takes `tab`'s.
     SplitDrop {
         target: String,
-        side: Side,
+        #[serde(default)]
+        side: Option<Side>,
     },
     /// The drag ended (dropped anywhere, or cancelled).
     SplitDragEnd,
@@ -206,6 +325,8 @@ pub(super) enum UiCommand {
     SplitEqualize {
         path: Vec<usize>,
     },
+    /// Arrange the split on screen as an even grid.
+    SplitGrid,
     RemoveSplit {
         id: String,
     },
@@ -220,6 +341,11 @@ pub(super) enum UiCommand {
         keep: Option<String>,
     },
     ReopenClosed,
+    /// Take the tab `id` over from the device of the sync chain it is open
+    /// on.
+    TakeDeviceTab {
+        id: String,
+    },
     RestoreArchived {
         id: String,
     },
@@ -260,6 +386,10 @@ pub(super) enum UiCommand {
     /// Ask the system to make Magnetite the default browser (answers when
     /// the user has answered the system).
     MakeDefaultBrowser,
+    /// Let the user choose the folder downloads are saved to, in the
+    /// system's dialog (answers with the settings' `downloads` once the
+    /// dialog is closed; unchanged without a choice).
+    ChooseDownloadFolder,
     ClosePeek,
     PeekToTab,
     PeekToSplit,
@@ -301,13 +431,29 @@ pub(super) enum UiCommand {
     SmartUnlink {
         id: String,
     },
-    /// Take tab `id` out of its smart folder for good.
-    SmartHide {
+    /// Put tab `id`, an item of its smart folder, away until `until`
+    /// (Unix seconds; none: until it is woken by hand).
+    SmartSnooze {
         id: String,
+        #[serde(default)]
+        until: Option<i64>,
+    },
+    /// Bring the item `url`, snoozed in smart folder `id`, back now.
+    SmartWake {
+        id: String,
+        url: String,
     },
     /// Let smart folder `id`, synced from another device, fetch here.
     SmartAllow {
         id: String,
+    },
+    /// Store the user's own image for `slot` of space `space` (WebP,
+    /// base64), or remove it (`None`). Settings → Appearance.
+    SetAppearanceImage {
+        slot: ImageSlot,
+        space: String,
+        #[serde(default)]
+        data: Option<String>,
     },
     /// What a Settings page changed: only the settings it sends change
     /// (`Settings::patched`).
@@ -316,6 +462,33 @@ pub(super) enum UiCommand {
     },
     /// Settings page (own tab) asks for everything it shows.
     GetSettings,
+    /// Give shortcut `action` the keys `keys` (as `Combo` saves them), or
+    /// none. An action that had these keys loses them. Answers
+    /// `{"error": …}` for keys a shortcut cannot have.
+    SetShortcut {
+        action: magnetite_engine::Action,
+        #[serde(default)]
+        keys: Option<String>,
+    },
+    /// Give space `id` the keys `keys` (as `Combo` saves them), or none.
+    /// A shortcut or space that had these keys loses them. Answers
+    /// `{"error": …}` for keys a shortcut cannot have.
+    SetSpaceShortcut {
+        id: String,
+        #[serde(default)]
+        keys: Option<String>,
+    },
+    /// Give shortcut `action` its default keys back, or every shortcut
+    /// without `action`; then no space has keys of its own either.
+    ResetShortcut {
+        #[serde(default)]
+        action: Option<magnetite_engine::Action>,
+    },
+    /// The Settings page waits for the keys of a shortcut (`on`): until it
+    /// has them no shortcut runs, so they reach the page.
+    RecordShortcut {
+        on: bool,
+    },
     /// Start a new sync chain (fresh sync code) on `server`.
     SyncCreate {
         server: String,
@@ -369,6 +542,56 @@ pub(super) enum UiCommand {
     },
     /// Toggle DevTools for the focused page.
     ToggleDevtools,
+    /// Open the focused page's DevTools on `panel`.
+    DevPanel {
+        panel: magnetite_engine::DevPanel,
+    },
+    /// Load the focused page anew, past the cache; a local page loses its
+    /// site data first.
+    DevReset,
+    /// Show the focused page as `patch` says (`dev::Emulation`'s fields).
+    DevEmulate {
+        patch: Value,
+    },
+    /// The programs listening on this computer's ports.
+    DevServers,
+    /// Open the page in front again, beside itself, with the logins of
+    /// `profile`: two users of one site at once.
+    DevSplitAs {
+        profile: String,
+    },
+    /// Show the page in front a second time beside itself, as a phone that
+    /// follows its address; or end that.
+    DevResponsive,
+    /// One picture of the page in front in light and dark at three sizes.
+    DevCaptureSet,
+    /// Record the page in front as a video, or end the recording that
+    /// runs.
+    DevRecord,
+    /// A page that stays (the sidebar, the top bar) makes the video.
+    DevRecordStart,
+    /// The page making recording `id`: the next picture of the recorded
+    /// page.
+    DevRecordFrame {
+        id: u64,
+    },
+    /// The same: a piece of the video (base64), MP4 or `WebM`.
+    DevRecordData {
+        id: u64,
+        data: String,
+        mp4: bool,
+    },
+    /// The same: the video is complete, or (`failed`) could not be written
+    /// to its end.
+    DevRecordEnd {
+        id: u64,
+        #[serde(default)]
+        failed: bool,
+    },
+    /// Copy the last recording's file, or show it in the file manager.
+    DevRecordFile {
+        reveal: bool,
+    },
     /// Zoom the focused page to `percent` (100 resets).
     SetZoom {
         percent: u32,
@@ -378,8 +601,12 @@ pub(super) enum UiCommand {
     /// Overlay asks for the frozen frame.
     CaptureFrame,
     /// Overlay picked an element or region (CSS px of the frozen frame).
+    /// `context`: an element was picked and its description (selector,
+    /// markup, styles, the picture's file) goes to the clipboard as text.
     CaptureSelect {
         rect: [f64; 4],
+        #[serde(default)]
+        context: bool,
     },
     CaptureVisible,
     CaptureFull,
@@ -425,6 +652,21 @@ pub(super) enum UiCommand {
     },
     /// Site panel: permission rows of the focused page.
     SitePermissions,
+    /// Every site with a choice of its own for a permission, in the
+    /// logins of `profile` (none: the default profile).
+    AllPermissions {
+        #[serde(default)]
+        profile: Option<String>,
+    },
+    /// Set what site `origin` may do in the logins of `profile`, from the
+    /// list in Settings.
+    SetProfilePermission {
+        #[serde(default)]
+        profile: Option<String>,
+        origin: String,
+        kind: magnetite_engine::PermissionKind,
+        value: magnetite_engine::PermissionValue,
+    },
     SetPermission {
         origin: String,
         kind: magnetite_engine::PermissionKind,
@@ -447,14 +689,37 @@ pub(super) enum UiCommand {
         id: String,
         profile: Option<String>,
     },
-    /// Show one of Chromium's own pages (saved passwords, addresses, cards)
-    /// as a peek, in the logins of `profile` (none: the default profile).
+    /// Show one of Chromium's own pages (saved passwords, addresses, cards,
+    /// deleting browsing data) as a peek, in the logins of `profile` (none: the default profile).
     OpenEnginePage {
         page: EnginePage,
         #[serde(default)]
         profile: Option<String>,
     },
     ToggleSidebar,
+    /// Turn the top bar on or off (Settings → Appearance has it too).
+    ToggleTopBar,
+    /// The window buttons of the top bar (Linux and Windows) and of the
+    /// floating sidebar (macOS).
+    WindowMinimize,
+    WindowMaximize,
+    WindowFullscreen,
+    WindowClose,
+    /// Open one of the top bar's pop-ups below it, `width` by `height`, at
+    /// (`x`, `y`) in the top bar page's coordinates.
+    TopBarPopup {
+        popup: TopBarPopup,
+        /// The extension a menu is for.
+        #[serde(default)]
+        id: Option<String>,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+        /// Asked by the developer bar, and placed below it.
+        #[serde(default)]
+        dev_bar: bool,
+    },
     /// A sidebar pop-up opened: give the sidebar keyboard focus.
     FocusSidebar,
     /// Slide the floating sidebar out or hide it (its page leaves on pointer-out).
@@ -462,13 +727,18 @@ pub(super) enum UiCommand {
         show: bool,
     },
     /// The welcome page is done. The browsers chosen there (`import`, keys
-    /// of `ImportSources`) are read now, not when they were picked; then the
-    /// page closes. If one cannot be read nothing changes, and the answer
-    /// names it (`failed`) for the page to show. Making Magnetite the
-    /// default browser, if chosen there, is asked for once it closes.
+    /// of `ImportSources`) are read again now, so what comes in is as new
+    /// as it can be; then the page closes. `spaces` has what was chosen
+    /// there for imported spaces (a name, an icon, leaving it out), per
+    /// browser. If a browser cannot be read
+    /// nothing changes, and the answer names it (`failed`) for the page to
+    /// show. Making Magnetite the default browser, if chosen there, is
+    /// asked for once it closes.
     FinishWelcome {
         #[serde(default)]
         import: Vec<String>,
+        #[serde(default)]
+        spaces: HashMap<String, Vec<SpaceChoice>>,
         /// Also ask the system to make Magnetite the default browser.
         #[serde(default)]
         default_browser: bool,
@@ -497,6 +767,11 @@ pub(super) enum UiCommand {
         id: String,
         #[serde(default)]
         reveal: bool,
+    },
+    /// Put download `id`'s file, or its path as text, on the clipboard.
+    CopyDownload {
+        id: String,
+        what: DownloadCopy,
     },
     ClearDownloads,
     /// "Downloads" from the palette: show the list in the sidebar.
@@ -560,6 +835,15 @@ pub(super) enum UiCommand {
         #[serde(default)]
         done: bool,
     },
+    /// Dragging the grip beside a docked web panel: `width` follows the
+    /// pointer (none: the usual width); `done` (on release) keeps it for
+    /// that panel.
+    WebPanelWidth {
+        #[serde(default)]
+        width: Option<u32>,
+        #[serde(default)]
+        done: bool,
+    },
     /// Where the update check stands (`update.rs`).
     UpdateStatus,
     /// Check for a new release now; answers when done.
@@ -570,6 +854,11 @@ pub(super) enum UiCommand {
     OpenUpdatePage,
     /// Browsers on this computer we can import from.
     ImportSources,
+    /// Read the browser `key` (see `ImportSources`) and say what an import
+    /// would add, space by space. Nothing is added.
+    ImportPreview {
+        key: String,
+    },
     /// Add the spaces, tabs and bookmarks of the browser `key` (see
     /// `ImportSources`) next to ours.
     ImportFrom {
@@ -598,6 +887,25 @@ pub(super) enum UiCommand {
 }
 
 impl MagnetiteApp {
+    /// The logins a command of Settings → Permissions names, as the engine
+    /// takes them: none for the default profile, which no id or its own id
+    /// names. An id that is no profile (any more) is an error: its choices
+    /// must not be read from, or written to, the default profile in its
+    /// place.
+    fn permission_logins(
+        &self,
+        profile: Option<&str>,
+    ) -> Result<Option<magnetite_engine::ContextProfile>, String> {
+        let Some(id) = profile else { return Ok(None) };
+        self.with_state(|s| {
+            if s.sidebar.profiles.iter().any(|p| p.id == id) {
+                Ok(s.context(Some(id)))
+            } else {
+                Err("Those logins are gone.".into())
+            }
+        })
+    }
+
     pub(super) fn handle_command(&self, engine: &Engine, cmd: UiCommand) -> Result<Value, String> {
         match cmd {
             UiCommand::Ready => {
@@ -613,26 +921,27 @@ impl MagnetiteApp {
                     engine.remove_profile_dirs(&deleted);
                 });
                 // Initial activation: restore the active tab of the active space.
+                // A further window starts without a tab: the space's first
+                // one may be on screen in another window, which would lose it.
                 self.smart_refresh_due(engine);
-                let target = self.with_state(|s| s.active_tab_id().map(str::to_owned));
+                let (target, first_window) =
+                    self.with_state(|s| (s.active_tab_id().map(str::to_owned), s.views.is_empty()));
                 if let Some(t) = target {
                     self.activate_tab(engine, &t);
-                } else {
+                } else if first_window {
                     let space = self.with_state(|s| s.active_space.clone());
                     self.activate_space(engine, &space);
+                } else {
+                    self.present(engine);
                 }
                 // Once: `Ready` repeats when the sidebar reloads.
                 static OPENED: std::sync::Once = std::sync::Once::new();
-                if let Some(url) = self.open_on_start.clone() {
-                    OPENED.call_once(|| {
+                OPENED.call_once(|| {
+                    if let Some(url) = self.open_on_start.clone() {
                         self.open_url(engine, &url, false);
-                    });
-                }
-                // As a link from another program arrives while Magnetite runs.
-                static LINKED: std::sync::Once = std::sync::Once::new();
-                if let Some(url) = self.link_on_start.clone() {
-                    LINKED.call_once(|| engine.open_link_from_other_app(url));
-                }
+                    }
+                    self.open_from_other_app(engine, self.launch_urls.clone());
+                });
                 // The first start asks what to bring along; nothing is taken
                 // from another browser without that.
                 static WELCOMED: std::sync::Once = std::sync::Once::new();
@@ -698,6 +1007,9 @@ impl MagnetiteApp {
                 }
             }
             UiCommand::SwitchSpace { id } => self.activate_space(engine, &id),
+            UiCommand::OpenPrivateSpace => self.open_private_space(engine),
+            UiCommand::ClosePrivateSpace => self.close_private_space(engine),
+            UiCommand::HidePrivateSpace => self.hide_private_space(engine),
             UiCommand::NextSpace => self.handle_shortcut(engine, Shortcut::NextSpace),
             UiCommand::PrevSpace => self.handle_shortcut(engine, Shortcut::PrevSpace),
             UiCommand::Pin { id } => self.set_pinned(engine, &id, true),
@@ -730,6 +1042,9 @@ impl MagnetiteApp {
                     self.push_state(engine);
                 }
             }
+            UiCommand::SetWebPanel { id, panel } => self.set_web_panel(engine, &id, panel),
+            UiCommand::SetPanelMobile { id, mobile } => self.set_panel_mobile(engine, &id, mobile),
+            UiCommand::ToggleWebPanel { id } => self.toggle_web_panel(engine, &id),
             UiCommand::RenameTab { id, title } => {
                 self.with_state(|s| {
                     if let Some(t) = s.find_tab_mut(&id) {
@@ -759,6 +1074,7 @@ impl MagnetiteApp {
                             blue: 1.0,
                         }),
                         profile_id: profile,
+                        shortcut: None,
                         pinned: vec![],
                         today: vec![],
                         bookmarks: Vec::new(),
@@ -769,6 +1085,10 @@ impl MagnetiteApp {
             }
             UiCommand::RenameSpace { id, title, icon } => {
                 self.with_state(|s| {
+                    // The private space keeps its name and icon.
+                    if s.is_private_space(&id) {
+                        return;
+                    }
                     if let Some(sp) = s.space_mut(&id) {
                         if !title.trim().is_empty() {
                             sp.title = title.trim().into();
@@ -780,10 +1100,22 @@ impl MagnetiteApp {
                 });
                 self.push_state(engine);
             }
+            UiCommand::DeleteSpace { id } if self.with_state(|s| s.is_private_space(&id)) => {
+                self.close_private_space(engine);
+            }
             UiCommand::DeleteSpace { id } => {
                 let contents = self.with_state(|s| s.delete_space(&id));
                 for c in contents {
                     engine.close_content(c);
+                }
+                // Its look and its own images go with it.
+                if self.with_state(|s| s.space(&id).is_none()) {
+                    self.with_state(|s| s.settings.appearance.looks.remove(&id));
+                    for slot in [ImageSlot::Empty, ImageSlot::Sidebar] {
+                        if let Some(file) = slot.file(&self.data_dir, &id) {
+                            let _ = std::fs::remove_file(file);
+                        }
+                    }
                 }
                 let space = self.with_state(|s| s.active_space.clone());
                 self.activate_space(engine, &space);
@@ -792,26 +1124,8 @@ impl MagnetiteApp {
                 self.with_state(|s| s.move_space(&id, index));
                 self.push_state(engine);
             }
-            UiCommand::NewFolder { title } => {
-                self.with_state(|s| {
-                    let space = s.active_space.clone();
-                    if let Some(sp) = s.space_mut(&space) {
-                        sp.pinned.insert(
-                            0,
-                            magnetite_core::SidebarNode::Folder(magnetite_core::Folder {
-                                id: new_id(),
-                                title: if title.trim().is_empty() {
-                                    "Untitled".into()
-                                } else {
-                                    title.trim().into()
-                                },
-                                icon: None,
-                                children: vec![],
-                                smart: None,
-                            }),
-                        );
-                    }
-                });
+            UiCommand::NewFolder { title, parent } => {
+                self.with_state(|s| s.new_folder(&title, parent.as_deref()));
                 self.push_state(engine);
             }
             UiCommand::RenameFolder { id, title } => {
@@ -827,6 +1141,27 @@ impl MagnetiteApp {
                     engine.close_content(c);
                 }
                 self.present(engine);
+            }
+            UiCommand::ShareFolder { id } => {
+                let text = match self.with_state(|s| s.share_folder(&id)) {
+                    Ok(link) if engine.copy_text(&link) => "Link to folder copied".to_string(),
+                    Ok(_) => "Could not copy".to_string(),
+                    Err(e) => e.to_string(),
+                };
+                Self::ui_call(engine, "notice", &json!({ "text": text }));
+            }
+            UiCommand::ReadShared { url } => {
+                return Ok(json!({ "folder": crate::state::read_shared(&url).ok() }));
+            }
+            UiCommand::AddShared { url } => {
+                let added = self.with_state(|s| s.add_shared(&url));
+                let text = match &added {
+                    Ok(title) => format!("Added \u{201c}{title}\u{201d}"),
+                    Err(e) => e.to_string(),
+                };
+                self.push_state(engine);
+                Self::ui_call(engine, "notice", &json!({ "text": text }));
+                return Ok(json!({ "added": added.is_ok() }));
             }
             UiCommand::SetFolderIcon { id, icon } => {
                 self.with_state(|s| {
@@ -886,24 +1221,24 @@ impl MagnetiteApp {
                     self.push_state(engine);
                 }
             }
-            UiCommand::MoveFolder { id, index } => {
-                self.with_state(|s| {
-                    let space = s.active_space.clone();
-                    if let Some(sp) = s.space_mut(&space)
-                        && let Some(node) =
-                            magnetite_core::sidebar::remove_from_tree(&mut sp.pinned, &id)
-                    {
-                        let i = index.min(sp.pinned.len());
-                        sp.pinned.insert(i, node);
-                    }
-                });
-                self.push_state(engine);
+            UiCommand::MoveFolder { id, index, folder } => {
+                if self.with_state(|s| s.move_folder(&id, folder.as_deref(), index)) {
+                    self.push_state(engine);
+                }
             }
             UiCommand::AddSplit { id, side } => {
                 self.split_add(engine, None, &id, side.unwrap_or(Side::Right));
             }
             UiCommand::SplitInsert { target, tab, side } => {
                 self.split_add(engine, target.as_deref(), &tab, side);
+            }
+            UiCommand::SplitReorder { target, tab, side } => {
+                self.with_state(|s| s.split_reorder(&target, &tab, side));
+                // The same pages stay on screen in the same layout, only
+                // their places change: tiling them again is enough, and far
+                // quicker than showing the split anew.
+                self.retile_split(engine);
+                self.push_state(engine);
             }
             UiCommand::SplitDragStart { tab } => self.split_drag_start(engine, tab),
             UiCommand::SplitDropFrame => {
@@ -945,8 +1280,13 @@ impl MagnetiteApp {
                     .filter(|(_, at)| at.elapsed() < LATE_DROP)
                     .map(|(tab, _)| tab);
                 let tab = self.split_drag_end(engine).or(just_ended);
-                if let Some(tab) = tab.filter(|t| *t != target) {
-                    self.split_add(engine, Some(&target), &tab, side);
+                match (tab.filter(|t| *t != target), side) {
+                    (Some(tab), Some(side)) => self.split_add(engine, Some(&target), &tab, side),
+                    (Some(tab), None) => {
+                        self.with_state(|s| s.split_swap(&target, &tab));
+                        self.present(engine);
+                    }
+                    (None, _) => {}
                 }
             }
             UiCommand::SplitDragEnd => {
@@ -954,6 +1294,7 @@ impl MagnetiteApp {
                 lock(&self.split_drag).ended = tab.map(|t| (t, std::time::Instant::now()));
             }
             UiCommand::SplitEqualize { path } => self.split_equalize(engine, &path),
+            UiCommand::SplitGrid => self.split_grid(engine),
             UiCommand::RemoveSplit { id } => {
                 self.with_state(|s| s.split_remove(&id));
                 self.present(engine);
@@ -966,6 +1307,7 @@ impl MagnetiteApp {
                 });
                 self.present(engine);
             }
+            UiCommand::TakeDeviceTab { id } => self.take_device_tab_by_id(engine, &id),
             UiCommand::ArchiveToday { keep } => {
                 let contents = self.with_state(|s| {
                     let space = s.active_space.clone();
@@ -1063,6 +1405,56 @@ impl MagnetiteApp {
                     }));
                 }
             }
+            UiCommand::ChooseDownloadFolder => {
+                // No window to open the dialog over is no choice made, and
+                // is said: a dialog closed without one is not.
+                if !engine.can_open_dialog() {
+                    return Err("The dialog could not be opened.".into());
+                }
+                if let Some(ticket) = engine.defer_reply() {
+                    let now = self.with_state(|s| s.settings.downloads.folder.clone());
+                    let start = (!now.is_empty()).then(|| std::path::PathBuf::from(now));
+                    engine.choose_folder(
+                        "Save downloads to",
+                        start.as_deref(),
+                        Box::new(move |chosen| {
+                            let engine = Engine::global();
+                            let Some(app) = super::global() else {
+                                return engine
+                                    .finish_reply(ticket, Err("Magnetite is closing".into()));
+                            };
+                            // Chosen, and gone or no folder by now: said, where
+                            // a dialog closed without a choice is not.
+                            if chosen
+                                .as_ref()
+                                .is_some_and(|f| !(f.is_absolute() && f.is_dir()))
+                            {
+                                return engine.finish_reply(
+                                    ticket,
+                                    Err("That folder cannot be used.".into()),
+                                );
+                            }
+                            let (downloads, changed) = app.with_state(|s| {
+                                let before = s.settings.downloads.folder.clone();
+                                if let Some(folder) = chosen {
+                                    s.settings.downloads.folder =
+                                        folder.to_string_lossy().into_owned();
+                                }
+                                let changed = s.settings.downloads.folder != before;
+                                (s.settings.downloads.clone(), changed)
+                            });
+                            // A dialog closed without a choice changes nothing.
+                            if changed {
+                                engine.set_downloads(&downloads);
+                                // Kept also if the app ends without a proper quit.
+                                app.save_soon();
+                            }
+                            let reply = json!({ "downloads": downloads }).to_string();
+                            engine.finish_reply(ticket, Ok(reply));
+                        }),
+                    );
+                }
+            }
             UiCommand::ClosePeek => self.close_peek(engine),
             UiCommand::PeekToTab => self.peek_to_tab(engine),
             UiCommand::PeekToSplit => self.peek_to_split(engine),
@@ -1113,7 +1505,8 @@ impl MagnetiteApp {
                 });
                 self.push_state(engine);
             }
-            UiCommand::SmartHide { id } => self.smart_hide(engine, &id),
+            UiCommand::SmartSnooze { id, until } => self.smart_snooze(engine, &id, until),
+            UiCommand::SmartWake { id, url } => self.smart_wake(engine, &id, &url),
             UiCommand::SmartAllow { id } => {
                 self.with_state(|s| s.allow_smart(&id));
                 self.smart_fetch(engine, &id);
@@ -1153,7 +1546,9 @@ impl MagnetiteApp {
                 self.push_state(engine);
             }
             UiCommand::SetSpaceSynced { id, synced } => {
-                if self.with_state(|s| s.set_space_synced(&id, synced)) {
+                // The private space is never synced: there is nothing to set.
+                if self.with_state(|s| !s.is_private_space(&id) && s.set_space_synced(&id, synced))
+                {
                     self.push_state(engine);
                     // The other devices hear of it now, not at the next round.
                     self.sync_now();
@@ -1162,7 +1557,10 @@ impl MagnetiteApp {
             UiCommand::SetSpaceProfile { id, profile } => {
                 // Tabs of that space must reload in the new context.
                 let contents = self.with_state(|s| {
-                    if !s.sidebar.profiles.iter().any(|p| p.id == profile) {
+                    // The private space stays in memory, and its profiles
+                    // are for nothing else.
+                    let known = s.sidebar.profiles.iter().any(|p| p.id == profile);
+                    if !known || s.is_private_space(&id) || s.private_profiles.contains(&profile) {
                         return vec![];
                     }
                     let Some(sp) = s.space_mut(&id) else {
@@ -1202,6 +1600,12 @@ impl MagnetiteApp {
             }
             UiCommand::SetTabProfile { id, profile } => {
                 let content = self.with_state(|s| {
+                    // A tab of the private space keeps its own profile, and
+                    // no other tab gets one of those.
+                    let private = |p: &String| s.private_profiles.contains(p);
+                    if s.in_private_space(&id) || profile.as_ref().is_some_and(private) {
+                        return None;
+                    }
                     // The default profile is the same as no override.
                     let profile = profile.filter(|p| {
                         s.sidebar
@@ -1263,17 +1667,18 @@ impl MagnetiteApp {
                     // What stays on this device: the spaces marked so, and
                     // the profiles that only they use.
                     let kept_profiles = s.unsynced_profiles();
+                    let space_keys = s.space_keys();
                     json!({
                         "keychain": keychain,
                         "extensions": extensions,
                         "sync_signed_in": sync::signed_in(s.data_dir()),
                         "settings": for_ui(json!({ "settings": s.settings }))["settings"],
-                        "profiles": s.sidebar.profiles.iter().map(|p| {
+                        "profiles": s.sidebar.profiles.iter().filter(|p| !s.private_profiles.contains(&p.id)).map(|p| {
                             let mut profile = json!(p);
                             profile["synced"] = json!(!kept_profiles.contains(&p.id));
                             profile
                         }).collect::<Vec<_>>(),
-                        "spaces": s.sidebar.spaces.iter().map(|sp| json!({"id": sp.id, "title": sp.title, "icon": sp.icon, "accent": sp.accent, "profile_id": sp.profile_id, "synced": !s.unsynced_spaces.contains(&sp.id)})).collect::<Vec<_>>(),
+                        "spaces": s.sidebar.spaces.iter().filter(|sp| !s.is_private_space(&sp.id)).map(|sp| json!({"id": sp.id, "title": sp.title, "icon": sp.icon, "accent": sp.accent, "profile_id": sp.profile_id, "synced": !s.unsynced_spaces.contains(&sp.id), "keys": space_keys.iter().find_map(|(own, keys)| (own.id == sp.id).then(|| keys.to_string())), "shortcut": sp.shortcut})).collect::<Vec<_>>(),
                         "active_space": s.active_space,
                         "favorites": s.sidebar.favorites.iter().flat_map(|f| f.items.iter()).map(|t| json!({"id": t.id, "title": t.title, "url": t.url, "profile_id": s.profile_for_tab(&t.id)})).collect::<Vec<_>>(),
                         "archive_count": s.archive.len(),
@@ -1284,7 +1689,14 @@ impl MagnetiteApp {
                         "repository": env!("CARGO_PKG_REPOSITORY"),
                         "engine": { "chromium": chromium, "cef": cef },
                         "data_dir": self.data_dir.display().to_string(),
+                        // The chosen folder is not there: the page says so.
+                        "download_folder_missing": !s.settings.downloads.folder.is_empty() && !std::path::Path::new(&s.settings.downloads.folder).is_dir(),
                         "adblock": adblock,
+                        "shortcuts": magnetite_engine::Action::ALL.iter().map(|action| json!({
+                            "action": action,
+                            "keys": s.settings.shortcuts.combo_of(*action).map(|c| c.to_string()),
+                            "default": action.default_combo().map(|c| c.to_string()),
+                        })).collect::<Vec<_>>(),
                     })
                 }));
             }
@@ -1296,23 +1708,89 @@ impl MagnetiteApp {
                 });
                 self.push_state(engine);
             }
+            UiCommand::SetAppearanceImage { slot, space, data } => {
+                if !self.with_state(|s| s.space(&space).is_some()) {
+                    return Err("no such space".into());
+                }
+                let file = slot.file(&self.data_dir, &space).ok_or("no such space")?;
+                let stored = if let Some(data) = data {
+                    use base64::Engine as _;
+                    if data.len() > MAX_IMAGE_BASE64 {
+                        return Err("that image is too large".into());
+                    }
+                    let bytes = base64::engine::general_purpose::STANDARD
+                        .decode(data)
+                        .map_err(|_| "that is not an image")?;
+                    // What the page sends: a WebP file ("RIFF....WEBP").
+                    if bytes.get(..4) != Some(b"RIFF") || bytes.get(8..12) != Some(b"WEBP") {
+                        return Err("that is not an image".into());
+                    }
+                    (file.parent().map_or(Ok(()), crate::files::private_dir))
+                        .and_then(|()| crate::files::write_private(&file, &bytes))
+                        .map_err(|e| format!("the image could not be stored: {e}"))?;
+                    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH);
+                    Some(now.map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX)))
+                } else {
+                    // Gone already is as good as removed; a picture that
+                    // stays on disk keeps its setting.
+                    match std::fs::remove_file(&file) {
+                        Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                            return Err(format!("the image could not be removed: {e}"));
+                        }
+                        _ => None,
+                    }
+                };
+                self.with_state(|s| {
+                    let a = s.settings.appearance.looks.entry(space).or_default();
+                    match slot {
+                        ImageSlot::Empty => a.empty_image = stored,
+                        ImageSlot::Sidebar => {
+                            a.sidebar_image = stored;
+                            // A new image shows at once; without one its effect is off.
+                            if stored.is_some() {
+                                a.sidebar_effect = SidebarEffect::Image;
+                            } else if a.sidebar_effect == SidebarEffect::Image {
+                                a.sidebar_effect = SidebarEffect::None;
+                            }
+                        }
+                    }
+                });
+                self.push_state(engine);
+            }
             UiCommand::SetSettings { settings: patch } => {
                 let before = self.with_state(|s| s.settings.adblock.clone());
-                let settings = self.with_state(|s| {
+                let downloads_before = self.with_state(|s| s.settings.downloads.clone());
+                let (settings, code_changed) = self.with_state(|s| {
                     let settings = s.settings.patched(patch)?;
+                    let code_changed = settings.site_code != s.settings.site_code;
                     s.settings = settings.clone();
                     // A shorter history period (or none) counts at once.
                     if s.history.prune(settings.history_days, crate::state::now()) {
                         s.history.save();
                     }
-                    Ok::<_, String>(settings)
+                    Ok::<_, String>((settings, code_changed))
                 })?;
                 engine.set_sidebar_width(settings.appearance.sidebar_width);
+                engine.set_top_bar_visible(settings.appearance.top_bar);
                 engine
                     .set_chrome_toolbar(settings.chrome_toolbar || engine.config().chrome_toolbar);
                 Self::apply_devtools_dock(engine, settings.devtools_dock);
                 engine.set_autofill(settings.autofill);
+                magnetite_engine::set_global_privacy_control(settings.global_privacy_control);
+                // Only when they changed.
+                if settings.downloads != downloads_before {
+                    engine.set_downloads(&settings.downloads);
+                }
+                // Written now so that it is there at the next start: Chromium
+                // reads the level when it starts, before Magnetite could set it.
+                engine.set_default_zoom(settings.page_zoom);
+                engine.set_languages(&settings.languages);
                 engine.set_quick_search_key(settings.quick_search);
+                self.dev_settings_changed(engine);
+                // Open pages get changed CSS at once.
+                if code_changed {
+                    engine.set_site_code(settings.site_code.clone());
+                }
                 // Lists are fetched and compiled only when they changed.
                 let after = &settings.adblock;
                 if (after.enabled, &after.lists) != (before.enabled, &before.lists) {
@@ -1322,9 +1800,29 @@ impl MagnetiteApp {
                 }
                 self.push_state(engine);
             }
+            UiCommand::SetShortcut { action, keys } => {
+                if let Err(error) = self.set_shortcut(engine, action, keys.as_deref()) {
+                    return Ok(json!({ "error": error.to_string() }));
+                }
+            }
+            UiCommand::SetSpaceShortcut { id, keys } => {
+                if let Err(error) = self.set_space_shortcut(engine, &id, keys.as_deref()) {
+                    return Ok(json!({ "error": error.to_string() }));
+                }
+            }
+            UiCommand::ResetShortcut { action } => self.reset_shortcut(engine, action),
+            UiCommand::RecordShortcut { on } => engine.record_shortcut_keys(on),
             UiCommand::OpenEnginePage { page, profile } => {
                 // Over the page in front (Settings), in the logins asked
                 // for: each profile has its own passwords and addresses.
+                // Logins asked for that are gone are an error: the peek
+                // would open in those of the space in front, and the page
+                // may delete data.
+                if let Some(id) = &profile
+                    && self.with_state(|s| s.profile_for_context(id).is_none())
+                {
+                    return Err("Those logins are gone.".into());
+                }
                 let context = profile.or_else(|| self.with_state(|s| Some(s.default_profile_id())));
                 self.open_peek(
                     engine,
@@ -1334,6 +1832,36 @@ impl MagnetiteApp {
                 );
             }
             UiCommand::ToggleSidebar => self.handle_shortcut(engine, Shortcut::ToggleSidebar),
+            UiCommand::ToggleTopBar => {
+                let on = self.with_state(|s| {
+                    let a = &mut s.settings.appearance;
+                    a.top_bar = !a.top_bar;
+                    a.top_bar
+                });
+                engine.set_top_bar_visible(on);
+                self.push_state(engine);
+            }
+            UiCommand::WindowMinimize => engine.minimize_frame(),
+            UiCommand::WindowMaximize => engine.toggle_maximize_frame(),
+            UiCommand::WindowFullscreen => engine.toggle_fullscreen_frame(),
+            UiCommand::WindowClose => engine.close_frame(),
+            UiCommand::TopBarPopup {
+                popup,
+                id,
+                x,
+                y,
+                width,
+                height,
+                dev_bar,
+            } => {
+                let id = id.map(|id| format!("&id={}", urlencode(&id)));
+                let url = format!(
+                    "magnetite://ui/popup?kind={}{}",
+                    popup.as_str(),
+                    id.unwrap_or_default()
+                );
+                engine.open_bar_popup(dev_bar, &url, (x, y), (width, height));
+            }
             UiCommand::FocusSidebar => engine.focus_sidebar(),
             UiCommand::FloatSidebar { show } => {
                 let had_focus = engine.float_sidebar_shown() && !show;
@@ -1345,6 +1873,7 @@ impl MagnetiteApp {
             }
             UiCommand::FinishWelcome {
                 import,
+                spaces,
                 default_browser,
             } => {
                 // Read everything first: a browser that cannot be read
@@ -1359,7 +1888,10 @@ impl MagnetiteApp {
                         .ok_or_else(|| "it is not on this computer".to_string())
                         .and_then(|b| magnetite_importer::import(b).map_err(|e| e.to_string()));
                     match result {
-                        Ok(snap) => read.push(snap),
+                        Ok(snap) => read.push(match spaces.get(key) {
+                            Some(chosen) => choose_spaces(snap, chosen),
+                            None => snap,
+                        }),
                         Err(error) => {
                             failed.push(json!({ "key": key, "name": name, "error": error }));
                         }
@@ -1410,7 +1942,8 @@ impl MagnetiteApp {
             }
             UiCommand::GetState => {
                 let extensions = self.front_extensions(engine);
-                return Ok(self.with_state(|s| for_ui(json!(s.ui_state(&extensions)))));
+                let recording = lock(&self.record).for_ui();
+                return Ok(self.with_state(|s| super::ui_json(s, &extensions, recording)));
             }
             UiCommand::OpenExtension { id } => self.open_extension(engine, &id),
             UiCommand::PinExtension { id, pinned } => self.pin_extension(engine, &id, pinned),
@@ -1443,6 +1976,22 @@ impl MagnetiteApp {
                     self.show_downloads(engine);
                 }
             }
+            UiCommand::CopyDownload { id, what } => {
+                let file = self.with_state(|s| s.downloads.file(&id).map(Path::to_path_buf));
+                // The path of a file that is gone is of no use either.
+                let text = match (file.filter(|f| f.exists()), what) {
+                    (None, _) => {
+                        self.show_downloads(engine);
+                        "That file was moved or deleted."
+                    }
+                    (Some(f), DownloadCopy::File) if engine.copy_file(&f) => "File copied",
+                    (Some(f), DownloadCopy::Path) if engine.copy_text(&f.to_string_lossy()) => {
+                        "Path copied"
+                    }
+                    (Some(_), _) => "Could not copy",
+                };
+                Self::ui_call(engine, "notice", &json!({ "text": text }));
+            }
             UiCommand::ClearDownloads => {
                 self.with_state(|s| {
                     s.downloads.clear();
@@ -1455,6 +2004,10 @@ impl MagnetiteApp {
             UiCommand::AddBookmark { id } => {
                 let saved = self.with_state(|s| {
                     let tab = id.or_else(|| s.active_tab_id().map(str::to_owned))?;
+                    // The private space's bookmarks would go with it.
+                    if s.in_private_space(&tab) {
+                        return None;
+                    }
                     let bookmark = s.add_bookmark(&tab)?;
                     s.bookmark(&bookmark).map(|(space, _)| space.title.clone())
                 });
@@ -1535,6 +2088,8 @@ impl MagnetiteApp {
                     self.push_state(engine);
                 }
             }
+            // Kept through `EngineEvent::WebPanelResized`.
+            UiCommand::WebPanelWidth { width, done } => engine.resize_web_panel(width, done),
             UiCommand::UpdateStatus => return Ok(self.update_json()),
             UiCommand::CheckUpdates => {
                 if let Some(ticket) = engine.defer_reply() {
@@ -1576,6 +2131,15 @@ impl MagnetiteApp {
                     .map(|b| json!({ "key": b.key, "name": b.name }))
                     .collect();
                 return Ok(json!({ "sources": sources }));
+            }
+            UiCommand::ImportPreview { key } => {
+                let browser = magnetite_importer::installed()
+                    .into_iter()
+                    .find(|b| b.key == key)
+                    .ok_or("That browser is not on this computer.")?;
+                let snap = magnetite_importer::import(&browser).map_err(|e| e.to_string())?;
+                let (spaces, favorites) = preview(snap);
+                return Ok(json!({ "spaces": spaces, "favorites": favorites }));
             }
             UiCommand::ImportFrom { key } => {
                 let browser = magnetite_importer::installed()
@@ -1629,7 +2193,14 @@ impl MagnetiteApp {
                     None => json!({}),
                 });
             }
-            UiCommand::CaptureSelect { rect } => self.capture_region(engine, Some(rect)),
+            UiCommand::CaptureSelect {
+                rect,
+                context: false,
+            } => self.capture_region(engine, Some(rect)),
+            UiCommand::CaptureSelect {
+                rect,
+                context: true,
+            } => self.capture_context(engine, rect),
             UiCommand::CaptureVisible => self.capture_region(engine, None),
             UiCommand::CaptureFull => self.capture_full(engine),
             UiCommand::CaptureCancel => {
@@ -1680,6 +2251,21 @@ impl MagnetiteApp {
             }
             UiCommand::DeviceGet { page } => return Ok(engine.device_config(page)),
             UiCommand::DeviceSet { page, config } => engine.set_device_config(page, config),
+            UiCommand::AllPermissions { profile } => {
+                let context = self.permission_logins(profile.as_deref())?;
+                return Ok(json!({ "rows": engine.all_permissions(context.as_ref()) }));
+            }
+            UiCommand::SetProfilePermission {
+                profile,
+                origin,
+                kind,
+                value,
+            } => {
+                let context = self.permission_logins(profile.as_deref())?;
+                if !engine.set_permission(context.as_ref(), &origin, kind, value) {
+                    return Err("That is no website's address.".into());
+                }
+            }
             UiCommand::SitePermissions => {
                 let rows = self
                     .focused_content(None)
@@ -1727,9 +2313,28 @@ impl MagnetiteApp {
                 }
             }
             UiCommand::ToggleDevtools => self.toggle_devtools(engine, None),
+            UiCommand::DevPanel { panel } => self.dev_panel(engine, None, panel),
+            UiCommand::DevReset => self.dev_reset(engine, None),
+            UiCommand::DevEmulate { patch } => return self.dev_emulate(engine, patch),
+            UiCommand::DevServers => Self::dev_servers(engine),
+            UiCommand::DevSplitAs { profile } => self.dev_split_as(engine, &profile),
+            UiCommand::DevResponsive => self.dev_responsive(engine),
+            UiCommand::DevCaptureSet => self.capture_set(engine),
+            UiCommand::DevRecordStart => return self.record_start(engine),
+            UiCommand::DevRecord => self.record_toggle(engine),
+            UiCommand::DevRecordFrame { id } => return Ok(self.record_frame(engine, id)),
+            UiCommand::DevRecordData { id, data, mp4 } => self.record_data(id, &data, mp4)?,
+            UiCommand::DevRecordEnd { id, failed } => self.record_end(engine, id, failed),
+            UiCommand::DevRecordFile { reveal } => {
+                let text = self.record_file(engine, reveal);
+                if !text.is_empty() {
+                    Self::ui_call(engine, "notice", &json!({ "text": text }));
+                }
+            }
             UiCommand::SetZoom { percent } => {
                 if let Some(c) = self.focused_content(None) {
-                    engine.set_content_zoom(c, percent.clamp(25, 500));
+                    // 0: the zoom every site starts with (Settings → Appearance).
+                    engine.set_content_zoom(c, (percent != 0).then_some(percent.clamp(25, 500)));
                 }
             }
         }

@@ -3,24 +3,24 @@
 // are Chromium's own pages, which the app shows over this one.
 import { useState } from "react";
 import { send, type Settings } from "../bridge";
-import { Field, Switch, Toggle } from "./fields";
+import { Field, Group, Switch, Toggle } from "./fields";
 import type { Info, SettingsPatch } from "./types";
 
 type EnginePage = "passwords" | "addresses" | "cards";
 
-/** One switch, and below it the button to what Chromium has saved for it. */
+/** One switch, and below it the button to what Chromium has saved for it: a row of a `Group`. */
 function Feature({ label, hint, checked, onChange, manage, onManage, children }: { label: string; hint: string; checked: boolean; onChange: (on: boolean) => void; manage: string; onManage: () => void; children?: React.ReactNode }) {
   return (
-    <div className="set-card">
+    <div className="set-row" data-search-row>
       <label className="flex cursor-default items-start gap-4">
-        <span className="min-w-0 flex-1">
+        <span className="min-w-0 flex-1" data-search-name>
           <span className="set-label block">{label}</span>
           <span className="set-hint block">{hint}</span>
         </span>
         <Switch label={label} checked={checked} onChange={onChange} />
       </label>
       {children}
-      <button className="btn mt-3" onClick={onManage}>{manage}</button>
+      <button className="btn mt-3" data-search-name onClick={onManage}>{manage}</button>
     </div>
   );
 }
@@ -38,15 +38,18 @@ export function AutofillSection({ info, update }: { info: Info; update: (patch: 
   return (
     <>
       {logins.length > 1 && (
-        <Field label="Logins" hint="Each set of logins keeps its own passwords, addresses and cards. The buttons below open those of the logins chosen here; the switches count for all of them.">
+        <Group>
+        <Field side label="Logins" hint="Each set of logins keeps its own passwords, addresses and cards. The buttons below open those of the logins chosen here; the switches count for all of them.">
           <select className="field" value={profile} onChange={(e) => setProfile(e.target.value)} aria-label="Logins">
             {logins.map((p) => <option key={p.id} value={p.id}>{p.is_default ? "Shared (your main logins)" : p.name}</option>)}
           </select>
         </Field>
+        </Group>
       )}
+      <Group title="Passwords">
       <Feature
         label="Offer to save passwords"
-        hint="After you sign in to a site, Magnetite asks whether to keep the password and fills it in the next time. Saved passwords stay on this computer and are not part of sync."
+        hint="After you sign in, Magnetite asks whether to keep the password and fills it in the next time. Saved passwords stay on this computer, outside sync."
         checked={autofill.passwords}
         onChange={(passwords) => set({ passwords })}
         manage="Saved passwords…"
@@ -56,6 +59,14 @@ export function AutofillSection({ info, update }: { info: Info; update: (patch: 
           <p className="set-hint" style={{ color: "var(--warn)" }}>This run uses Chromium's test key (--mock-keychain): what it saves is not protected by your keychain.</p>
         )}
       </Feature>
+      <Toggle
+        label="Warn about passwords from data breaches"
+        hint="While this is on, Chromium asks a Google service at each sign-in whether the password appeared in a known breach. It sends an encrypted fragment, not the password."
+        checked={autofill.breach_check}
+        onChange={(breach_check) => set({ breach_check })}
+      />
+      </Group>
+      <Group title="Forms">
       <Feature
         label="Save and fill in addresses"
         hint="Names, addresses, phone numbers and email addresses for forms. Magnetite asks before it saves one."
@@ -72,12 +83,7 @@ export function AutofillSection({ info, update }: { info: Info; update: (patch: 
         manage="Saved cards…"
         onManage={() => open("cards")}
       />
-      <Toggle
-        label="Warn about passwords from data breaches"
-        hint="When you sign in, Chromium asks a Google service whether this password has appeared in a known breach. It sends an encrypted fragment, not the password. Off unless you turn it on here."
-        checked={autofill.breach_check}
-        onChange={(breach_check) => set({ breach_check })}
-      />
+      </Group>
       <p className="hint">The lists are Chromium's own pages; they open over this one. The extension of a password manager such as Bitwarden works next to all this, or in its place.</p>
     </>
   );

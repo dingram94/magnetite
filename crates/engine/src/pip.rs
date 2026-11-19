@@ -23,11 +23,12 @@ use objc2::runtime::{AnyObject, NSObject, NSObjectProtocol, ProtocolObject, Sel}
 use objc2::{ClassType, MainThreadMarker, MainThreadOnly, Message, define_class, msg_send, sel};
 use objc2_app_kit::{
     NSAnimatablePropertyContainer, NSAnimationContext, NSApplication, NSBackingStoreType, NSBox,
-    NSButton, NSColor, NSCursor, NSCursorFrameResizeDirections, NSCursorFrameResizePosition,
-    NSEvent, NSFloatingWindowLevel, NSFont, NSFontWeightMedium, NSFontWeightSemibold, NSImage,
-    NSImageSymbolConfiguration, NSPanel, NSTrackingArea, NSTrackingAreaOptions, NSView, NSWindow,
-    NSWindowCollectionBehavior, NSWindowDidResizeNotification, NSWindowOrderingMode,
-    NSWindowStyleMask, NSWindowWillCloseNotification,
+    NSButton, NSCellImagePosition, NSColor, NSCursor, NSCursorFrameResizeDirections,
+    NSCursorFrameResizePosition, NSEvent, NSFloatingWindowLevel, NSFont, NSFontWeightMedium,
+    NSFontWeightSemibold, NSImage, NSImageSymbolConfiguration, NSPanel, NSTrackingArea,
+    NSTrackingAreaOptions, NSView, NSWindow, NSWindowCollectionBehavior,
+    NSWindowDidResizeNotification, NSWindowOrderingMode, NSWindowStyleMask,
+    NSWindowWillCloseNotification,
 };
 use objc2_foundation::{NSNotification, NSNotificationCenter, NSPoint, NSRect, NSSize, NSString};
 
@@ -45,6 +46,8 @@ const PILL_RADIUS: f64 = 8.0;
 const PLAY: f64 = 52.0;
 const SEEK: f64 = 40.0;
 const CENTER_GAP: f64 = 18.0;
+/// The least room between play/pause and a seek button.
+const MIN_GAP: f64 = 4.0;
 /// Band along each edge, and square at each corner, that resizes the window.
 const EDGE: f64 = 6.0;
 const CORNER: f64 = 16.0;
@@ -138,7 +141,8 @@ impl From<Area> for NSRect {
 /// Where the buttons go on a `w` × `h` video. `labelled` are the widths of
 /// the top buttons with their labels; when the three do not fit side by
 /// side they show only their icons (`compact`). Live video has nothing to
-/// seek in, so it gets no seek buttons.
+/// seek in, so it gets no seek buttons; nor does a video too narrow to hold
+/// them.
 fn layout(w: f64, h: f64, labelled: [f64; 3], live: bool) -> (bool, Vec<(Button, Area)>) {
     let compact = labelled.iter().sum::<f64>() + 2.0 * MARGIN + 3.0 * PILL_GAP > w;
     let width = |i: usize| if compact { PILL_HEIGHT } else { labelled[i] };
@@ -162,8 +166,12 @@ fn layout(w: f64, h: f64, labelled: [f64; 3], live: bool) -> (bool, Vec<(Button,
         (Button::Close, pill(close_x, width(2))),
         (Button::PlayPause, round(w / 2.0, PLAY)),
     ];
-    if !live {
-        let offset = PLAY / 2.0 + CENTER_GAP + SEEK / 2.0;
+    if !live && w >= PLAY + 2.0 * (SEEK + MIN_GAP) {
+        // A narrow (upright) video moves them closer, so they stay on it.
+        let gap = CENTER_GAP
+            .min((w - PLAY - 2.0 * SEEK - 2.0 * MARGIN) / 2.0)
+            .max(MIN_GAP);
+        let offset = PLAY / 2.0 + gap + SEEK / 2.0;
         places.push((Button::Back, round(w / 2.0 - offset, SEEK)));
         places.push((Button::Forward, round(w / 2.0 + offset, SEEK)));
     }
@@ -440,7 +448,7 @@ pub(crate) fn follow(id: ContentId, media: Option<&MediaState>) {
 }
 
 /// The floating video window `window` stands for: itself, or the video
-/// under our panel. For gestures on the video (`mac::install_pip_swipe`).
+/// under our panel. For gestures on the video (`mac::install_swipe_monitor`).
 pub(crate) fn video_window_for(window: &NSWindow) -> Option<Retained<NSWindow>> {
     if is_video_window(window) {
         return Some(window.retain());
@@ -633,12 +641,13 @@ fn lay_out(p: &Panel) {
             None => frame.setHidden(true),
         }
         if button.on_top() {
-            let title = if compact {
-                String::new()
+            // Icon only: an empty title would still keep the icon to the
+            // left of the pill's middle.
+            inner.setImagePosition(if compact {
+                NSCellImagePosition::ImageOnly
             } else {
-                labelled_title(*button)
-            };
-            inner.setTitle(&NSString::from_str(&title));
+                NSCellImagePosition::ImageLeading
+            });
         } else if *button == Button::PlayPause
             && let Some(image) = symbol(*button, s.playing)
         {
@@ -894,11 +903,6 @@ fn cursor(hover: Option<Button>, edges: Option<Edges>) -> Retained<NSCursor> {
     )
 }
 
-/// A top button's title: its label a thin space away from the icon.
-fn labelled_title(button: Button) -> String {
-    format!("\u{2009}{}", button.label(false))
-}
-
 fn fill(button: Button, hover: bool) -> Retained<NSColor> {
     match (button.on_top(), hover) {
         (true, false) => NSColor::colorWithWhite_alpha(0.08, 0.62),
@@ -979,7 +983,8 @@ fn create_panel(mtm: MainThreadMarker) -> Panel {
         .map(|button| {
             let image = symbol(button, false).unwrap_or_default();
             let inner = if button.on_top() {
-                let title = NSString::from_str(&labelled_title(button));
+                // The label, a thin space away from the icon.
+                let title = NSString::from_str(&format!("\u{2009}{}", button.label(false)));
                 // SAFETY: no target or action: the panel's view handles clicks.
                 unsafe {
                     NSButton::buttonWithTitle_image_target_action(&title, &image, None, None, mtm)
@@ -1047,6 +1052,20 @@ mod tests {
         let back = place(&places, Button::BackToTab).unwrap();
         let minimize = place(&places, Button::Minimize).unwrap();
         assert!(back.x + back.w < minimize.x);
+    }
+
+    #[test]
+    fn seek_buttons_stay_on_a_narrow_video() {
+        let (_, places) = layout(160.0, 284.0, LABELLED, false);
+        let back = place(&places, Button::Back).unwrap();
+        let play = place(&places, Button::PlayPause).unwrap();
+        let forward = place(&places, Button::Forward).unwrap();
+        assert!(back.x >= MARGIN && forward.x + forward.w <= 160.0 - MARGIN);
+        assert!(back.x + back.w < play.x && play.x + play.w < forward.x);
+        // Too narrow for them: play/pause alone.
+        let (_, places) = layout(120.0, 213.0, LABELLED, false);
+        assert!(place(&places, Button::Back).is_none());
+        assert!(place(&places, Button::PlayPause).is_some());
     }
 
     #[test]

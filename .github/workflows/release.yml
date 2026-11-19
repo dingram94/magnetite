@@ -56,6 +56,15 @@ jobs:
       run:
         shell: bash
     steps:
+      # A release never carries an ad hoc signed Mac app or disk image:
+      # Gatekeeper blocks them after download. Checked first, before the
+      # long build.
+      - name: Require the Apple secrets
+        if: runner.os == 'macOS' && (env.HAS_APPLE_CERT != 'true' || env.HAS_APPLE_NOTARY != 'true')
+        run: |
+          echo "::error::the Apple signing or notarization secrets are missing from the release environment"
+          exit 1
+
       - if: runner.os == 'Windows'
         run: git config --global core.autocrlf false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -64,9 +73,10 @@ jobs:
       - uses: ./.github/actions/setup
 
       # Everything that runs other people's code (crate build scripts and
-      # macros, npm's build tools) runs before the Developer ID certificate
-      # is in the keychain; after it, build.sh only packages and signs (its
-      # cargo build finds nothing left to do).
+      # macros, npm's build tools, uBlock Origin's scriptlet modules) runs
+      # before the Developer ID certificate is in the keychain; after it,
+      # build.sh only packages and signs (its cargo build finds nothing left
+      # to do, and the scriptlets are made).
       - name: Build
         run: |
           # Windows: MSVC's link.exe ahead of Git Bash's own link.
@@ -77,12 +87,14 @@ jobs:
           if [[ $RUNNER_OS == Windows ]]; then
             cargo build --locked --profile release -p magnetite-windows
           fi
+          scripts/scriptlets.sh
 
       - name: Developer ID certificate
-        if: runner.os == 'macOS' && env.HAS_APPLE_CERT == 'true'
+        if: runner.os == 'macOS'
         env:
           APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
         run: scripts/release/import-macos-cert.sh
 
       # For the installer; GitHub's image usually has it already.
@@ -103,16 +115,14 @@ jobs:
           scripts/linux-packages.sh "dist/magnetite-$VERSION"
 
       - name: Notarize
-        if: runner.os == 'macOS' && env.HAS_APPLE_CERT == 'true' && env.HAS_APPLE_NOTARY == 'true'
+        if: runner.os == 'macOS'
         env:
           APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
           APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
           APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
-        run: scripts/release/notarize-macos.sh dist/Magnetite.app "dist/Magnetite-$VERSION-${{ matrix.target }}.zip"
-
-      - name: Warn about an unnotarized app
-        if: runner.os == 'macOS' && (env.HAS_APPLE_CERT != 'true' || env.HAS_APPLE_NOTARY != 'true')
-        run: echo "::warning::${{ matrix.target }} is ad hoc signed, not notarized; Gatekeeper will block it after download"
+        run: |
+          scripts/release/notarize-macos.sh dist/Magnetite.app \
+            "dist/Magnetite-$VERSION-${{ matrix.target }}.zip" "dist/Magnetite-$VERSION-${{ matrix.target }}.dmg"
 
       # No certificate for Windows yet: SmartScreen warns about the download.
       - name: Warn about an unsigned installer
@@ -171,12 +181,18 @@ jobs:
 
       - name: Checksums
         working-directory: dist
-        run: sha256sum -- *.zip *.tar.gz *.rpm *.deb *.exe >SHA256SUMS
+        run: sha256sum -- *.zip *.dmg *.tar.gz *.rpm *.deb *.exe >SHA256SUMS
 
+      # The notes: GitHub's list of the pull requests since the last
+      # release, for a maintainer to rewrite, then the install table.
       - name: Create the draft
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="$GITHUB_REF_NAME" --jq .body >"$RUNNER_TEMP/notes.md"
+          echo >>"$RUNNER_TEMP/notes.md"
+          scripts/release/release-notes.sh "$VERSION" dist >>"$RUNNER_TEMP/notes.md"
           gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
-            --title "Magnetite $VERSION" --generate-notes \
-            dist/*.zip dist/*.tar.gz dist/*.rpm dist/*.deb dist/*.deb.asc dist/*.exe dist/latest.json dist/latest.json.sig dist/magnetite.rb dist/SHA256SUMS
+            --title "Magnetite $VERSION" --notes-file "$RUNNER_TEMP/notes.md" \
+            dist/*.zip dist/*.dmg dist/*.tar.gz dist/*.rpm dist/*.deb dist/*.deb.asc dist/*.exe dist/latest.json dist/latest.json.sig dist/magnetite.rb dist/SHA256SUMS

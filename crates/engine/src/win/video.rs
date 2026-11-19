@@ -149,10 +149,13 @@ fn ours(hwnd: Hwnd) -> bool {
     let engine = Engine::global();
     let inner = engine.lock();
     let is = |w: &cef::Window| w.window_handle().0.cast::<c_void>() == hwnd;
-    inner.frame.as_ref().is_some_and(|f| is(&f.window))
-        || inner.overlay.as_ref().is_some_and(is)
+    // Every frame window: the current one and the others.
+    let mut frames = std::iter::once(&inner.win).chain(inner.parked.values());
+    frames.any(|w| {
+        w.frame.as_ref().is_some_and(|f| is(&f.window))
+            || (w.float_bar.as_ref()).is_some_and(|f| f.window.as_ref().is_some_and(is))
+    }) || inner.overlay.as_ref().is_some_and(is)
         || inner.notifications.as_ref().is_some_and(is)
-        || (inner.float_bar.as_ref()).is_some_and(|f| f.window.as_ref().is_some_and(is))
         || (inner.contents.values()).any(|c| c.window.as_ref().is_some_and(is))
 }
 

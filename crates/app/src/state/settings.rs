@@ -2,9 +2,9 @@
 //! change goes through, whether it comes from the Settings page or from
 //! another device.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
-use magnetite_core::UnixSeconds;
+use magnetite_core::{Id, UnixSeconds};
 use serde::{Deserialize, Serialize};
 
 /// The longest the archive may keep a tab: ten years.
@@ -38,10 +38,19 @@ pub struct Settings {
     pub search_template: String,
     /// Keywords that search one site from the command bar (`gh rust`).
     pub site_searches: Vec<SiteSearch>,
-    /// Links from other apps: "tab", "peek" or "mini" (a mini window).
-    /// Synced: a version that does not know a value takes "tab"
-    /// (`sanitised`).
+    /// Links from other apps: "mini" (a mini window, the default), "tab" or
+    /// "peek". Synced: a version that does not know a value takes the
+    /// default (`sanitised`).
     pub external_links: String,
+    /// Which space a link from another app opens in, by its site
+    /// (`LinkRule`). This device's own, never synced.
+    pub link_rules: Vec<LinkRule>,
+    /// The user's own CSS and JavaScript per site (Settings → Custom CSS &
+    /// JS). This device's own, never synced.
+    pub site_code: Vec<magnetite_engine::SiteCode>,
+    /// The shortcuts the user gave other keys, or none (Settings →
+    /// Shortcuts); the rest have their default keys. Synced.
+    pub shortcuts: magnetite_engine::Overrides,
     /// The system-wide quick search key (⌥⌘N) is registered. This
     /// device's own choice, never synced.
     pub quick_search: bool,
@@ -51,8 +60,14 @@ pub struct Settings {
     pub appearance: Appearance,
     /// Pop a playing video out (picture-in-picture) when leaving its tab.
     pub auto_pip: bool,
+    /// Several windows on one sidebar (New Window, ⌘N; `state/windows.rs`).
+    /// Off unless turned on: it is new, and untested on macOS and Windows.
+    pub several_windows: bool,
     /// Remove tracking parameters (utm_*, fbclid, …) when copying links.
     pub strip_trackers: bool,
+    /// A web panel closes by itself when a page behind it is used
+    /// (`web-panels.md`); off: it stays until it is closed.
+    pub panel_autoclose: bool,
     /// Where DevTools open: right of or below the page, or a separate window.
     pub devtools_dock: magnetite_engine::DevToolsDock,
     /// The size docked DevTools were dragged to, per side. This device's
@@ -70,9 +85,24 @@ pub struct Settings {
     pub check_updates: bool,
     /// What a click on the sidebar's archive and downloads button opens.
     pub library_opens: LibraryView,
+    /// The order `Ctrl+Tab` goes through the tabs in. This device's own
+    /// choice, never synced.
+    pub tab_order: TabOrder,
     /// Chromium's password manager and autofill: which parts are on. Not
     /// synced: what a device saves is that device's.
     pub autofill: magnetite_engine::AutofillPrefs,
+    /// Tell websites not to sell or share the user's data (Global Privacy
+    /// Control). Not synced, as the other settings of this kind.
+    pub global_privacy_control: bool,
+    /// Where downloads go, and whether to ask each time. Not synced: a
+    /// folder is this computer's.
+    pub downloads: magnetite_engine::DownloadPrefs,
+    /// The zoom, in percent, a site has until it is zoomed on its own: one
+    /// of Chromium's steps. Not synced: screens differ.
+    pub page_zoom: u32,
+    /// Spell check, and the languages websites are asked for. Not synced:
+    /// a device has its own keyboard and reader.
+    pub languages: magnetite_engine::LanguagePrefs,
     /// Smart folders allowed to fetch on this device (`smart_key`): those made
     /// or edited here, or turned on here. A folder another device synced
     /// waits, so the words alone cannot make this device's accounts run a
@@ -81,6 +111,9 @@ pub struct Settings {
     pub smart_allowed: Option<Vec<String>>,
     /// The ad blocker. Not synced: each device downloads its own lists.
     pub adblock: AdblockSettings,
+    /// Developer features: the row for local pages, the hosts that count
+    /// as local. Not synced.
+    pub developer: crate::dev::DeveloperSettings,
 }
 
 /// The ad blocker (Settings → Ad blocking, `adblock.rs`). Off, with no list,
@@ -126,6 +159,39 @@ pub struct Appearance {
     pub density: Density,
     /// Width of the docked sidebar in points, 220 to 360.
     pub sidebar_width: u32,
+    /// Navigation, the address and the window buttons in a bar across the
+    /// top of the window, not at the top of the sidebar.
+    pub top_bar: bool,
+    /// How each space looks beyond its colour, by space id. A space without
+    /// an entry has the default look. Kept on this device.
+    pub looks: BTreeMap<String, SpaceLook>,
+}
+
+/// One space's look beyond its colour (Settings → Appearance).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct SpaceLook {
+    /// How much of the space colour is mixed into the window, in percent,
+    /// 0 to 30.
+    pub tint: u32,
+    /// What is drawn over the sidebar's colour.
+    pub sidebar_effect: SidebarEffect,
+    /// When the user's own sidebar image was stored (milliseconds), `None`
+    /// without one. Part of the image's address, so pages load a new one.
+    pub sidebar_image: Option<u64>,
+    /// The same for the image behind the empty window.
+    pub empty_image: Option<u64>,
+}
+
+impl Default for SpaceLook {
+    fn default() -> Self {
+        Self {
+            tint: 8,
+            sidebar_effect: SidebarEffect::None,
+            sidebar_image: None,
+            empty_image: None,
+        }
+    }
 }
 
 impl Default for Appearance {
@@ -134,6 +200,8 @@ impl Default for Appearance {
             text_scale: 100,
             density: Density::Comfortable,
             sidebar_width: 264,
+            top_bar: false,
+            looks: BTreeMap::new(),
         }
     }
 }
@@ -143,13 +211,35 @@ impl Appearance {
     pub fn clamped(mut self) -> Self {
         self.text_scale = self.text_scale.clamp(85, 130);
         self.sidebar_width = Self::sidebar_width(self.sidebar_width);
+        for look in self.looks.values_mut() {
+            look.tint = look.tint.min(30);
+        }
         self
+    }
+
+    /// The look of space `id`: its own, or the default one.
+    pub fn look(&self, id: &str) -> SpaceLook {
+        self.looks.get(id).cloned().unwrap_or_default()
     }
 
     /// The docked sidebar's width kept between 220 and 360 points.
     pub fn sidebar_width(width: u32) -> u32 {
         width.clamp(220, 360)
     }
+}
+
+/// An effect over the sidebar's colour, or the user's own image.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SidebarEffect {
+    #[default]
+    None,
+    Grain,
+    Glow,
+    Aurora,
+    Fade,
+    /// The stored image (`SpaceLook::sidebar_image`).
+    Image,
 }
 
 /// Row height and spacing in the sidebar.
@@ -160,6 +250,17 @@ pub enum Density {
     #[default]
     Comfortable,
     Spacious,
+}
+
+/// The order `Ctrl+Tab` and `Ctrl+Shift+Tab` go through the tabs in.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum TabOrder {
+    /// By last use: one press goes to the tab used before this one.
+    #[default]
+    Recent,
+    /// As the sidebar lists them.
+    Sidebar,
 }
 
 /// A view behind the sidebar's archive and downloads button. While something
@@ -247,6 +348,120 @@ impl SiteSearch {
     }
 }
 
+/// A rule for links from other apps: one to `site` opens in space `space`.
+/// `site` is a host, or a host and the start of a path (`github.com/acme`),
+/// in lower case without `www.`; it stands for its subdomains too.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LinkRule {
+    pub site: String,
+    pub space: Id,
+}
+
+/// The most link rules kept.
+const MAX_LINK_RULES: usize = 100;
+
+/// The host of an http(s) address or of a rule's site, without `www.`, and
+/// the path after it (up to `?` or `#`, without the `/` at its end).
+fn host_and_path(address: &str) -> Option<(String, &str)> {
+    // A scheme stands at the very start; "://" further in belongs to a path.
+    let scheme = |s: &str| {
+        !s.is_empty()
+            && s.chars()
+                .all(|c| c.is_ascii_alphanumeric() || "+.-".contains(c))
+    };
+    let rest = match address.split_once("://") {
+        Some((before, rest)) if scheme(before) => rest,
+        _ => address,
+    };
+    let rest = rest.split(['?', '#']).next()?;
+    let (authority, path) = match rest.find('/') {
+        Some(at) => rest.split_at(at),
+        None => (rest, ""),
+    };
+    let host = authority.rsplit('@').next()?.split(':').next()?;
+    let host = host.to_ascii_lowercase();
+    let host = host.trim_start_matches("www.").to_string();
+    let fine = |c: char| c.is_ascii_alphanumeric() || c == '-' || c == '.';
+    (host.contains('.') && host.chars().all(fine)).then(|| (host, path.trim_end_matches('/')))
+}
+
+/// `path` with its `.` and `..` segments resolved, as a browser does
+/// before it asks for the page (also written `%2e`): `/a/./b/../c` is
+/// `/a/c`. Without the `/` at its end, like `host_and_path`'s paths.
+fn without_dot_segments(path: &str) -> String {
+    let mut kept: Vec<&str> = Vec::new();
+    for segment in path.split('/').skip(1) {
+        match segment.to_ascii_lowercase().replace("%2e", ".").as_str() {
+            "." => {}
+            ".." => {
+                kept.pop();
+            }
+            _ => kept.push(segment),
+        }
+    }
+    let joined: String = kept.iter().flat_map(|segment| ["/", segment]).collect();
+    joined.trim_end_matches('/').to_string()
+}
+
+impl LinkRule {
+    /// This rule as Magnetite keeps it, or `None` without a site: what was
+    /// typed may be a whole address (`https://www.GitHub.com/acme/`), of
+    /// which the host and the path stay (`github.com/acme`).
+    fn sanitised(self) -> Option<Self> {
+        let (host, path) = host_and_path(self.site.trim())?;
+        Some(Self {
+            site: format!("{host}{path}"),
+            space: self.space,
+        })
+    }
+
+    /// How closely the rule fits `url`, if it does: the lengths of its host
+    /// and its path. It fits an http(s) address on its host or a subdomain
+    /// of it, under its path.
+    fn fit(&self, url: &str) -> Option<(usize, usize)> {
+        if !(url.starts_with("https://") || url.starts_with("http://")) {
+            return None;
+        }
+        let (host, path) = host_and_path(url)?;
+        // As the browser will load it: `/acme/../other` is `/other`.
+        let path = without_dot_segments(path);
+        let (site, under) = host_and_path(&self.site)?;
+        let on_host = host == site || host.ends_with(&format!(".{site}"));
+        // `/acme` is above `/acme/app`, not above `/acmecorp`.
+        let below = path
+            .strip_prefix(under)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'));
+        (on_host && below).then_some((site.len(), under.len()))
+    }
+}
+
+impl Settings {
+    /// The space a link from another app to `url` opens in, if a rule says
+    /// so: of several rules that fit, the one with the longest host, then
+    /// the longest path. Only rules whose space `exists` count: one whose
+    /// space is gone must not stand in the way of a less exact rule.
+    pub fn link_space(&self, url: &str, exists: impl Fn(&Id) -> bool) -> Option<&Id> {
+        (self.link_rules.iter())
+            .filter(|rule| exists(&rule.space))
+            .filter_map(|rule| Some((rule.fit(url)?, rule)))
+            .max_by_key(|(fit, _)| *fit)
+            .map(|(_, rule)| &rule.space)
+    }
+}
+
+/// The most sites with CSS and JavaScript of the user's own, and the most
+/// bytes of either for one site.
+const MAX_CODE_SITES: usize = 200;
+const MAX_SITE_CODE: usize = 256 * 1024;
+
+/// The host a site was named by, in lower case and without `www.`: what
+/// was typed may be a whole address. `None` if it names no host.
+fn site_host(typed: &str) -> Option<String> {
+    // The host as `host_and_path` finds it: a scheme counts only at the start.
+    let (host, _) = host_and_path(typed.trim())?;
+    Some(host)
+}
+
 /// Sync configuration. Keys are kept out of `state.json` (see `sync.rs`).
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
@@ -260,6 +475,11 @@ pub struct SyncSettings {
     /// This device started its chain. Only that device writes into a chain
     /// that holds nothing yet; one that joined waits for the first data.
     pub started_here: bool,
+    /// This install among the chain's devices; made up when it first syncs.
+    pub device_id: String,
+    /// Tabs of other devices taken over here that their devices may still
+    /// list (`devices` module).
+    pub taken: Vec<String>,
 }
 
 impl Settings {
@@ -267,7 +487,10 @@ impl Settings {
     /// or from another device: archiving after at least an hour, retention
     /// periods in range, appearance in range, search addresses on https with
     /// `%s` in them (site searches that are not, or repeat a keyword, are
-    /// dropped), a known choice for external links.
+    /// dropped), a known choice for external links, link rules with a site
+    /// each (one per site), own CSS and JavaScript only for sites named by
+    /// their host (one entry per site, each part at most `MAX_SITE_CODE`
+    /// long).
     pub fn sanitised(mut self) -> Self {
         let defaults = Self::default();
         self.auto_archive_hours = self.auto_archive_hours.max(1);
@@ -275,6 +498,7 @@ impl Settings {
         self.history_days = self.history_days.min(MAX_ARCHIVE_DAYS);
         self.appearance = self.appearance.clamped();
         self.adblock = self.adblock.sanitised();
+        self.developer = self.developer.sanitised();
         if !usable_search(&self.search_template) {
             self.search_template = defaults.search_template;
         }
@@ -291,11 +515,49 @@ impl Settings {
         if !matches!(self.external_links.as_str(), "tab" | "peek" | "mini") {
             self.external_links = defaults.external_links;
         }
+        let mut rules: Vec<LinkRule> = Vec::new();
+        for rule in std::mem::take(&mut self.link_rules) {
+            if let Some(rule) = rule.sanitised()
+                && !rules.iter().any(|r| r.site == rule.site)
+                && rules.len() < MAX_LINK_RULES
+            {
+                rules.push(rule);
+            }
+        }
+        self.link_rules = rules;
+        let mut code: Vec<magnetite_engine::SiteCode> = Vec::new();
+        for mut entry in std::mem::take(&mut self.site_code) {
+            let small = entry.css.len() <= MAX_SITE_CODE && entry.js.len() <= MAX_SITE_CODE;
+            if let Some(site) = site_host(&entry.site)
+                && small
+                && !code.iter().any(|c| c.site == site)
+                && code.len() < MAX_CODE_SITES
+            {
+                entry.site = site;
+                code.push(entry);
+            }
+        }
+        self.site_code = code;
+        self.shortcuts = self.shortcuts.sanitised();
+        // A folder is a whole path; anything else means Chromium's own.
+        if !std::path::Path::new(&self.downloads.folder).is_absolute() {
+            self.downloads.folder.clear();
+        }
+        if !magnetite_engine::ZOOM_STEPS.contains(&self.page_zoom) {
+            self.page_zoom = defaults.page_zoom;
+        }
+        self.languages = self.languages.sanitised();
         self
     }
 }
 
 impl Settings {
+    /// The shortcuts that have keys, each with them as text.
+    pub fn shortcut_keys(&self) -> impl Iterator<Item = (magnetite_engine::Action, String)> {
+        (magnetite_engine::Action::ALL.into_iter())
+            .filter_map(|action| Some((action, self.shortcuts.combo_of(action)?.to_string())))
+    }
+
     /// Settings read from this device's `state.json`, following defaults
     /// that changed since they were saved: pages unloaded after 30 minutes
     /// off screen, which read as slow tabs. That time may have been chosen
@@ -313,7 +575,10 @@ impl Settings {
     /// changed), checked like any others. A page sends only what it changed:
     /// its copy of the rest may be old. What pages never change stays as it
     /// is here whatever the patch says: everything about sync, the pinned
-    /// extensions, and the smart folders allowed on this device.
+    /// extensions, the smart folders allowed on this device, and the
+    /// shortcuts' keys, which have commands of their own (`set_shortcut`).
+    /// The download folder too, which only the system's dialog names
+    /// (`choose_download_folder`); a patch can only take it away.
     pub fn patched(
         &self,
         patch: serde_json::Map<String, serde_json::Value>,
@@ -331,12 +596,17 @@ impl Settings {
         let mut merged = serde_json::to_value(self).map_err(|e| e.to_string())?;
         lay_over(&mut merged, serde_json::Value::Object(patch));
         let wanted: Self = serde_json::from_value(merged).map_err(|e| e.to_string())?;
+        let mut wanted = wanted.sanitised();
+        if !wanted.downloads.folder.is_empty() {
+            wanted.downloads.folder.clone_from(&self.downloads.folder);
+        }
         Ok(Self {
             sync: self.sync.clone(),
             pinned_extensions: self.pinned_extensions.clone(),
             chromium_pins_seen: self.chromium_pins_seen.clone(),
             smart_allowed: self.smart_allowed.clone(),
-            ..wanted.sanitised()
+            shortcuts: self.shortcuts.clone(),
+            ..wanted
         })
     }
 }
@@ -351,12 +621,17 @@ impl Default for Settings {
             defaults: DEFAULTS,
             search_template: "https://duckduckgo.com/?q=%s".into(),
             site_searches: builtin_site_searches(),
-            external_links: "tab".into(),
+            external_links: "mini".into(),
+            link_rules: Vec::new(),
+            site_code: Vec::new(),
+            shortcuts: magnetite_engine::Overrides::default(),
             quick_search: true,
             chrome_toolbar: false,
             appearance: Appearance::default(),
             auto_pip: true,
+            several_windows: false,
             strip_trackers: true,
+            panel_autoclose: false,
             devtools_dock: magnetite_engine::DevToolsDock::Right,
             devtools_size: magnetite_engine::DevToolsSize::default(),
             sync: SyncSettings::default(),
@@ -364,9 +639,15 @@ impl Default for Settings {
             chromium_pins_seen: HashMap::new(),
             check_updates: true,
             library_opens: LibraryView::Archive,
+            tab_order: TabOrder::Recent,
             autofill: magnetite_engine::AutofillPrefs::default(),
+            global_privacy_control: false,
+            downloads: magnetite_engine::DownloadPrefs::default(),
+            page_zoom: 100,
+            languages: magnetite_engine::LanguagePrefs::default(),
             smart_allowed: None,
             adblock: AdblockSettings::default(),
+            developer: crate::dev::DeveloperSettings::default(),
         }
     }
 }
@@ -374,6 +655,143 @@ impl Default for Settings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn rule(site: &str, space: &str) -> LinkRule {
+        LinkRule {
+            site: site.into(),
+            space: space.into(),
+        }
+    }
+
+    #[test]
+    fn a_link_goes_to_the_space_of_the_rule_that_fits_it_best() {
+        let settings = Settings {
+            link_rules: vec![
+                rule("github.com", "personal"),
+                rule("github.com/acme", "work"),
+                rule("mail.example.org", "mail"),
+            ],
+            ..Settings::default()
+        };
+        let space = |url: &str| settings.link_space(url, |_| true).map(String::as_str);
+        assert_eq!(
+            space("https://github.com/acme/app/pull/1?x=1"),
+            Some("work")
+        );
+        assert_eq!(space("https://github.com/acme"), Some("work"));
+        assert_eq!(space("https://github.com/acmecorp/app"), Some("personal"));
+        assert_eq!(space("https://www.github.com/"), Some("personal"));
+        assert_eq!(space("https://gist.github.com/someone"), Some("personal"));
+        assert_eq!(space("http://mail.example.org:8080/inbox"), Some("mail"));
+        assert_eq!(space("https://example.org/"), None);
+        assert_eq!(space("https://notgithub.com/acme"), None);
+        assert_eq!(space("file:///github.com/acme"), None);
+        // The page that loads counts, not the address as written.
+        assert_eq!(
+            space("https://github.com/acme/../other/repo"),
+            Some("personal")
+        );
+        assert_eq!(
+            space("https://github.com/acme/%2E%2e/other"),
+            Some("personal")
+        );
+        assert_eq!(
+            space("https://github.com/other/./../acme/app/"),
+            Some("work")
+        );
+        // The space of the closest rule is gone: the next one counts.
+        let without_work = settings.link_space("https://github.com/acme/app", |id| id != "work");
+        assert_eq!(without_work.map(String::as_str), Some("personal"));
+    }
+
+    #[test]
+    fn link_rules_keep_a_site_each_as_host_and_path() {
+        let kept = Settings {
+            link_rules: vec![
+                rule(" https://WWW.GitHub.com/acme/ ", "work"),
+                rule("github.com/acme", "again"),
+                rule("not a site", "x"),
+                rule("", "x"),
+            ],
+            ..Settings::default()
+        }
+        .sanitised();
+        assert_eq!(kept.link_rules, [rule("github.com/acme", "work")]);
+        // An address inside a path is part of the path.
+        let nested = rule("archive.example/https://target.example", "x").sanitised();
+        assert_eq!(
+            nested.unwrap().site,
+            "archive.example/https://target.example"
+        );
+    }
+
+    #[test]
+    fn own_code_is_kept_per_host_and_within_limits() {
+        let code = |site: &str, css: &str| magnetite_engine::SiteCode {
+            site: site.into(),
+            css: css.into(),
+            js: String::new(),
+            enabled: true,
+        };
+        let kept = Settings {
+            site_code: vec![
+                code(" https://WWW.Example.org/some/page ", "a"),
+                code("example.org", "again"),
+                code("not a site", "x"),
+                code("example.net", &"x".repeat(MAX_SITE_CODE + 1)),
+            ],
+            ..Settings::default()
+        }
+        .sanitised();
+        assert_eq!(kept.site_code, [code("example.org", "a")]);
+        // An address inside a path is part of the path, not the site.
+        assert_eq!(
+            site_host("archive.example/https://target.example").as_deref(),
+            Some("archive.example")
+        );
+    }
+
+    #[test]
+    fn a_patch_can_take_the_download_folder_away_but_not_name_one() {
+        let mut start = Settings::default();
+        assert_eq!(start.downloads, magnetite_engine::DownloadPrefs::default());
+        start.downloads.folder = "/tmp/chosen".into();
+        let patch = |value: serde_json::Value| {
+            let serde_json::Value::Object(patch) = value else {
+                panic!("an object");
+            };
+            start.patched(patch).unwrap().downloads
+        };
+        let asked = patch(serde_json::json!({ "downloads": { "ask": true } }));
+        assert_eq!((asked.folder.as_str(), asked.ask), ("/tmp/chosen", true));
+        let named = patch(serde_json::json!({ "downloads": { "folder": "/etc" } }));
+        assert_eq!(
+            named.folder, "/tmp/chosen",
+            "only the dialog names a folder"
+        );
+        let reset = patch(serde_json::json!({ "downloads": { "folder": "" } }));
+        assert_eq!(reset.folder, "");
+        // A path that is not whole is none.
+        let mut odd = Settings::default();
+        odd.downloads.folder = "Downloads".into();
+        assert_eq!(odd.sanitised().downloads.folder, "");
+    }
+
+    #[test]
+    fn the_page_zoom_is_one_of_chromiums_steps() {
+        let zoom = |pct: u32| {
+            let s = Settings {
+                page_zoom: pct,
+                ..Settings::default()
+            };
+            s.sanitised().page_zoom
+        };
+        assert_eq!(Settings::default().page_zoom, 100);
+        assert_eq!(zoom(125), 125);
+        assert_eq!(zoom(0), 100);
+        assert_eq!(zoom(123), 100);
+        assert_eq!(zoom(5000), 100);
+    }
 
     #[test]
     fn autofill_switches_start_safe_and_change_one_at_a_time() {
@@ -469,7 +887,7 @@ mod tests {
         .sanitised();
         assert_eq!(bad.auto_archive_hours, 1);
         assert_eq!(bad.search_template, Settings::default().search_template);
-        assert_eq!(bad.external_links, "tab");
+        assert_eq!(bad.external_links, "mini");
         for known in ["tab", "peek", "mini"] {
             let s = Settings {
                 external_links: known.into(),
@@ -486,6 +904,30 @@ mod tests {
         }
         .sanitised();
         assert_eq!(fine.search_template, "https://kagi.com/search?q=%s");
+    }
+
+    /// Appearance saved before the top bar existed keeps its values and
+    /// leaves the top bar off; a top bar turned on stays on once saved.
+    #[test]
+    fn appearance_saved_before_the_top_bar_loads_with_it_off() {
+        let older: Appearance =
+            serde_json::from_str(r#"{"text_scale":110,"density":"compact","sidebar_width":300}"#)
+                .unwrap();
+        assert_eq!(
+            older,
+            Appearance {
+                text_scale: 110,
+                density: Density::Compact,
+                sidebar_width: 300,
+                ..Appearance::default()
+            }
+        );
+        let on = Appearance {
+            top_bar: true,
+            ..older
+        };
+        let saved = serde_json::to_string(&on).unwrap();
+        assert_eq!(serde_json::from_str::<Appearance>(&saved).unwrap(), on);
     }
 
     #[test]

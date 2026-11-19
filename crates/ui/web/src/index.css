@@ -76,6 +76,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focu
 .space-list .row { margin-bottom: var(--row-gap); }
 .row:hover, .row:focus-within { background: var(--row-hover); }
 .row[data-active] { background: var(--row-active); box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
+/* A tab in developer mode: a caution border, amber stripes around the row. */
+.row[data-dev]::before { content: ""; position: absolute; inset: 0; padding: 2px; border-radius: inherit; pointer-events: none; background: repeating-linear-gradient(-45deg, #f5a524 0 6px, rgba(245,165,36,0.18) 6px 12px); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
 .row .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Close floats over the title end so titles keep their full width at rest. */
 .row .close { position: absolute; right: 6px; top: calc((var(--row-h) - 20px) / 2); width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; color: var(--muted); opacity: 0; background: #2a2a2d; }
@@ -91,8 +93,20 @@ button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focu
 /* "Keep active": a mark, not a button. It makes room for the close button. */
 .row .kept { width: 16px; height: 20px; flex: none; display: grid; place-items: center; color: var(--muted); }
 .row:hover .kept, .row:focus-within .kept { visibility: hidden; }
+/* A tab a page is sharing (screen sharing): the colour of the address row's
+   capture dot. It stays on hover: one has to find the shared tab at any time. */
+:is(.row, .split-cell) .shared { width: 18px; height: 20px; flex: none; display: grid; place-items: center; color: #f05d5d; }
+.fav[data-shared]::before { content: ""; position: absolute; right: 4px; top: 4px; width: 7px; height: 7px; border-radius: 50%; background: #f05d5d; }
+/* The device a tab of another device is open on; it stays on hover: the row has no other button. */
+.row .from-device { width: 16px; height: 20px; flex: none; display: grid; place-items: center; color: var(--muted); }
 .row:hover .slot.ghost, .row:focus-within .slot.ghost { opacity: 1; }
 .row .slot:hover { background: rgba(255,255,255,0.1); color: var(--fg); }
+/* A toggle that is on (a smart folder showing its snoozed items). */
+.row .slot[data-on] { color: var(--space, var(--accent)); }
+/* A snoozed item of a smart folder: dimmed; its wake time gives way to the wake button. */
+.row.snoozed .title { color: var(--muted); }
+.row.snoozed .favicon { opacity: 0.5; filter: grayscale(1); }
+.row.snoozed:hover .meta, .row.snoozed:focus-within .meta { visibility: hidden; }
 .row .rename { flex: 1; min-width: 0; height: 24px; background: var(--surface); border: 0; border-radius: 6px; padding: 0 6px; color: var(--fg); outline: 2px solid var(--accent); outline-offset: -2px; }
 
 .drop { position: relative; }
@@ -146,6 +160,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focu
 .space-list { animation: space-in 180ms ease-out; transition: transform 160ms ease-out; }
 @keyframes space-in { from { opacity: 0; transform: translateX(var(--enter-x, 0)); } to { opacity: 1; transform: none; } }
 .fav[data-active] { background: rgba(255,255,255,0.16); box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
+/* the favorite being dragged, at the place it would land: marked like the placeholder of a split row */
+.fav[data-carried] { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 65%, transparent); animation: ghost-in 140ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.fav[data-carried] .favicon { opacity: 0.6; }
+/* A favorite or pinned tab that opens as a web panel: a small panel glyph (a frame with its side filled), in the tile's corner or at the row's end, lit while it is open. */
+.fav[data-panel]::after, .row .panel-mark::after { content: ""; box-sizing: border-box; width: 10px; height: 8px; border: 1.2px solid currentColor; border-radius: 2.5px; background: linear-gradient(to right, currentColor 0 3px, transparent 3px); color: var(--muted); opacity: 0.75; }
+.fav[data-panel]::after { position: absolute; right: 4px; bottom: 4px; }
+.fav[data-panel][data-active]::after, .row .panel-mark[data-open]::after { color: var(--space); opacity: 1; }
+.row .panel-mark { width: 16px; height: 20px; flex: none; display: grid; place-items: center; }
+.row:hover .panel-mark, .row:focus-within .panel-mark { visibility: hidden; }
 
 /* address field: filled, borderless, host only */
 .urlbar { display: flex; align-items: center; gap: 8px; width: 100%; height: 36px; padding: 0 12px; border-radius: 10px; background: rgba(255,255,255,0.06); color: var(--secondary); text-align: left; transition: background-color 100ms; }
@@ -164,10 +187,27 @@ button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focu
 .chip-dot { position: absolute; right: -3px; top: -3px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--bg); }
 .chip-dot[data-state="capture"] { background: #f05d5d; }
 .addr-status { position: absolute; z-index: 30; left: 0; right: 0; top: 40px; display: flex; align-items: center; gap: 8px; height: 26px; padding: 0 10px; border-radius: 8px; background: var(--surface-2); font-size: 12.5px; color: var(--secondary); box-shadow: 0 6px 16px rgba(0,0,0,0.3); }
+/* The top bar (TopBar.tsx): one row the window's width; the address takes
+   the middle. Its copy status sits inside the address, the bar is too short
+   to show it below. */
+.topbar { display: flex; align-items: center; gap: 8px; height: 100%; padding: 0 0 0 0; }
+.topbar-address { flex: 1; min-width: 0; max-width: 1100px; margin: 0 auto; }
+.topbar-address .addr, .topbar-address .urlbar { height: 32px; }
+.topbar .addr-status { top: 3px; left: auto; right: 34px; max-width: 60%; height: 26px; box-shadow: none; }
+.topbar .window-close:hover:not(:disabled) { background: rgba(232, 17, 35, 0.9); color: #fff; }
+
+/* A top bar pop-up fills its window (TopBarPopup.tsx). */
+html[data-window] body { background: var(--surface); }
+html[data-window] .site-panel { position: static; max-height: none; border: 0; border-radius: 0; box-shadow: none; }
+html[data-window] .menu { position: static; max-width: none; border: 0; border-radius: 0; box-shadow: none; }
+
 .addr-status .link { margin-left: auto; color: var(--fg); text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
 
 /* site panel */
 .site-panel { position: absolute; z-index: 45; left: 0; right: 0; top: 40px; max-height: 70vh; overflow-y: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,0.5); outline: none; }
+/* The panel takes the keyboard when it opens (Esc closes it): no focus ring
+   around the whole panel, which the rule for `[tabindex]` would draw. */
+.site-panel:focus-visible { outline: none; }
 .panel-group { border-top: 1px solid var(--line); padding: 4px; }
 .panel-row { display: flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 8px; border-radius: 7px; }
 button.panel-row:hover:not(:disabled) { background: rgba(255,255,255,0.07); }
@@ -205,6 +245,10 @@ button.panel-row:disabled { opacity: 0.45; }
 /* capture result toast, above the footer */
 .capture-toast { position: absolute; z-index: 30; left: 8px; right: 8px; bottom: 52px; display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(0,0,0,0.45); font-size: 13px; outline: none; }
 .capture-toast:focus-within { border-color: var(--accent); }
+/* Stacked: each line takes the toast's width, so long text is cut at its end. */
+.capture-toast.flex-col { align-items: stretch; }
+.capture-toast.flex-col > * { min-width: 0; }
+.capture-toast .btn { white-space: nowrap; }
 .capture-thumb { width: 100%; max-height: 140px; object-fit: contain; border-radius: 6px; background: rgba(0,0,0,0.3); }
 .btn.sm { height: 28px; padding: 0 6px; font-size: 12.5px; }
 
@@ -238,9 +282,12 @@ button.panel-row:disabled { opacity: 0.45; }
 .split-cell .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .split-cell .close { position: absolute; right: 4px; top: calc((var(--row-h) - 22px) / 2); width: 18px; height: 18px; border-radius: 5px; display: none; place-items: center; color: var(--muted); background: #2a2a2d; }
 .split-cell:hover .close { display: grid; }
+/* The close button takes the mark's place. */
+.split-cell:hover .shared { visibility: hidden; }
 .split-cell:hover .title { -webkit-mask-image: linear-gradient(to left, transparent 20px, #000 36px); }
 .split-cell .close:hover { color: var(--fg); background: #3a3a3e; }
 /* where a dragged tab lands: a placeholder page beside its new neighbour */
+.split-cell[data-lifted] { opacity: 0; }
 .split-cell[data-ghost] { background: var(--accent-soft); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 65%, transparent); color: var(--secondary); animation: ghost-in 140ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 @keyframes ghost-in { from { opacity: 0; transform: scale(0.94); } }
 /* a tab row previewing the split it would become */
@@ -280,6 +327,7 @@ button.panel-row:disabled { opacity: 0.45; }
 .menu button { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; height: 28px; padding: 0 10px; border-radius: 6px; }
 /* One line per entry: the menu's height is counted in 28 px rows (ContextMenu.tsx). */
 .menu button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu button .hint { margin-left: auto; flex: none; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .menu button:hover { background: rgba(255,255,255,0.1); }
 .menu button[data-danger] { color: var(--danger); }
 .menu button[data-danger]:hover { background: rgba(255, 90, 90, 0.14); }
@@ -296,7 +344,14 @@ button.panel-row:disabled { opacity: 0.45; }
 .cmdbar .result { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 4px 8px; border-radius: 6px; }
 .cmdbar .result[data-selected] { background: rgba(255,255,255,0.1); }
 .cmdbar .result .meta { color: var(--muted); font-size: 12px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The tab switcher's list (Switcher.tsx): rows as in the command bar; the app counts on 40 px rows and 6 px around (SWITCHER_ROW). */
+.switcher { height: 100%; padding: 6px; background: var(--surface); overflow: hidden; }
+.switcher .result { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 10px; border-radius: 8px; font-size: 14px; }
+.switcher .result[data-selected] { background: rgba(255,255,255,0.12); }
+.switcher .result .meta { max-width: 40%; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cmdbar .group { padding: 6px 8px 2px; font-size: 12px; color: var(--muted); }
+/* The keys that run a result (the list of spaces). */
+.cmdbar .result kbd { flex: none; min-width: 22px; padding: 1px 6px; border-radius: 4px; background: rgba(255,255,255,0.1); font: inherit; font-size: 12px; text-align: center; color: var(--secondary); }
 /* What the keys do with the selected result, or what to type. */
 .cmdbar .hints { flex: none; display: flex; flex-wrap: wrap; column-gap: 16px; padding: 0 14px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); white-space: nowrap; }
 /* Each hint stays whole; in a narrow window the line wraps and the bar grows. */
@@ -388,6 +443,18 @@ button:disabled, select:disabled, [aria-disabled="true"] { cursor: default; }
 .sf-source { display: flex; align-items: center; gap: 8px; }
 .sf-source select { flex: 1; }
 
+/* The floating sidebar's window buttons on macOS: the system's three
+   colours, their signs showing while the pointer is over the group. */
+.window-buttons { display: flex; align-items: center; gap: 8px; padding: 0 12px 0 6px; }
+.window-buttons button { width: 12px; height: 12px; border-radius: 50%; cursor: default; box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.2); }
+.window-buttons button[data-kind="close"] { background: #ff5f57; }
+.window-buttons button[data-kind="minimize"] { background: #febc2e; }
+.window-buttons button[data-kind="fullscreen"] { background: #28c840; }
+.window-buttons button:active { filter: brightness(0.8); }
+.window-buttons svg { display: block; width: 12px; height: 12px; opacity: 0; fill: none; stroke: rgba(0, 0, 0, 0.6); stroke-width: 1.2; stroke-linecap: round; }
+.window-buttons svg .fill { fill: rgba(0, 0, 0, 0.6); stroke: none; }
+.window-buttons:hover svg { opacity: 1; }
+
 /* the floating sidebar slides in each time it appears */
 [data-float] { animation: float-in 170ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 @keyframes float-in { from { transform: translateX(-16px); opacity: 0.4; } }
@@ -400,12 +467,19 @@ button:disabled, select:disabled, [aria-disabled="true"] { cursor: default; }
 :is(.row, .split-cell)[data-unloaded] .favicon:not(:has(img)), .fav[data-unloaded] .favicon:not(:has(img)) { color: var(--muted); }
 
 /* Settings → Appearance */
-.swatches { display: flex; flex-wrap: wrap; gap: 5px; justify-content: flex-end; max-width: 300px; }
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; }
 .swatch { width: 18px; height: 18px; border-radius: 9px; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25); position: relative; }
 .swatch[data-on] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--fg); }
 .swatch.custom { background: conic-gradient(#f55, #fb5, #5f8, #5cf, #a6f, #f5a, #f55); overflow: hidden; cursor: pointer; }
 .swatch.custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-.range { accent-color: var(--accent); }
+/* A slider drawn by us: the engine's own one changes colour under the pointer.
+   `--fill` is how far it is set, in percent (`Slider`). */
+.range { appearance: none; height: 18px; background: transparent; cursor: pointer; }
+.range::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--accent) var(--fill, 0%), rgba(255,255,255,0.14) var(--fill, 0%)); }
+.range::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: var(--fg); box-shadow: 0 1px 3px rgba(0,0,0,0.4); transition: box-shadow 100ms; }
+.range:hover::-webkit-slider-thumb, .range:active::-webkit-slider-thumb { box-shadow: 0 1px 3px rgba(0,0,0,0.4), 0 0 0 4px var(--accent-soft); }
+.range:focus-visible { outline: none; }
+.range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px var(--accent); }
 
 /* Downloads: progress under a running row, a ring on the footer button. */
 .row.download[data-dim] .title { color: var(--muted); }
@@ -471,21 +545,78 @@ button:disabled, select:disabled, [aria-disabled="true"] { cursor: default; }
 
 /* Settings: grouped navigation, a header with an icon tile, one card per setting. */
 .set-nav-label { padding: 4px 8px 4px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+/* The search field above the sections, and the page of what it found:
+   the name of each section, the sections the search left out (`data-miss`)
+   and what it did not find, greyed out (`data-dim`). */
+.set-search { position: relative; display: block; margin: 2px 0 4px; color: var(--muted); }
+.set-search svg { position: absolute; left: 9px; top: 9px; pointer-events: none; }
+.set-search .field { padding-left: 29px; }
+.set-found { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.set-found:hover { color: var(--fg); }
+[data-miss] { display: none !important; }
+[data-dim] { opacity: 0.35; }
+[data-dim] [data-dim] { opacity: 1; }
+/* The typed words, where a found setting names them. */
+::highlight(settings-search) { background: color-mix(in srgb, var(--accent) 38%, transparent); color: var(--fg); }
 .set-icon { width: 44px; height: 44px; flex: none; border-radius: 12px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
 .set-card { padding: 16px 18px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
 .set-label { font-size: 14px; line-height: 20px; font-weight: 500; color: var(--fg); }
 .set-hint { margin-top: 3px; max-width: 560px; font-size: 13px; line-height: 18px; color: var(--muted); }
+/* A group of settings: one card, a name on top, a row per setting. */
+.set-group { padding: 0; }
+.set-group-head { padding: 14px 18px 4px; }
+.set-group-title { font-size: 12.5px; line-height: 18px; font-weight: 600; letter-spacing: 0.02em; color: var(--secondary); }
+.set-row { padding: 14px 18px; border-top: 1px solid var(--line); }
+.set-group-body > .set-row:first-child, .set-group-body > :first-child > .set-row:first-child { border-top: 0; }
+.set-group-head + .set-group-body > .set-row:first-child { padding-top: 10px; }
+.set-group[data-folded] .set-group-head { padding-bottom: 14px; }
+/* The name of a group that folds: a button over the whole line. */
+.set-fold { display: flex; align-items: center; gap: 8px; width: 100%; font: inherit; color: inherit; letter-spacing: inherit; }
+.set-fold svg { flex: none; transition: transform 120ms; }
+.set-fold[aria-expanded="false"] svg { transform: rotate(-90deg); }
+.set-fold:hover { color: var(--fg); }
+/* A list of rows of its own kind inside a group (shortcuts, isolation). */
+.set-group .set-list { padding: 0 18px 6px; }
+.set-group-body > .iso-list { border-width: 1px 0 0; border-radius: 0; margin-top: 8px; }
+.set-group-body > .iso-list .iso-row { padding: 10px 18px; }
+/* A short control to the right of its setting's name. */
+/* Without room for both, the control goes below the name. */
+.set-sided { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
+.set-sided > :first-child { flex: 1 1 240px; }
+.set-side { flex: none; max-width: 100%; }
+.set-side .field { max-width: 100%; }
+.set-side > .flex:has(.range) { width: 320px; max-width: 100%; }
+.set-side select.field { width: auto; min-width: 190px; padding-right: 30px; }
 .link-tile { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px; border-radius: 9px; background: rgba(255,255,255,0.05); color: var(--secondary); }
 .link-tile:hover:not(:disabled) { background: rgba(255,255,255,0.09); color: var(--fg); }
 .link-tile:disabled { opacity: 0.45; }
 .shortcuts { display: grid; grid-template-columns: max-content 1fr; gap: 7px 16px; align-items: baseline; font-size: 13px; color: var(--secondary); }
 .shortcuts kbd { font-family: inherit; color: var(--fg); font-variant-numeric: tabular-nums; }
+/* Settings → Shortcuts: one shortcut per row, its keys and buttons on the right. */
+.shortcut-row { font-size: 14px; border-top: 1px solid var(--line); }
+.shortcut-row:first-child { border-top: 0; }
+.shortcut-row kbd { min-width: 28px; padding: 3px 8px; border-radius: 6px; background: rgba(255,255,255,0.1); font: inherit; font-size: 13px; text-align: center; color: var(--fg); }
+
+/* Settings → Custom CSS & JS: a code field as wide as its card, growing downwards. */
+textarea.field.code { display: block; width: 100%; height: auto; min-height: 96px; padding: 8px 10px; resize: vertical; font-size: 12.5px; line-height: 1.5; white-space: pre; tab-size: 2; }
 
 /* Licence texts page. */
 .licence-text { white-space: pre-wrap; font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--secondary); }
 
 /* The docked sidebar's right edge: drag to resize. */
 .sidebar-resizer { position: fixed; top: 0; right: 0; bottom: 0; width: 6px; z-index: 60; cursor: col-resize; }
+/* The shadows under the pages (Empty.tsx): one box per page. One wide
+   blur and no outline: the plain dark frame hardly shows them,
+   a space with a brighter look (tint, an effect) does. */
+.page-shadows { position: fixed; inset: 0; pointer-events: none; }
+.page-shadows > div { position: absolute; box-shadow: 0 2px 10px 1px rgb(0 0 0 / 0.3); }
+/* The gap beside a docked web panel (outside macOS): drag to resize it. */
+.panel-resizer { position: fixed; z-index: 60; cursor: col-resize; border-radius: 3px; }
+.panel-resizer:hover, .panel-resizer:active { background: var(--space-soft, rgba(255,255,255,0.08)); }
+/* The round button beside a docked web panel's top corner that closes it,
+   as the pages beside the panel have it (`panel_close.rs`). */
+.panel-close { position: fixed; z-index: 60; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: rgba(31,31,31,0.94); color: rgba(255,255,255,0.88); cursor: default; }
+.panel-close:hover { background: rgb(60,60,62); }
 .sidebar-resizer:hover, .sidebar-resizer:active { background: linear-gradient(to left, var(--space-soft, rgba(255,255,255,0.08)) 2px, transparent 2px); }
 
 /* The device bar above a page in device mode (DeviceBar.tsx): one row,
@@ -500,3 +631,137 @@ button:disabled, select:disabled, [aria-disabled="true"] { cursor: default; }
 .device-bar .field.sm.device-preset { width: 104px; }
 .device-group { display: inline-flex; align-items: center; gap: 4px; }
 .device-bar .field.sm.device-size { width: 52px; padding: 0 4px; text-align: center; }
+
+/* developer bar (DevBar.tsx): across the top of the page area, for local pages */
+.devbar { height: 100%; padding: 6px 8px 0; }
+.devbar[data-buttons] { padding-left: 86px; }
+.dev-row { display: flex; align-items: center; gap: 1px; height: 30px; padding: 0 3px 0 12px; border-radius: 9px; background: rgba(255,255,255,0.045); font-size: 12px; color: var(--muted); }
+.dev-row .dev-name { flex: 0 1 auto; }
+.dev-sep { flex: none; width: 1px; height: 14px; margin: 0 4px; background: var(--line); }
+.dev-btn[data-recording] { color: #ff6b6b; }
+.dev-name { flex: 0 1 auto; max-width: 150px; margin-right: 6px; }
+.dev-sep { flex: none; width: 1px; height: 14px; margin: 0 3px; background: var(--line); }
+.dev-btn[data-recording] { color: #ff6b6b; }
+.dev-name { flex: 1; min-width: 0; display: flex; align-items: center; gap: 1px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; }
+.dev-btn { position: relative; flex: none; height: 24px; min-width: 26px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; border-radius: 6px; color: var(--muted); }
+.dev-btn:hover, .dev-btn[aria-expanded="true"] { background: rgba(255,255,255,0.08); color: var(--fg); }
+.dev-btn[data-on] { color: var(--accent); }
+.dev-btn[data-errors] { color: #f08c8c; }
+.dev-count { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dev-pulse { flex: none; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%; background: var(--warn); animation: dev-pulse 1.2s ease-in-out infinite; }
+@keyframes dev-pulse { 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .dev-pulse { animation: none; } }
+.row .dev-errors { flex: none; min-width: 16px; height: 16px; padding: 0 4px 1px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; border-radius: 8px; background: rgba(240,93,93,0.18); color: #f08c8c; font-size: 10.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* a shared folder's page (Shared.tsx) */
+.shared-list { list-style: none; margin: 0; padding: 0; }
+.shared-list .shared-list { margin-left: 15px; padding-left: 8px; border-left: 1px solid var(--line); }
+.shared-tab { display: flex; align-items: baseline; gap: 12px; padding: 7px 10px; border-radius: 8px; font-size: 13.5px; }
+.shared-tab > :first-child { min-width: 0; flex: 1; }
+.shared-folder { display: flex; align-items: center; gap: 8px; padding: 7px 10px; font-size: 13.5px; font-weight: 600; color: var(--secondary); }
+
+/* The welcome page: the steps by name on the left, one step on the right.
+   A soft glow of the accent behind it all, and each step slides in. */
+.wel { display: flex; height: 100%; background: radial-gradient(900px 520px at 0% 0%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 70%), radial-gradient(700px 480px at 100% 100%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 70%), var(--bg); }
+.wel-rail { display: flex; flex-direction: column; width: 232px; flex: none; padding: 28px 16px 24px; border-right: 1px solid var(--line); background: rgba(255,255,255,0.015); }
+.wel-main { flex: 1; min-width: 0; display: flex; justify-content: center; }
+.wel-body { display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 712px; margin: auto 0; padding: 48px 36px; animation: wel-in 260ms cubic-bezier(0.2, 0.7, 0.2, 1); }
+@keyframes wel-in { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { .wel-body { animation: none; } }
+/* The first step: the words on the left, a drawing of the window on the right. */
+.wel-body[data-wide] { max-width: 1000px; }
+.wel-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr); gap: 40px; align-items: stretch; }
+.wel-sketch { display: flex; min-height: 420px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); box-shadow: 0 24px 60px rgba(0,0,0,0.35); overflow: hidden; }
+.wel-sketch i { display: block; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.14); }
+.wel-sk-side { display: flex; flex-direction: column; gap: 5px; width: 138px; flex: none; padding: 12px 10px; }
+.wel-sk-side > span { margin-top: 8px; padding: 0 5px; font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.wel-sk-side > .wel-sk-end { margin-top: auto; }
+.wel-sk-lights { display: flex; gap: 5px; padding: 0 4px 6px; }
+.wel-sk-lights b { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.14); }
+.wel-sk-addr { height: 24px; border-radius: 7px; background: rgba(255,255,255,0.07); }
+.wel-sk-favs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.wel-sk-favs b { aspect-ratio: 1; border-radius: 8px; background: rgba(255,255,255,0.07); }
+.wel-sk-row { display: flex; align-items: center; gap: 7px; height: 24px; padding: 0 6px; border-radius: 7px; }
+.wel-sk-row::before { content: ""; width: 10px; height: 10px; flex: none; border-radius: 3px; background: rgba(255,255,255,0.18); }
+.wel-sk-row[data-now] { background: var(--row-active); }
+.wel-sk-spaces { display: flex; gap: 8px; padding: 2px 5px; }
+.wel-sk-spaces b { width: 16px; height: 16px; border-radius: 5px; background: rgba(255,255,255,0.1); }
+.wel-sk-spaces b[data-now] { background: var(--accent); }
+.wel-sk-page { flex: 1; display: flex; flex-direction: column; gap: 12px; margin: 8px 8px 8px 0; padding: 30px 26px; border-radius: 10px; background: var(--bg); }
+.wel-sk-page i:first-child { height: 12px; margin-bottom: 6px; background: rgba(255,255,255,0.2); }
+@media (max-width: 900px) { .wel-body[data-wide] { max-width: 712px; } .wel-hero { grid-template-columns: minmax(0, 1fr); } .wel-sketch { display: none; } }
+.wel-step { display: flex; align-items: center; gap: 10px; width: 100%; height: 36px; padding: 0 8px; border-radius: 9px; font-size: 13.5px; color: var(--muted); text-align: left; transition: background-color 120ms, color 120ms; }
+.wel-step[data-done] { color: var(--secondary); }
+.wel-step[data-done]:hover { background: var(--row-hover); color: var(--fg); }
+.wel-step[data-now] { background: var(--row-active); color: var(--fg); font-weight: 500; }
+.wel-dot { display: grid; place-items: center; width: 24px; height: 24px; flex: none; border-radius: 50%; border: 1px solid var(--line); color: var(--muted); }
+.wel-step[data-now] .wel-dot { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.wel-step[data-done] .wel-dot { border-color: transparent; background: var(--accent); color: #1b1b1e; }
+/* A narrow window has no room for the list: the steps become a row of dots on
+   top. After the rules of the steps, which it changes. */
+@media (max-width: 760px) {
+  .wel { flex-direction: column; }
+  .wel-rail { width: auto; flex-direction: row; align-items: center; gap: 16px; padding: 12px 20px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .wel-rail ol { flex-direction: row; margin: 0 0 0 auto; }
+  .wel-rail p { display: none; }
+  .wel-step { font-size: 0; gap: 0; padding: 0 3px; }
+  .wel-body { padding: 32px 20px; }
+}
+/* The two ways in, on the first step. */
+.wel-pick { display: flex; align-items: flex-start; gap: 16px; padding: 18px 20px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); text-align: left; transition: border-color 140ms, background-color 140ms; }
+.wel-pick:hover { border-color: color-mix(in srgb, var(--accent) 60%, transparent); background: var(--surface-2); }
+/* A browser to import from; an answer in a row; an answer with a line of text. */
+.wel-tile, .wel-option, .wel-answer { display: flex; align-items: center; gap: 12px; border-radius: 11px; border: 1px solid var(--line); background: var(--surface); text-align: left; transition: border-color 120ms, background-color 120ms; }
+.wel-tile { padding: 12px 14px; }
+.wel-option { height: 36px; padding: 0 14px; background: rgba(255,255,255,0.03); }
+.wel-answer { align-items: flex-start; padding: 12px 14px; background: rgba(255,255,255,0.03); }
+.wel-tile:hover, .wel-option:hover, .wel-answer:hover { border-color: rgba(255,255,255,0.2); }
+.wel-tile[data-active], .wel-option[data-active], .wel-answer[data-active] { border-color: var(--accent); background: var(--accent-soft); }
+/* A browser's first letter: Magnetite ships no other browser's icon. */
+.wel-initial { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 9px; background: rgba(255,255,255,0.07); font-size: 15px; font-weight: 600; color: var(--secondary); }
+.wel-tile[data-active] .wel-initial { background: var(--accent); color: #1b1b1e; }
+.wel-radio { width: 16px; height: 16px; margin-top: 2px; flex: none; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.28); }
+.wel-answer[data-active] .wel-radio { border: 5px solid var(--accent); }
+.wel-chosen { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+.wel-chosen:first-child { border-top: 0; padding-top: 0; }
+.wel-chosen:last-child { padding-bottom: 0; }
+.btn.lg { height: 38px; padding: 0 18px; border-radius: 10px; font-size: 14px; }
+/* The filter lists behind an answer about ad blocking, set in from it. */
+.wel-lists { display: flex; flex-direction: column; gap: 8px; margin: 2px 0 6px 14px; padding: 4px 0 4px 26px; border-left: 2px solid var(--line); font-size: 13px; line-height: 19px; color: var(--secondary); }
+.wel-lists b { font-weight: 500; color: var(--fg); }
+/* The spaces an import brings, as the sidebar will list them, with names to change. */
+.wel-side { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; padding: 10px; border-radius: 12px; border: 1px solid var(--line); background: rgba(0,0,0,0.18); }
+.wel-side-from { padding: 2px 8px 6px; font-size: 12.5px; line-height: 18px; color: var(--muted); }
+.wel-space { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 40px; padding: 4px 12px 4px 8px; border-radius: 9px; }
+.wel-space:hover, .wel-space:focus-within { background: var(--row-hover); }
+.wel-space-icon { display: grid; place-items: center; width: 26px; height: 26px; flex: none; border-radius: 8px; background: var(--accent-soft); color: var(--accent); }
+.wel-name { flex: 0 1 300px; min-width: 120px; height: 30px; padding: 0 8px; border-radius: 7px; border: 1px solid rgba(255,255,255,0.09); background: transparent; color: var(--fg); font: inherit; font-weight: 500; outline: none; text-overflow: ellipsis; }
+.wel-name + span { margin-left: auto; }
+.wel-name:focus { border-color: var(--accent); background: var(--surface); }
+/* One setting of several in a card: its value on the line, the answers behind "Change". */
+.wel-setting + .wel-setting { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+.wel-space[data-out] .wel-space-icon, .wel-space[data-out] .wel-name, .wel-space[data-out] .wel-name + span { opacity: 0.45; }
+.wel-space[data-out] .wel-name { text-decoration: line-through; }
+button.wel-space-icon:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 24%, transparent); }
+/* Three keys for the first day, in a line. */
+.wel-keys { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; font-size: 13px; color: var(--secondary); }
+.wel-keys kbd { margin-right: 4px; padding: 3px 8px; border-radius: 6px; background: rgba(255,255,255,0.1); font: inherit; color: var(--fg); }
+/* The two layouts of the window, each a small drawing to choose. */
+.wel-layout { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 11px; border: 1px solid var(--line); background: rgba(255,255,255,0.03); text-align: left; transition: border-color 120ms, background-color 120ms; }
+.wel-layout:hover { border-color: rgba(255,255,255,0.2); }
+.wel-layout[data-active] { border-color: var(--accent); background: var(--accent-soft); }
+.wel-mini { display: grid; grid-template-columns: 30% 1fr; gap: 4px; height: 92px; padding: 5px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); }
+.wel-mini[data-top] { grid-template-rows: 12px 1fr; }
+.wel-mini[data-top] > b[data-bar] { grid-column: 1 / -1; }
+.wel-mini > span { display: flex; flex-direction: column; gap: 4px; }
+.wel-mini b { display: block; flex: 1; border-radius: 4px; background: rgba(255,255,255,0.08); }
+.wel-mini b[data-bar] { flex: none; height: 12px; background: color-mix(in srgb, var(--accent) 60%, transparent); }
+/* The icons to choose from for an imported space, below its line. */
+.wel-glyphs { display: flex; flex-wrap: wrap; gap: 2px; width: 100%; margin: 2px 0 6px 36px; }
+.wel-glyphs button { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; color: var(--secondary); }
+.wel-glyphs button:hover { background: rgba(255,255,255,0.1); color: var(--fg); }
+.wel-glyphs button[data-active] { background: var(--accent-soft); color: var(--accent); }
+/* What Magnetite talks to: a name and a line per server. */
+.set-talks { padding-top: 6px; padding-bottom: 14px; }
+.set-talks li { display: flex; gap: 12px; padding: 5px 0; font-size: 13px; line-height: 18px; color: var(--muted); }
+.set-talks b { flex: none; width: 190px; font-weight: 500; color: var(--fg); }

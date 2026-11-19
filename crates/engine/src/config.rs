@@ -14,6 +14,10 @@ pub struct EngineConfig {
     pub sidebar_width: i32,
     /// Development only: avoid the macOS keychain prompt for unsigned builds.
     pub use_mock_keychain: bool,
+    /// The languages websites are asked for, as language tags with commas
+    /// between, the preferred one first (`LanguagePrefs::accept_languages`).
+    /// Empty: Chromium's own choice, the system's languages.
+    pub accept_languages: String,
     /// Unpacked extension directories to load (`--load-extension`).
     pub load_extensions: Vec<PathBuf>,
     /// Show Chrome's toolbar (address bar, extension buttons) at the top of
@@ -34,9 +38,11 @@ impl EngineConfig {
         self.data_dir.join("cef")
     }
 
-    /// Chromium's folder for the default context.
+    /// Chromium's folder for the default context. Chromium always keeps it in
+    /// `Default`: CEF ignores any other child folder given as `cache_path`.
+    /// The capital matters on case-sensitive file systems (Linux).
     pub(crate) fn default_profile_dir(&self) -> PathBuf {
-        self.cef_root().join("default")
+        self.cef_root().join("Default")
     }
 
     /// Chromium's folder for profile `id`: directly below the root, the only
@@ -87,10 +93,10 @@ mod tests {
             assert!(names[i + 1..].iter().all(|b| a != b), "{a} twice");
         }
         let config = config("/data".into());
-        // Where existing installations keep the default profile's data.
+        // Where Chromium keeps the default profile's data, capital D included.
         assert_eq!(
             config.default_profile_dir(),
-            std::path::Path::new("/data/cef/default")
+            std::path::Path::new("/data/cef/Default")
         );
         // Directly below Chromium's root: only there a profile reaches the disk.
         assert_eq!(
@@ -101,6 +107,7 @@ mod tests {
 
     fn config(data_dir: std::path::PathBuf) -> EngineConfig {
         EngineConfig {
+            accept_languages: String::new(),
             data_dir,
             ui_dir: "/ui".into(),
             ui_url: EngineConfig::SIDEBAR_URL.into(),

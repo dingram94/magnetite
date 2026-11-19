@@ -7,10 +7,11 @@
 # <repository>/releases/latest/download/latest.json:
 #   {"version": "...", "notes_url": "...",
 #    "assets": {"<os>-<arch>": {"url": "...", "sha256": "<hex>", "size": <bytes>}}}
-# Only the packages found in <folder> are listed: the zip (macOS), the
-# tar.gz (Linux) and, for Windows, the installer, which is what a Magnetite
-# there runs to update itself (the zip is for unpacking by hand). The
-# owner/repo comes from GITHUB_REPOSITORY, or else from Cargo.toml.
+# Only the packages found in <folder> are listed: the zip (macOS; the disk
+# image is not one, the updater takes the zip), the tar.gz (Linux) and, for
+# Windows, the installer, which is what a Magnetite there runs to update
+# itself (the zip is for unpacking by hand). The owner/repo comes from
+# GITHUB_REPOSITORY, or else from Cargo.toml.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../lib.sh"
 

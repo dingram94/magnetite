@@ -34,6 +34,13 @@ Settings → Passwords & autofill:
 The switches count for every profile. They are this device's and do not
 sync. Magnetite sets them at each start and whenever a setting changes.
 
+Chromium's own pages (`chrome://settings`,
+`chrome://password-manager/settings`) have the same switches. A change made
+there is taken over: it shows in Settings, counts for every profile and is
+kept at the next start. Signing in without a click ("Sign in automatically"
+on Chromium's page) has no switch in Settings: it stays as chosen there
+while passwords are on, and is off while they are off.
+
 Below each of the first three is a button to what is saved:
 
 | Button | Opens |
@@ -72,9 +79,6 @@ is for.
 
 ## Limits
 
-- Chromium's pages have switches of their own for the same things. One
-  changed there lasts until Magnetite sets its own again: at the next start
-  or the next change in Settings.
 - The lists of addresses and cards are part of Chromium's settings page,
   with its own navigation to settings Magnetite does not use.
 

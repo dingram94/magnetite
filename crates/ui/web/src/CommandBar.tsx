@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { TIMEZONES } from "./DevBar";
 import { Favicon } from "./Favicon";
 import { Arrow, Command as CommandIcon } from "./Icons";
-import { IS_MAC, findTab, findTabInSpace, hostOf, send, type Command, type PaletteMode, type SearchResult, type Side, type SiteSearch, type UiState } from "./bridge";
+import { IS_MAC, findTab, findTabInSpace, hostOf, send, type Command, type DevServer, type PaletteMode, type SearchResult, type Side, type SiteSearch, type UiState } from "./bridge";
 import { useDismiss } from "./dismiss";
 
 /**
@@ -18,6 +19,8 @@ type Action = { id: string; title: string; keywords: string[]; cmd: Command };
 
 const ACTIONS: Action[] = [
   { id: "new_space", title: "New space", keywords: ["space"], cmd: { cmd: "new_space", title: "" } },
+  { id: "spaces", title: "Show all spaces…", keywords: ["space", "switch", "go", "list"], cmd: { cmd: "open_palette", mode: "spaces" } },
+  { id: "private_space", title: "Open private space", keywords: ["private", "incognito", "anonymous", "space"], cmd: { cmd: "open_private_space" } },
   { id: "new_folder", title: "New folder", keywords: ["folder"], cmd: { cmd: "new_folder", title: "" } },
   { id: "archive_today", title: "Archive all Today tabs", keywords: ["clear", "archive"], cmd: { cmd: "archive_today" } },
   { id: "reopen", title: "Reopen last archived tab", keywords: ["restore", "closed"], cmd: { cmd: "reopen_closed" } },
@@ -25,20 +28,44 @@ const ACTIONS: Action[] = [
   { id: "bookmarks", title: "Open bookmarks", keywords: ["bookmarks", "saved"], cmd: { cmd: "show_bookmarks" } },
   { id: "bookmark_page", title: "Bookmark this page", keywords: ["bookmark", "save", "keep"], cmd: { cmd: "add_bookmark" } },
   { id: "toggle_sidebar", title: "Toggle sidebar", keywords: ["hide", "show"], cmd: { cmd: "toggle_sidebar" } },
+  { id: "web_panel", title: "Open or close the web panel", keywords: ["panel", "side", "web"], cmd: { cmd: "shortcut", shortcut: "web_panel" } },
+  { id: "toggle_top_bar", title: "Toggle top bar", keywords: ["top", "bar", "address", "layout", "toolbar"], cmd: { cmd: "toggle_top_bar" } },
   { id: "import", title: "Import from another browser…", keywords: ["import", "chrome", "firefox", "zen", "arc", "brave", "edge"], cmd: { cmd: "new_tab", url: "magnetite://ui/settings#data" } },
+  { id: "welcome", title: "Show the welcome page again", keywords: ["welcome", "setup", "wizard", "first", "start", "onboarding"], cmd: { cmd: "new_tab", url: "magnetite://ui/welcome" } },
   { id: "copy_link", title: "Copy link without trackers", keywords: ["copy", "link", "url", "clean"], cmd: { cmd: "copy_link", variant: "clean", notify: true } },
   { id: "copy_original", title: "Copy original link", keywords: ["copy", "link", "url", "raw"], cmd: { cmd: "copy_link", variant: "original", notify: true } },
   { id: "copy_markdown", title: "Copy link as Markdown", keywords: ["copy", "markdown", "md"], cmd: { cmd: "copy_link", variant: "markdown", notify: true } },
-  { id: "zoom_reset", title: "Reset zoom", keywords: ["zoom", "100"], cmd: { cmd: "set_zoom", percent: 100 } },
+  { id: "zoom_reset", title: "Reset zoom", keywords: ["zoom", "100"], cmd: { cmd: "set_zoom", percent: 0 } },
   { id: "split_right", title: "Add right split…", keywords: ["split", "right", "side"], cmd: { cmd: "open_palette", mode: "split", side: "right" } },
   { id: "split_left", title: "Add left split…", keywords: ["split", "left", "side"], cmd: { cmd: "open_palette", mode: "split", side: "left" } },
   { id: "split_top", title: "Add top split…", keywords: ["split", "top", "above"], cmd: { cmd: "open_palette", mode: "split", side: "top" } },
   { id: "split_bottom", title: "Add bottom split…", keywords: ["split", "bottom", "below"], cmd: { cmd: "open_palette", mode: "split", side: "bottom" } },
   { id: "split_even", title: "Even out split sizes", keywords: ["split", "equal", "even", "reset"], cmd: { cmd: "split_equalize", path: [] } },
+  { id: "split_grid", title: "Arrange split as grid", keywords: ["split", "grid", "tile", "2x2", "quarters"], cmd: { cmd: "split_grid" } },
   { id: "separate", title: "Separate split tabs", keywords: ["split", "separate", "unsplit"], cmd: { cmd: "separate_all" } },
   { id: "devtools", title: "Toggle developer tools", keywords: ["devtools", "developer", "console", "inspect", "f12"], cmd: { cmd: "toggle_devtools" } },
+  { id: "dev_console", title: "Open console", keywords: ["console", "devtools", "developer", "errors", "log"], cmd: { cmd: "dev_panel", panel: "console" } },
+  { id: "dev_picker", title: "Pick an element", keywords: ["inspect", "element", "picker", "devtools", "select"], cmd: { cmd: "dev_panel", panel: "picker" } },
+  { id: "dev_network", title: "Open network panel", keywords: ["network", "requests", "devtools", "xhr", "fetch"], cmd: { cmd: "dev_panel", panel: "network" } },
+  { id: "dev_application", title: "Open storage and service workers", keywords: ["application", "storage", "cookies", "service", "worker", "devtools"], cmd: { cmd: "dev_panel", panel: "application" } },
+  { id: "dev_reset", title: "Reset page (reload past the cache)", keywords: ["reset", "hard", "reload", "cache", "clear", "storage"], cmd: { cmd: "dev_reset" } },
+  { id: "emu_dark", title: "Show page in dark mode", keywords: ["dark", "emulate", "color", "scheme", "theme"], cmd: { cmd: "dev_emulate", patch: { color_scheme: "dark" } } },
+  { id: "emu_light", title: "Show page in light mode", keywords: ["light", "emulate", "color", "scheme", "theme"], cmd: { cmd: "dev_emulate", patch: { color_scheme: "light" } } },
+  { id: "emu_motion", title: "Show page with reduced motion", keywords: ["reduced", "motion", "animation", "emulate"], cmd: { cmd: "dev_emulate", patch: { reduced_motion: true } } },
+  { id: "emu_print", title: "Show page as it prints", keywords: ["print", "media", "emulate", "styles"], cmd: { cmd: "dev_emulate", patch: { print: true } } },
+  { id: "emu_offline", title: "Take page offline", keywords: ["offline", "network", "emulate"], cmd: { cmd: "dev_emulate", patch: { network: "offline" } } },
+  { id: "emu_slow", title: "Slow down page's network", keywords: ["slow", "network", "throttle", "3g", "4g", "emulate"], cmd: { cmd: "dev_emulate", patch: { network: "slow" } } },
+  { id: "emu_cpu", title: "Slow down page's processor", keywords: ["cpu", "slow", "throttle", "processor", "emulate"], cmd: { cmd: "dev_emulate", patch: { slow_cpu: true } } },
+  { id: "emu_cache", title: "Turn off cache for page", keywords: ["cache", "disable", "emulate"], cmd: { cmd: "dev_emulate", patch: { no_cache: true } } },
+  { id: "dev_responsive", title: "Responsive split (the page as a phone beside itself)", keywords: ["responsive", "phone", "mobile", "split", "beside", "viewport", "breakpoint"], cmd: { cmd: "dev_responsive" } },
+  { id: "dev_capture_set", title: "Capture set (light and dark at three sizes)", keywords: ["capture", "screenshot", "set", "light", "dark", "sizes", "widths", "responsive"], cmd: { cmd: "dev_capture_set" } },
+  { id: "dev_record", title: "Record page as a video (or end the recording)", keywords: ["record", "recording", "video", "screencast", "gif", "stop"], cmd: { cmd: "dev_record" } },
+  ...TIMEZONES.map(([zone, place]): Action => ({ id: `emu_zone_${zone}`, title: `Show page in ${place} time`, keywords: ["time", "zone", "timezone", "emulate", zone.toLowerCase()], cmd: { cmd: "dev_emulate", patch: { timezone: zone } } })),
+  { id: "emu_zone_off", title: "Show page in this computer's time zone", keywords: ["time", "zone", "timezone", "emulate", "system", "local"], cmd: { cmd: "dev_emulate", patch: { timezone: null } } },
+  { id: "emu_off", title: "Show page as it is", keywords: ["emulate", "reset", "online", "system", "normal"], cmd: { cmd: "dev_emulate", patch: { color_scheme: null, reduced_motion: false, print: false, network: "online", slow_cpu: false, no_cache: false, timezone: null } } },
   { id: "capture", title: "Capture page…", keywords: ["capture", "screenshot", "snap"], cmd: { cmd: "capture_start" } },
   { id: "capture_copy", title: "Copy last capture", keywords: ["capture", "screenshot", "copy"], cmd: { cmd: "capture_copy", notify: true } },
+  { id: "find", title: "Find in page…", keywords: ["find", "search", "text"], cmd: { cmd: "shortcut", shortcut: "find" } },
   { id: "print", title: "Print page", keywords: ["print", "pdf"], cmd: { cmd: "shortcut", shortcut: "print" } },
   { id: "history", title: "Open history", keywords: ["history", "visited"], cmd: { cmd: "show_history" } },
 ];
@@ -53,10 +80,29 @@ function tabActions(state: UiState): Action[] {
   for (const sp of spaces) {
     if (sp.id !== state.active_space) actions.push({ id: `switch_${sp.id}`, title: `Switch to ${sp.title}`, keywords: ["space", "switch", "go"], cmd: { cmd: "switch_space", id: sp.id } });
   }
+  if (state.private_space) {
+    actions.push({ id: "close_private_space", title: "Close private space", keywords: ["private", "incognito", "close", "space"], cmd: { cmd: "close_private_space" } });
+    actions.push({ id: "hide_private_space", title: "Hide private space", keywords: ["private", "incognito", "hide", "space"], cmd: { cmd: "hide_private_space" } });
+  }
   const id = state.active_tab;
   const tab = id ? findTab(state, id) : null;
   if (!id || !tab) return actions;
   const owner = spaces.find((sp) => findTabInSpace(sp, id));
+  // The same page beside this one with another profile's logins: two users
+  // at once. Every profile but the page's own (`profile_for_tab` in the app).
+  if (state.active_space !== state.private_space) {
+    const { profiles, favorites } = state.sidebar;
+    const home = owner ?? favorites.find((f) => f.items.some((t) => t.id === id));
+    const own = (profiles.find((p) => p.id === tab.profile_id) ?? profiles.find((p) => p.id === home?.profile_id))?.id;
+    for (const p of profiles) {
+      if (p.id !== own && !p.ephemeral) actions.push({ id: `split_as_${p.id}`, title: `Open beside as ${p.name}`, keywords: ["split", "beside", "user", "profile", "second", "login", "account"], cmd: { cmd: "dev_split_as", profile: p.id } });
+    }
+  }
+  // A tab of the private space stays what and where it is.
+  if (owner && owner.id === state.private_space) {
+    actions.push({ id: "duplicate", title: "Duplicate tab", keywords: ["duplicate", "copy", "clone"], cmd: { cmd: "new_tab", url: tab.url } });
+    return actions;
+  }
   const favorite = !owner;
   const today = owner?.today.some((t) => t.id === id) ?? false;
   if (owner && today) actions.push({ id: "pin", title: "Pin tab", keywords: ["pin"], cmd: { cmd: "pin", id } });
@@ -67,7 +113,7 @@ function tabActions(state: UiState): Action[] {
   if (today) actions.push({ id: "keep_active", title: tab.keep_active ? "Stop keeping tab active" : "Keep tab active", keywords: ["keep", "active", "awake"], cmd: { cmd: "set_keep_active", id, keep: !tab.keep_active } });
   if (owner) {
     for (const sp of spaces) {
-      if (sp.id !== owner.id) actions.push({ id: `move_${sp.id}`, title: `Move tab to ${sp.title}`, keywords: ["move", "space"], cmd: { cmd: "move_tab", id, space: sp.id, section: "today", index: 0 } });
+      if (sp.id !== owner.id && sp.id !== state.private_space) actions.push({ id: `move_${sp.id}`, title: `Move tab to ${sp.title}`, keywords: ["move", "space"], cmd: { cmd: "move_tab", id, space: sp.id, section: "today", index: 0 } });
     }
   }
   // A favorite's copy keeps its profile; a tab's opens as a new Today tab of this space.
@@ -135,6 +181,12 @@ export function CommandBar({ mode, state, profileFor, splitSide, onClose, onOpen
   // The site search the hint line names while nothing is typed: another one each time the bar opens.
   const [example] = useState(() => state.settings.site_searches[Math.floor(Math.random() * state.settings.site_searches.length)]);
   const quick = mode === "quick";
+  // The programs listening on this computer's ports (Settings → Developer), asked once per opening.
+  const [servers, setServers] = useState<DevServer[]>([]);
+  const wantsServers = state.settings.developer.enabled && !quick && !naming;
+  useEffect(() => {
+    if (wantsServers) void send({ cmd: "dev_servers" }).then((r) => setServers(r.servers));
+  }, [wantsServers]);
   const sites = naming ? [] : state.settings.site_searches;
   // The palette window is focused already; it closes on Esc or when it loses focus.
   useDismiss(onClose, { takeFocus: false });
@@ -212,12 +264,23 @@ export function CommandBar({ mode, state, profileFor, splitSide, onClose, onOpen
     const saved: Item[] = results.filter((r) => r.kind === "bookmark").map((r) => ({ ...r, peek: r.url, run: () => (quick ? open(r.url) : send({ cmd: "open_bookmark", id: r.id })) }));
     const visited: Item[] = results.filter((r) => r.kind === "history").map((r) => ({ ...r, peek: r.url, run: () => open(r.url) }));
     const archived: Item[] = results.filter((r) => r.kind === "archived" && !quick).map((r) => ({ ...r, run: () => send({ cmd: "restore_archived", id: r.id }) }));
+    // What listens on this computer's ports: by project, port, or "local".
+    const lower = q.toLowerCase();
+    const local: Item[] = !q ? [] : servers
+      .filter((s) => s.project?.toLowerCase().includes(lower) || String(s.port).startsWith(lower) || ["localhost", "servers", "ports"].some((w) => w.startsWith(lower)))
+      .map((s) => {
+        const url = `http://localhost:${s.port}/`;
+        return { kind: "url", title: `${s.project ?? s.command} · localhost:${s.port}`, url, peek: url, run: () => open(url) };
+      });
     if (top.length) groups.push({ label: "", items: top });
     if (tabs.length) groups.push({ label: "Tabs", items: tabs });
     if (actions.length) groups.push({ label: "Commands", items: actions });
     if (saved.length) groups.push({ label: "Bookmarks", items: saved });
     if (visited.length) groups.push({ label: "History", items: visited });
     if (archived.length) groups.push({ label: "Archive", items: archived });
+    // Last: the list arrives a moment after the bar opens, and rows added
+    // here move none of the rows above, so the selected one stays selected.
+    if (local.length) groups.push({ label: "Local servers", items: local });
     for (const g of groups) items.push(...g.items);
   }
   const sel = Math.min(selected, Math.max(0, items.length - 1));

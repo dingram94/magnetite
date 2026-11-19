@@ -29,65 +29,147 @@ pub struct ContextProfile {
     pub ephemeral: bool,
 }
 
-pub(crate) struct Inner {
+/// Identifies one of Magnetite's main windows (a frame with its sidebar
+/// and pages).
+pub type WindowId = u32;
+
+/// What belongs to one main window. The engine works on one window at a
+/// time, the current one (`Inner::win`); the others wait in `Inner::parked`
+/// (`Engine::enter`).
+pub(crate) struct WindowState {
     pub frame: Option<FrameState>,
-    pub contents: HashMap<ContentId, ContentState>,
-    pub next_id: ContentId,
     pub sidebar_visible: bool,
-    pub router: Option<Arc<BrowserSideRouter>>,
-    pub quitting: bool,
     /// The sidebar browser is created while the frame window is still being
     /// built; it is parked here until `FrameState` exists.
     pub pending_sidebar_browser: Option<Browser>,
+    /// The visible split (two or more pages), if any.
+    pub split: Option<magnetite_core::split::SplitNode<ContentId>>,
+    /// Content window shown as a peek overlay, if any.
+    pub peek: Option<ContentId>,
+    /// Content window shown as a web panel: over the pages, at the
+    /// sidebar's edge of the page area, if any.
+    pub web_panel: Option<ContentId>,
+    /// The width asked for the web panel, in points; none: the usual.
+    pub web_panel_width: Option<u32>,
+    /// The close button of a docked web panel, and the page whose window
+    /// it is an overlay of (`panel_close.rs`).
+    pub panel_close: Option<(ContentId, OverlayController)>,
+    /// The page last shown alone (`show_content`) and not hidden since.
+    pub shown: Option<ContentId>,
+    /// Last draggable regions reported by the sidebar page (its own
+    /// coordinates: the body's).
+    pub sidebar_drag: Vec<DraggableRegion>,
+    /// Last draggable regions reported by the top bar page (window coordinates).
+    pub top_bar_drag: Vec<DraggableRegion>,
+    /// The developer bar shows above this window's pages
+    /// (`set_dev_bar_visible`).
+    pub dev_bar_visible: bool,
+    /// The split view's dividers as last laid out (`update_dividers`),
+    /// shown together with the docked DevTools' ones (`show_dividers`).
+    pub split_dividers: Vec<magnetite_core::split::Divider>,
+    /// Background of the page area (ARGB), for windows drawn in its gaps.
+    pub chrome_color: u32,
+    /// The sidebar floating over the pages while the docked one is hidden.
+    pub float_bar: Option<crate::floatbar::FloatBar>,
+    /// Space colour (ARGB): the outline of the focused page in a split.
+    pub accent_color: u32,
+    /// The page of the split on screen that has the keyboard.
+    pub focused_pane: Option<ContentId>,
+}
+
+impl WindowState {
+    /// A window that has no frame yet.
+    pub(crate) fn new() -> Self {
+        Self {
+            frame: None,
+            sidebar_visible: true,
+            pending_sidebar_browser: None,
+            split: None,
+            peek: None,
+            web_panel: None,
+            web_panel_width: None,
+            panel_close: None,
+            shown: None,
+            sidebar_drag: Vec::new(),
+            top_bar_drag: Vec::new(),
+            dev_bar_visible: false,
+            split_dividers: Vec::new(),
+            focused_pane: None,
+            float_bar: None,
+            accent_color: 0xFF78_82FF,
+            chrome_color: 0xFF1B_1B1E,
+        }
+    }
+}
+
+pub(crate) struct Inner {
+    /// The current window's state: what every call that names no window
+    /// works on.
+    pub win: WindowState,
+    /// The current window's id.
+    pub current: WindowId,
+    /// The other windows.
+    pub parked: HashMap<WindowId, WindowState>,
+    /// The id the next window gets.
+    pub next_window: WindowId,
+    pub contents: HashMap<ContentId, ContentState>,
+    pub next_id: ContentId,
+    pub router: Option<Arc<BrowserSideRouter>>,
+    pub quitting: bool,
     /// Content windows locked to a host (pinned tabs, favorites): user
     /// navigations to another host are redirected to the application.
     pub locks: HashMap<ContentId, String>,
     /// Which parts of Chromium's password manager and autofill are on
     /// (`autofill.rs`), for the profiles made from now on.
     pub autofill: crate::AutofillPrefs,
+    /// Where downloads go (`downloads.rs`), for the profiles made from
+    /// now on.
+    pub downloads: crate::DownloadPrefs,
+    /// The zoom, in percent, every site starts with (`site.rs`), for the
+    /// profiles made from now on.
+    pub default_zoom: u32,
+    /// Spell check and the languages websites are asked for
+    /// (`languages.rs`), for the profiles made from now on.
+    pub languages: crate::LanguagePrefs,
     /// Pages the app muted. Kept here because a page gets its browser a
     /// moment after it is asked for: the mute is applied once it has one.
     pub muted: HashSet<ContentId>,
+    /// Which tabs pages capture (`tabshare.rs`).
+    pub shares: crate::tabshare::Shares,
+    /// Pages shown as on a phone (`set_mobile_view`). Kept here for the
+    /// same reason, and to give it back after device mode.
+    pub mobile: HashSet<ContentId>,
     /// When one of our own pages was last reloaded after its renderer died,
     /// by browser identifier (`may_reload_ui`).
     pub ui_reloads: HashMap<i32, std::time::Instant>,
-    /// The visible split (two or more pages), if any.
-    pub split: Option<magnetite_core::split::SplitNode<ContentId>>,
-    /// Content window shown as a peek overlay, if any.
-    pub peek: Option<ContentId>,
     /// One CEF request context (cookies, storage, extensions) per profile id.
     pub contexts: HashMap<String, RequestContext>,
     /// Browsers in windows Chromium made, not we: a page's popup window,
     /// an extension's pop-up window. `quit` closes them; each one left open
     /// would keep the app running.
     pub foreign: HashMap<i32, Browser>,
-    /// Keeps the watch on each profile's extension pins alive
-    /// (`extensions::watch_pins`).
-    pub pin_watches: Vec<Registration>,
+    /// Keeps the watches on each profile's Chromium preferences alive
+    /// (`extensions::watch_pins`, `autofill::watch`).
+    pub pref_watches: Vec<Registration>,
     /// Profile ids whose context Chromium has finished making: only then
     /// can a browser be made in it (`context_ready`).
     pub ready_contexts: HashSet<String>,
     /// Pages asked for while their profile's context was still being made
     /// (`create_content`); they get their window once it is ready.
     pub queued: Vec<crate::content::QueuedContent>,
-    /// The page last shown alone (`show_content`) and not hidden since.
-    pub shown: Option<ContentId>,
     /// Runtime override of `EngineConfig::chrome_toolbar` (settings change).
     pub chrome_toolbar: bool,
-    /// Last draggable regions reported by the sidebar page (window coordinates).
-    pub sidebar_drag: Vec<DraggableRegion>,
+    /// The top bar is on (`set_top_bar_visible`).
+    pub top_bar_visible: bool,
     /// Where DevTools open, and the docked ones per page.
     pub devtools_dock: crate::DevToolsDock,
     pub docked: HashMap<ContentId, crate::devdock::DockedDevTools>,
+    /// The panel `DevTools` that are opening show first, per page.
+    pub pending_panels: HashMap<ContentId, crate::DevPanel>,
     /// The docked DevTools' size the user dragged, per side.
     pub devtools_size: crate::DevToolsSize,
-    /// The split view's dividers as last laid out (`update_dividers`),
-    /// shown together with the docked DevTools' ones (`show_dividers`).
-    pub split_dividers: Vec<magnetite_core::split::Divider>,
     /// The device device mode used last (`device.rs`), to start with next.
     pub last_device: Option<crate::device::DeviceConfig>,
-    /// Background of the page area (ARGB), for windows drawn in its gaps.
-    pub chrome_color: u32,
     /// The open overlay window (capture tool), if any.
     pub overlay: Option<Window>,
     /// The overlay is the quick search: a window of its own, not the frame's.
@@ -102,6 +184,8 @@ pub(crate) struct Inner {
     pub notifications: Option<Window>,
     /// Its height as its page asked.
     pub notifications_height: i32,
+    /// The window the notification panel is in.
+    pub notifications_win: WindowId,
     /// Origins seen per profile id this session (clear site data).
     pub origins: HashMap<String, std::collections::BTreeSet<String>>,
     /// The address each window's page was loaded from, by browser
@@ -114,21 +198,59 @@ pub(crate) struct Inner {
     /// same tab asked for.
     pub permission_requests:
         HashMap<ContentId, std::collections::BTreeSet<(String, String, crate::PermissionKind)>>,
-    /// The sidebar floating over the pages while the docked one is hidden.
-    pub float_bar: Option<crate::floatbar::FloatBar>,
-    /// Space colour (ARGB): the outline of the focused page in a split.
-    pub accent_color: u32,
-    /// The page of the split on screen that has the keyboard.
-    pub focused_pane: Option<ContentId>,
     /// Width of the docked sidebar (Settings → Appearance).
     pub sidebar_width: i32,
     /// Installed extensions per profile (`extensions.rs`).
     pub extensions: crate::extensions::ExtensionCache,
 }
 
+impl Inner {
+    /// Window `id`'s state, current or parked.
+    pub(crate) fn window(&self, id: WindowId) -> Option<&WindowState> {
+        if id == self.current {
+            Some(&self.win)
+        } else {
+            self.parked.get(&id)
+        }
+    }
+
+    pub(crate) fn window_mut(&mut self, id: WindowId) -> Option<&mut WindowState> {
+        if id == self.current {
+            Some(&mut self.win)
+        } else {
+            self.parked.get_mut(&id)
+        }
+    }
+
+    /// Every window with its id, the current one first.
+    pub(crate) fn windows_mut(&mut self) -> impl Iterator<Item = (WindowId, &mut WindowState)> {
+        std::iter::once((self.current, &mut self.win))
+            .chain(self.parked.iter_mut().map(|(id, w)| (*id, w)))
+    }
+
+    /// The window page `id` lives in (the current one for a page unknown).
+    pub(crate) fn home_of(&self, id: ContentId) -> WindowId {
+        self.contents.get(&id).map_or(self.current, |c| c.home)
+    }
+}
+
+impl Inner {
+    /// Window `id` is the current one now; `engine` notes it for
+    /// `Engine::current_window`.
+    pub(crate) fn set_current(&mut self, engine: &Engine, id: WindowId) -> WindowId {
+        engine
+            .current
+            .store(id, std::sync::atomic::Ordering::Relaxed);
+        std::mem::replace(&mut self.current, id)
+    }
+}
+
 /// The running engine: one global instance (`Engine::global`).
 pub struct Engine {
     pub(crate) inner: Mutex<Inner>,
+    /// `Inner::current` again, to read without the lock (`current_window`):
+    /// events are sent from code that holds it.
+    pub(crate) current: std::sync::atomic::AtomicU32,
     pub(crate) delegate: Arc<dyn EngineDelegate>,
     pub(crate) config: EngineConfig,
 }
@@ -140,53 +262,59 @@ impl Engine {
     pub(crate) fn init(config: EngineConfig, delegate: Arc<dyn EngineDelegate>) {
         let engine = Engine {
             inner: Mutex::new(Inner {
-                frame: None,
+                win: WindowState::new(),
+                current: 1,
+                parked: HashMap::new(),
+                next_window: 2,
                 contents: HashMap::new(),
                 next_id: 1,
-                sidebar_visible: true,
                 router: None,
                 quitting: false,
-                pending_sidebar_browser: None,
                 locks: HashMap::new(),
                 autofill: crate::AutofillPrefs::default(),
+                downloads: crate::DownloadPrefs::default(),
+                default_zoom: 100,
+                languages: crate::LanguagePrefs::default(),
                 muted: HashSet::new(),
+                shares: crate::tabshare::Shares::default(),
+                mobile: HashSet::new(),
                 ui_reloads: HashMap::new(),
-                split: None,
-                peek: None,
                 contexts: HashMap::new(),
                 foreign: HashMap::new(),
-                pin_watches: Vec::new(),
+                pref_watches: Vec::new(),
                 ready_contexts: HashSet::new(),
                 queued: Vec::new(),
-                shown: None,
                 chrome_toolbar: config.chrome_toolbar,
-                sidebar_drag: Vec::new(),
+                top_bar_visible: false,
                 devtools_dock: crate::DevToolsDock::default(),
                 docked: HashMap::new(),
+                pending_panels: HashMap::new(),
                 devtools_size: crate::DevToolsSize::default(),
-                split_dividers: Vec::new(),
                 last_device: None,
-                chrome_color: 0xFF1B_1B1E,
                 overlay: None,
                 overlay_detached: false,
                 quick_from_outside: false,
                 mini_spaces: Vec::new(),
                 notifications: None,
                 notifications_height: 0,
+                notifications_win: 1,
                 origins: HashMap::new(),
                 loaded_urls: HashMap::new(),
                 permission_requests: HashMap::new(),
-                float_bar: None,
-                accent_color: 0xFF78_82FF,
-                focused_pane: None,
                 sidebar_width: config.sidebar_width,
                 extensions: crate::extensions::ExtensionCache::default(),
             }),
+            current: std::sync::atomic::AtomicU32::new(1),
             delegate,
             config,
         };
         // Only the first call counts.
         let _ = ENGINE.set(engine);
+    }
+
+    /// The engine instance, once `init` made it.
+    pub fn try_global() -> Option<&'static Engine> {
+        ENGINE.get()
     }
 
     /// The engine instance. Panics before `init`.
@@ -202,10 +330,25 @@ impl Engine {
     /// so delegates are never called while an engine API call is on the
     /// stack (which would deadlock their own state locks).
     #[allow(clippy::unused_self)] // an Engine method like its siblings
+    ///
+    /// The delegate hears of it in the window that is current now: an event
+    /// from a window in the background is handled there.
     pub(crate) fn emit(&self, event: EngineEvent) {
+        let win = self.current_window();
         Self::post(Box::new(move || {
             let engine = Engine::global();
-            engine.delegate.on_event(engine, event);
+            let mut event = Some(event);
+            let handle = || {
+                if let Some(event) = event.take() {
+                    engine.delegate.on_event(engine, event);
+                }
+            };
+            // A window closed in the meantime: the current one hears of it.
+            if engine.in_window(win, handle).is_none()
+                && let Some(event) = event
+            {
+                engine.delegate.on_event(engine, event);
+            }
         }));
     }
 
@@ -213,9 +356,9 @@ impl Engine {
         lock(&self.inner)
     }
 
-    /// The frame (main) window, once it exists.
+    /// The current window's frame, once it exists.
     pub(crate) fn frame_window(&self) -> Option<Window> {
-        self.lock().frame.as_ref().map(|f| f.window.clone())
+        self.lock().win.frame.as_ref().map(|f| f.window.clone())
     }
 
     /// Run `f` on the CEF UI thread (from any thread). Used by background
@@ -268,16 +411,37 @@ impl Engine {
         } else {
             self.docked_sidebar_browser()
         };
-        if let Some(frame) = browser.and_then(|b| b.main_frame()) {
+        // The top bar holds the address row while it is on.
+        let top_bar = self
+            .top_bar_visible()
+            .then(|| self.top_bar_browser())
+            .flatten();
+        let dev_bar = self.dev_bar_browser();
+        for frame in [browser, top_bar, dev_bar]
+            .into_iter()
+            .flatten()
+            .filter_map(|b| b.main_frame())
+        {
             self.eval_in_ui(&frame, js);
         }
     }
 
-    /// Run `js` in every sidebar page, shown or not: state pushes.
+    /// Run `js` in every sidebar page, the top bar and the empty page, shown
+    /// or not, and in the overlay (a pop-up of the top bar shows live state):
+    /// state pushes.
     pub fn ui_eval_all(&self, js: &str) {
-        for browser in [self.docked_sidebar_browser(), self.float_sidebar_browser()]
-            .into_iter()
-            .flatten()
+        let overlay = (self.lock().overlay.clone())
+            .and_then(|w| w.child_view_at(0)?.as_browser_view()?.browser());
+        for browser in [
+            self.docked_sidebar_browser(),
+            self.float_sidebar_browser(),
+            self.top_bar_browser(),
+            self.dev_bar_browser(),
+            self.empty_browser(),
+            overlay,
+        ]
+        .into_iter()
+        .flatten()
         {
             if let Some(frame) = browser.main_frame() {
                 self.eval_in_ui(&frame, js);
@@ -311,8 +475,30 @@ impl Engine {
                 && url.starts_with(dev.as_str()))
     }
 
+    fn top_bar_browser(&self) -> Option<Browser> {
+        self.lock()
+            .win
+            .frame
+            .as_ref()
+            .and_then(|f| f.top_bar_browser.clone())
+    }
+
+    pub(crate) fn dev_bar_browser(&self) -> Option<Browser> {
+        self.lock()
+            .win
+            .frame
+            .as_ref()
+            .and_then(|f| f.dev_bar_browser.clone())
+    }
+
+    /// The browser a dialog of the system's opens over: the sidebar's.
+    pub(crate) fn dialog_host(&self) -> Option<BrowserHost> {
+        self.docked_sidebar_browser().and_then(|b| b.host())
+    }
+
     fn docked_sidebar_browser(&self) -> Option<Browser> {
         self.lock()
+            .win
             .frame
             .as_ref()
             .and_then(|f| f.sidebar_browser.clone())
@@ -336,7 +522,9 @@ impl Engine {
                 inner.foreign.values().cloned().collect(),
             )
         };
-        let frame = self.frame_window();
+        let frames: Vec<Window> = (self.lock().windows_mut())
+            .filter_map(|(_, w)| w.frame.as_ref().map(|f| f.window.clone()))
+            .collect();
         for b in foreign {
             if let Some(host) = b.host() {
                 host.close_browser(1);
@@ -345,7 +533,7 @@ impl Engine {
         for w in contents {
             w.close();
         }
-        if let Some(w) = frame {
+        for w in frames {
             w.close();
         }
         // Not a task on the message loop: the loop may have ended and still
@@ -360,7 +548,7 @@ impl Engine {
         });
     }
 
-    pub(crate) fn is_quitting(&self) -> bool {
+    pub fn is_quitting(&self) -> bool {
         self.lock().quitting
     }
 
@@ -376,7 +564,8 @@ impl Engine {
     /// The request context for `profile`; `None` is the global context.
     /// Other profiles get their own cache directory below the root cache
     /// path (separate cookies, storage and extensions); ephemeral ones keep
-    /// everything in memory until Magnetite quits. Chromium finishes a new
+    /// everything in memory, until `forget_contexts` or until Magnetite
+    /// quits. Chromium finishes a new
     /// context a little later (`context_is_ready`).
     pub(crate) fn request_context(
         &self,
@@ -388,7 +577,10 @@ impl Engine {
         }
         let settings = if profile.ephemeral {
             // An empty cache path makes CEF create an in-memory context.
-            RequestContextSettings::default()
+            RequestContextSettings {
+                accept_language_list: CefString::from(self.config.accept_languages.as_str()),
+                ..Default::default()
+            }
         } else {
             let dir = self.config.profile_dir(&profile.id);
             if let Err(e) = std::fs::create_dir_all(&dir) {
@@ -397,6 +589,7 @@ impl Engine {
             RequestContextSettings {
                 cache_path: CefString::from(dir.to_string_lossy().as_ref()),
                 persist_session_cookies: 1,
+                accept_language_list: CefString::from(self.config.accept_languages.as_str()),
                 ..Default::default()
             }
         };
@@ -404,6 +597,27 @@ impl Engine {
         let ctx = request_context_create_context(Some(&settings), Some(&mut handler))?;
         self.lock().contexts.insert(profile.id.clone(), ctx.clone());
         Some(ctx)
+    }
+
+    /// Let go of the in-memory contexts of the profiles `ids`, which nothing
+    /// uses any more: Chromium drops such a context, with its cookies and
+    /// storage, once its last page has closed. A popup window a page of
+    /// theirs opened (`foreign`) would keep the context alive: it closes.
+    pub fn forget_contexts(&self, ids: &[String]) {
+        let popups: Vec<Browser> = self.lock().foreign.values().cloned().collect();
+        for host in popups.iter().filter_map(ImplBrowser::host) {
+            let context = host.request_context().and_then(|c| self.context_id_of(&c));
+            if context.is_some_and(|id| ids.contains(&id)) {
+                host.close_browser(1);
+            }
+        }
+        let mut inner = self.lock();
+        for id in ids {
+            if inner.contexts.remove(id).is_some() {
+                crate::trace(&format!("letting go of in-memory context {id}"));
+            }
+            inner.ready_contexts.remove(id);
+        }
     }
 
     /// Whether a browser can be made in `profile`'s context now: always in
@@ -514,7 +728,8 @@ fn schedule_tick(delay_ms: i64) {
     Engine::post_delayed(Box::new(tick), delay_ms);
 }
 
-/// Poll the signal flag often; emit the housekeeping tick once a minute.
+/// Poll the signal flag often, and on macOS look for pages wrongly marked
+/// covered; emit the housekeeping tick once a minute.
 fn tick() {
     let engine = Engine::global();
     if engine.is_quitting() {
@@ -524,6 +739,8 @@ fn tick() {
         engine.emit(EngineEvent::QuitRequested);
         return;
     }
+    #[cfg(target_os = "macos")]
+    engine.uncover_shown_pages();
     static POLLS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     if POLLS
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
@@ -578,6 +795,24 @@ pub(crate) fn prepare_context(ctx: &RequestContext) -> bool {
     let autofill = Engine::global().lock().autofill;
     if !autofill.apply(ctx) {
         crate::trace("cannot set the password and autofill preferences");
+    }
+    crate::autofill::watch(ctx);
+    // Downloads where the user's settings send them.
+    let downloads = Engine::global().lock().downloads.clone();
+    if !downloads.apply(ctx) {
+        crate::trace("cannot set the download preferences");
+    }
+    // The zoom sites start with, as the user's settings have it.
+    let zoom = Engine::global().lock().default_zoom;
+    // Also 100 percent: a profile may still hold an earlier choice.
+    if !crate::site::apply_default_zoom(ctx, zoom) {
+        crate::trace("cannot set the default zoom");
+    }
+    // Spell check and languages as the user's settings have them.
+    let spellcheck = Engine::global().lock().languages.spellcheck;
+    // Also when it is on, as at first: a profile may still hold "off".
+    if !crate::languages::apply_spellcheck(ctx, spellcheck) {
+        crate::trace("cannot set the language preferences");
     }
     set
 }

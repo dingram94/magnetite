@@ -22,24 +22,20 @@ impl Engine {
             .filter(|t| t.pane_count() > 1)
             .map(|t| t.dividers(self.split_area(), SPLIT_GAP))
             .unwrap_or_default();
-        self.lock().split_dividers = dividers;
+        self.lock().win.split_dividers = dividers;
         self.show_dividers();
     }
 
     /// Show the split dividers and one beside each docked `DevTools` on
     /// screen, and the resize handles of pages in device mode (native
     /// windows on macOS and Windows; Linux has none yet).
-    #[cfg_attr(
-        not(any(target_os = "macos", target_os = "windows")),
-        allow(clippy::unused_self)
-    )]
     pub(crate) fn show_dividers(&self) {
         #[cfg(target_os = "macos")]
         {
-            let (wanted, frame) = {
+            let (wanted, frame, peek) = {
                 let inner = self.lock();
                 let row = inner.devtools_dock != crate::DevToolsDock::Bottom;
-                let split = inner.split_dividers.iter().map(|d| {
+                let split = inner.win.split_dividers.iter().map(|d| {
                     let key = crate::mac::DividerKey::Split {
                         row: d.axis == Axis::Row,
                         path: d.path.clone(),
@@ -66,10 +62,24 @@ impl Engine {
                             .map(move |(r, edge)| (r.clone(), key(*edge)))
                     });
                 let wanted: Vec<_> = split.chain(devtools).chain(handles).collect();
-                (wanted, inner.frame.as_ref().map(|f| f.window.clone()))
+                let frame = inner.win.frame.as_ref().map(|f| f.window.clone());
+                (wanted, frame, inner.win.peek.is_some())
             };
+            // The grip beside an open web panel, to resize it, and the
+            // button to close it.
+            let mut wanted = wanted;
+            let panel = self.web_panel_bounds();
+            wanted.extend((panel.as_ref()).map(|p| {
+                (
+                    crate::content::web_panel_grip(p),
+                    crate::mac::DividerKey::WebPanel,
+                )
+            }));
             if let Some(frame) = frame {
                 crate::mac::set_dividers(frame.window_handle(), &wanted);
+                // Not over a peek and the dimmed pages behind it.
+                let button = panel.as_ref().filter(|_| !peek);
+                crate::mac::set_panel_close(frame.window_handle(), button);
             }
         }
         #[cfg(target_os = "windows")]
@@ -77,7 +87,7 @@ impl Engine {
             let (wanted, frame) = {
                 let inner = self.lock();
                 let row = inner.devtools_dock != crate::DevToolsDock::Bottom;
-                let split = inner.split_dividers.iter().map(|d| {
+                let split = inner.win.split_dividers.iter().map(|d| {
                     let key = crate::win::DividerKey::Split {
                         row: d.axis == Axis::Row,
                         path: d.path.clone(),
@@ -109,12 +119,16 @@ impl Engine {
                     .chain(handles)
                     .map(|(r, key)| (display_convert_screen_rect_to_pixels(Some(&r)), key))
                     .collect();
-                (wanted, inner.frame.as_ref().map(|f| f.window.clone()))
+                (wanted, inner.win.frame.as_ref().map(|f| f.window.clone()))
             };
             if let Some(frame) = frame {
                 crate::win::set_dividers(frame.window_handle(), &wanted);
             }
         }
+        self.web_panel_above_dividers();
+        self.sync_panel_close();
+        // Every change of what is on screen, and where, comes by here.
+        self.update_page_shadows();
     }
 
     /// JPEG screenshot of page `id` as a data URL (drop-zone overlay).
@@ -140,12 +154,12 @@ impl Engine {
         let area = self.content_rect();
         let ids: Vec<ContentId> = {
             let inner = self.lock();
-            match inner.split.as_ref() {
+            match inner.win.split.as_ref() {
                 Some(t) if t.pane_count() > 1 => t.ids(),
                 _ => inner
                     .contents
                     .iter()
-                    .filter(|(_, c)| c.mini.is_none())
+                    .filter(|(_, c)| c.mini.is_none() && c.home == inner.current)
                     .filter(|(_, c)| c.window.as_ref().is_some_and(|w| w.is_visible() != 0))
                     .map(|(id, _)| *id)
                     .collect(),

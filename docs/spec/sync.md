@@ -61,9 +61,44 @@ repository, <https://github.com/magnetite-browser/magnetite-sync>
 | Collection | Content |
 |---|---|
 | `sidebar` | profiles, favorites, spaces with their pinned trees (folders, smart folder definitions), Today tabs and bookmarks |
-| `settings` | when Today tabs are archived, when inactive tabs are suspended, where links from other apps open (a tab, a peek or a mini window; a version that does not know a choice uses a new tab) |
+| `settings` | when Today tabs are archived, when inactive tabs are suspended, where links from other apps open (a tab, a peek or a mini window; a version that does not know a choice uses a new tab), the shortcuts with other keys or none (`shortcuts.md`) |
+| `devices` | per device: the tabs open on it that it lists for the others (phones do), and which tabs of other devices it took over |
 
 The server never sees these names, only ids derived from the sync code.
+
+## Tabs of other devices
+
+The sidebar is replaced as a whole, so a device that only looks at it, a
+phone, must not write it. What a phone has open travels in `devices`
+instead, where every device changes only its own entry and writes the
+collection as the version after the one it read; when another device wrote
+first, it reads again. Devices cannot overwrite each other there.
+
+- A tab open on another device shows in the Today list of the space it is
+  open in there (in the space in front if this device does not have that
+  one), below this device's tabs, with the device's icon on the right. It is
+  not a tab here: it has no page and is not in the sidebar that syncs.
+- A click takes it over: it opens here as a Today tab in front, and this
+  device notes its id as taken. The other device sees that at its next sync,
+  closes the tab and stops listing it; this device then forgets the id.
+- A tab another device took is no longer shown here.
+- A tab the other device sent here ("Send to Desktop") is taken without a
+  click: it opens in the background, marked unread. With several desktops
+  in the chain it opens on one: a desktop opens it only after its note of
+  having taken it is stored, and the others see that note.
+- A desktop lists no tabs of its own: its Today tabs are in the sidebar
+  already. Its entry holds only what it took, and is gone when that is
+  nothing. It names itself by its kind ("Mac", "Linux PC"), never by the
+  computer's name.
+- Entries not written for 90 days are dropped with the next write. Fields a
+  newer version wrote are kept.
+- Never in the private space, and not in a space kept on this device
+  alone: the tab then opens in the space in front, or, if that is such a
+  space too, in the first space that syncs. Only a device none of whose
+  spaces sync opens it in the space in front regardless.
+- A tab with an address Magnetite does not open from stored data (a local
+  file, for example) is not shown and not taken: it stays open on its
+  device.
 
 Not synced: the archive, downloads, cookies and logins, which pages are
 open, split views, the search engine (a device holding the words could

@@ -308,9 +308,8 @@ dependencies = [
 
 [[package]]
 name = "cef"
-version = "156.4.0+156.0.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f48d6e78916f115e21933b44c39bd20de0bd25c753fb86b61fb4e2b84b001877"
+version = "156.5.0+156.0.30"
+source = "git+https://github.com/magnetite-browser/cef-rs?rev=d02cf0401baf79e6a24b6d175e024983d59c7f0e#d02cf0401baf79e6a24b6d175e024983d59c7f0e"
 dependencies = [
  "cef-dll-sys",
  "libloading",
@@ -320,9 +319,8 @@ dependencies = [
 
 [[package]]
 name = "cef-dll-sys"
-version = "156.4.0+156.0.26"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a29dddf938de892feea7601d6a8aee3ae2ff8c8d6a3fe30022c1356097fa8e6"
+version = "156.5.0+156.0.30"
+source = "git+https://github.com/magnetite-browser/cef-rs?rev=d02cf0401baf79e6a24b6d175e024983d59c7f0e#d02cf0401baf79e6a24b6d175e024983d59c7f0e"
 dependencies = [
  "anyhow",
  "cc",
@@ -660,9 +658,8 @@ checksum = "1aaf95b3e5c8f23aa320147307562d361db0ae0d51242340f558153b4eb2439b"
 
 [[package]]
 name = "download-cef"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05ee509499d14dc47da5f824e4bb1bd558ceb259adc5475956265d48787a80da"
+version = "3.0.1"
+source = "git+https://github.com/magnetite-browser/cef-rs?rev=d02cf0401baf79e6a24b6d175e024983d59c7f0e#d02cf0401baf79e6a24b6d175e024983d59c7f0e"
 dependencies = [
  "bzip2",
  "clap",
@@ -794,9 +791,9 @@ dependencies = [
 
 [[package]]
 name = "flate2"
-version = "1.1.10"
+version = "1.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e634e2e0ebac1ee034020da1ca582e17ffe4e0f5e985823721e168928136dcb"
+checksum = "626d4928326b646e70f65ed36fc7cf9f206bdb68a0019ee7c6b4709da4e084c4"
 dependencies = [
  "crc32fast",
  "miniz_oxide 0.9.1",
@@ -1336,16 +1333,16 @@ checksum = "5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c"
 
 [[package]]
 name = "lz4_flex"
-version = "0.14.0"
+version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ecbdfe44b1bd960b68170b417450a628c43f7cf56bb3c5317e61cb230ee7f226"
+checksum = "f56455fff36934a9500d69062aec1c77037179b6f0669e4d5d6b72b84722d6a3"
 
 [[package]]
 name = "magnetite"
-version = "0.0.2"
+version = "0.0.8"
 dependencies = [
  "anyhow",
- "base64 0.22.1",
+ "base64 0.23.1",
  "clap",
  "ed25519-dalek",
  "flate2",
@@ -1367,7 +1364,7 @@ dependencies = [
 
 [[package]]
 name = "magnetite-core"
-version = "0.0.2"
+version = "0.0.8"
 dependencies = [
  "serde",
  "serde_json",
@@ -1375,12 +1372,13 @@ dependencies = [
 
 [[package]]
 name = "magnetite-engine"
-version = "0.0.2"
+version = "0.0.8"
 dependencies = [
  "adblock",
- "base64 0.22.1",
+ "base64 0.23.1",
  "block2",
  "cef",
+ "cef-dll-sys",
  "libc",
  "magnetite-core",
  "objc2",
@@ -1390,11 +1388,12 @@ dependencies = [
  "psl",
  "serde",
  "serde_json",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
 name = "magnetite-importer"
-version = "0.0.2"
+version = "0.0.8"
 dependencies = [
  "anyhow",
  "clap",
@@ -1441,11 +1440,11 @@ dependencies = [
 
 [[package]]
 name = "magnetite-ui"
-version = "0.0.2"
+version = "0.0.8"
 
 [[package]]
 name = "magnetite-windows"
-version = "0.0.2"
+version = "0.0.8"
 dependencies = [
  "magnetite",
 ]
@@ -1731,9 +1730,9 @@ dependencies = [
 
 [[package]]
 name = "psl"
-version = "2.1.248"
+version = "2.1.254"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db58c388e851a5e62d8b5373b0f41135edac0bd43009832ba362691089d7367c"
+checksum = "cb958e602bc5c9e07a3bdb78ce240402a490cd08f01e51deacfe637ed903d743"
 dependencies = [
  "psl-types",
 ]
@@ -2631,9 +2630,9 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "ureq"
-version = "3.5.1"
+version = "3.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7be76686bdf7198002062423ca0d8cf9b75a27c8e1de804513b97e97b555d9d"
+checksum = "3ac5cecf619ca81f66a96482db09687c9f7465af65f4300a8c30cca05bd5a59d"
 dependencies = [
  "base64 0.23.1",
  "cookie_store",

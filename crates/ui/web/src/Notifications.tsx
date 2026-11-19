@@ -53,6 +53,8 @@ export function Notifications() {
   const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
   const [hover, setHover] = useState(false);
   const [leftAt, setLeftAt] = useState(0);
+  // The downloads whose cards the pointer holds on the panel.
+  const [held, setHeld] = useState<ReadonlySet<string>>(new Set());
   const [now, setNow] = useState(() => Date.now() / 1000);
   // Nothing is measured before the list arrived: 0 would close the window.
   const [loaded, setLoaded] = useState(false);
@@ -85,10 +87,26 @@ export function Notifications() {
     });
   }, []);
 
+  // A download shows while it runs and for a while after it ended. The
+  // pointer on the panel holds the cards that are there (`held`), and they
+  // stay two more seconds after it left. Nothing else does: a download whose
+  // card is gone stays gone, whatever the panel opens for later.
+  const holding = hover || now < leftAt + 2;
   const shown = items
     .filter((d) => !closed.has(d.id))
-    .filter((d) => d.status === "in_progress" || hover || now < Math.max(d.changed_at + LINGER, leftAt + 2))
+    .filter((d) => d.status === "in_progress" || now < d.changed_at + LINGER || (holding && held.has(d.id)))
     .slice(0, MAX);
+  // What shows while the pointer is on the panel is what is held: also a
+  // card that came after the pointer, and no longer one that newer cards
+  // pushed out or that was closed.
+  const showing = shown.map((d) => d.id).join();
+  useEffect(() => {
+    if (!hover) return;
+    setHeld((was) => {
+      const ids = showing ? showing.split(",") : [];
+      return ids.length === was.size && ids.every((id) => was.has(id)) ? was : new Set(ids);
+    });
+  }, [hover, showing]);
 
   // Tick while an ended download waits to leave.
   const waiting = shown.some((d) => d.status !== "in_progress");
@@ -122,7 +140,15 @@ export function Notifications() {
     <div
       ref={root}
       className="notifications"
-      onMouseEnter={() => setHover(true)}
+      onMouseEnter={() => {
+        // Held from here on are the cards that show now, taken before the
+        // clock moves: one whose time ran out since the last tick is still
+        // under the pointer. Those of the last time are among them only
+        // while they still show.
+        setHeld(new Set(shown.map((d) => d.id)));
+        setNow(Date.now() / 1000);
+        setHover(true);
+      }}
       onMouseLeave={() => {
         setHover(false);
         setLeftAt(Date.now() / 1000);

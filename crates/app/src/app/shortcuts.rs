@@ -1,13 +1,73 @@
 //! Keys and menu bar items, and the command palette they open.
 
 use magnetite_core::split::Side;
-use magnetite_engine::{ContentId, Engine, Shortcut};
+use magnetite_engine::{Action, Combo, ContentId, Engine, KeysError, Overrides, Shortcut};
 use serde_json::json;
 
 use super::addresses::urlencode;
 use super::{LinkVariant, MagnetiteApp, PaletteMode};
 
 impl MagnetiteApp {
+    /// Hand the engine the keys the shortcuts have now (Settings →
+    /// Shortcuts): at start, and whenever they change here or through sync.
+    pub(super) fn apply_shortcut_keys(&self, engine: &Engine) {
+        let keys = self.with_state(|s| s.settings.shortcuts.clone());
+        engine.set_shortcut_keys(&keys);
+    }
+
+    /// Give `action` the keys `keys` (`None`: no keys), or tell why not.
+    /// Other keys take effect at once, in the menu bar too.
+    pub(super) fn set_shortcut(
+        &self,
+        engine: &Engine,
+        action: Action,
+        keys: Option<&str>,
+    ) -> Result<(), KeysError> {
+        let combo: Option<Combo> = keys.map(str::parse).transpose()?;
+        self.with_state(|s| {
+            s.settings.shortcuts.set(action, combo)?;
+            s.drop_shadowed_space_keys();
+            Ok(())
+        })?;
+        self.apply_shortcut_keys(engine);
+        self.push_state(engine);
+        Ok(())
+    }
+
+    /// Give space `id` the keys `keys` (`None`: no keys), or tell why not.
+    /// A shortcut or space that had them loses them.
+    pub(super) fn set_space_shortcut(
+        &self,
+        engine: &Engine,
+        id: &str,
+        keys: Option<&str>,
+    ) -> Result<(), KeysError> {
+        let combo: Option<Combo> = keys.map(str::parse).transpose()?;
+        self.with_state(|s| s.set_space_shortcut(id, combo))?;
+        // The keys may have been an action's.
+        self.apply_shortcut_keys(engine);
+        self.push_state(engine);
+        Ok(())
+    }
+
+    /// Give `action` its default keys back, or every action (`None`); then
+    /// no space has keys of its own either.
+    pub(super) fn reset_shortcut(&self, engine: &Engine, action: Option<Action>) {
+        self.with_state(|s| {
+            if let Some(action) = action {
+                s.settings.shortcuts.reset(action);
+            } else {
+                s.settings.shortcuts = Overrides::default();
+                for space in &mut s.sidebar.spaces {
+                    space.shortcut = None;
+                }
+            }
+            s.drop_shadowed_space_keys();
+        });
+        self.apply_shortcut_keys(engine);
+        self.push_state(engine);
+    }
+
     /// Open the command palette centred over the page area; the quick
     /// search in a window of its own, on the screen with the pointer.
     pub(super) fn open_palette(
@@ -32,14 +92,14 @@ impl MagnetiteApp {
         }
     }
 
-    /// Reload, history and zoom for the page in front (menu bar items).
+    /// Reload, history, zoom and find for the page in front (menu bar items).
     pub(super) fn page_command(&self, engine: &Engine, shortcut: Shortcut) {
         if let Some(c) = self.focused_content(None) {
             Self::page_command_on(engine, c, shortcut);
         }
     }
 
-    /// Reload, history and zoom for page `c`.
+    /// Reload, history, zoom and find for page `c`.
     pub(super) fn page_command_on(engine: &Engine, c: ContentId, shortcut: Shortcut) {
         let zoom = || engine.content_site_state(c).map_or(100, |s| s.zoom);
         match shortcut {
@@ -48,9 +108,12 @@ impl MagnetiteApp {
             Shortcut::Forward => engine.content_go_forward(c),
             Shortcut::ZoomIn | Shortcut::ZoomOut => {
                 let up = shortcut == Shortcut::ZoomIn;
-                engine.set_content_zoom(c, magnetite_engine::zoom_step(zoom(), up));
+                engine.set_content_zoom(c, Some(magnetite_engine::zoom_step(zoom(), up)));
             }
-            Shortcut::ZoomReset => engine.set_content_zoom(c, 100),
+            Shortcut::ZoomReset => engine.set_content_zoom(c, None),
+            Shortcut::Find | Shortcut::FindNext | Shortcut::FindPrevious => {
+                engine.content_find(c, shortcut);
+            }
             _ => {}
         }
     }
@@ -83,12 +146,12 @@ impl MagnetiteApp {
             | Shortcut::Forward
             | Shortcut::ZoomIn
             | Shortcut::ZoomOut
-            | Shortcut::ZoomReset => self.page_command(engine, shortcut),
-            Shortcut::OpenDevTools => {
-                if let Some(c) = self.focused_content(None) {
-                    engine.content_show_devtools(c);
-                }
-            }
+            | Shortcut::ZoomReset
+            | Shortcut::Find
+            | Shortcut::FindNext
+            | Shortcut::FindPrevious => self.page_command(engine, shortcut),
+            Shortcut::DevPanel(panel) => self.dev_panel(engine, None, panel),
+            Shortcut::DevReset => self.dev_reset(engine, None),
             Shortcut::CopyLink => {
                 let result = self.copy_link(engine, None, LinkVariant::Clean);
                 Self::ui_call(engine, "copied", &result);
@@ -106,6 +169,24 @@ impl MagnetiteApp {
                 Self::ui_call(engine, "openSitePanel", &json!({}));
             }
             Shortcut::NewTab => Self::open_palette(engine, PaletteMode::New, None, None),
+            // Without several windows (Settings) the key keeps what it did
+            // before: a new tab.
+            Shortcut::NewWindow => {
+                if self.with_state(|s| s.settings.several_windows) {
+                    self.new_window(engine);
+                } else {
+                    self.handle_shortcut(engine, Shortcut::NewTab);
+                }
+            }
+            Shortcut::CloseWindow => {
+                // With one window the key keeps what it did before there
+                // were several: it closes the tab.
+                if engine.windows().len() > 1 {
+                    engine.close_window(engine.current_window());
+                } else {
+                    self.handle_shortcut(engine, Shortcut::CloseTab);
+                }
+            }
             Shortcut::FocusAddress => {
                 let has_tab = self.with_state(|s| s.active_tab_id().is_some());
                 let mode = if has_tab {
@@ -119,6 +200,9 @@ impl MagnetiteApp {
                 // A peek is in front: the key closes it, not the tab behind it.
                 if self.with_state(|s| s.peek.is_some()) {
                     self.close_peek(engine);
+                } else if engine.web_panel_focused() {
+                    // The keyboard is in the web panel: the key is for it.
+                    self.close_web_panel(engine);
                 } else if let Some(id) = self.with_state(|s| s.active_tab_id().map(str::to_owned)) {
                     self.close_tab(engine, &id);
                 }
@@ -133,12 +217,9 @@ impl MagnetiteApp {
                 }
                 self.push_state(engine);
             }
+            Shortcut::WebPanel => self.web_panel_key(engine),
             Shortcut::NextTab | Shortcut::PrevTab => {
-                let forward = shortcut == Shortcut::NextTab;
-                let target = self.with_state(|s| s.cycle_tab(forward));
-                if let Some(t) = target {
-                    self.activate_tab(engine, &t);
-                }
+                self.cycle_tab(engine, shortcut == Shortcut::NextTab);
             }
             Shortcut::SelectTab(n) => {
                 // Tabs count from 1; a 0 from a page names none.
@@ -154,7 +235,7 @@ impl MagnetiteApp {
                 // Spaces count from 1, in the footer's order.
                 let target = self.with_state(|s| {
                     let at = usize::from(n).checked_sub(1)?;
-                    let space = s.sidebar.spaces.get(at)?;
+                    let space = s.listed_spaces().nth(at)?;
                     (space.id != s.active_space).then(|| space.id.clone())
                 });
                 if let Some(id) = target {
@@ -180,25 +261,38 @@ impl MagnetiteApp {
                 }
             }
             Shortcut::NewSpace => Self::open_palette(engine, PaletteMode::NewSpace, None, None),
+            Shortcut::SpacePicker => Self::open_palette(engine, PaletteMode::Spaces, None, None),
+            Shortcut::SpaceKeys(keys) => {
+                let target = self.with_state(|s| {
+                    let space = s.space_for_keys(keys)?;
+                    (space.id != s.active_space).then(|| space.id.clone())
+                });
+                if let Some(id) = target {
+                    self.activate_space(engine, &id);
+                }
+            }
+            Shortcut::PrivateSpace => self.open_private_space(engine),
+            Shortcut::ClosePrivateSpace => self.close_private_space(engine),
+            Shortcut::HidePrivateSpace => self.hide_private_space(engine),
             Shortcut::NewMini => Self::open_palette(engine, PaletteMode::Quick, None, None),
             Shortcut::ClosePeek => self.close_peek(engine),
             Shortcut::PeekToTab => self.peek_to_tab(engine),
             Shortcut::PeekToSplit => self.peek_to_split(engine),
             Shortcut::NextSpace | Shortcut::PrevSpace => {
                 let target = self.with_state(|s| {
-                    let n = s.sidebar.spaces.len();
-                    let pos = s
-                        .sidebar
-                        .spaces
+                    // A hidden private space is no stop on the way.
+                    let spaces: Vec<&str> = s.listed_spaces().map(|sp| sp.id.as_str()).collect();
+                    let n = spaces.len();
+                    let pos = spaces
                         .iter()
-                        .position(|sp| sp.id == s.active_space)
+                        .position(|id| *id == s.active_space)
                         .unwrap_or(0);
                     let next = if shortcut == Shortcut::NextSpace {
                         (pos + 1) % n
                     } else {
                         (pos + n - 1) % n
                     };
-                    s.sidebar.spaces[next].id.clone()
+                    spaces[next].to_string()
                 });
                 self.activate_space(engine, &target);
             }

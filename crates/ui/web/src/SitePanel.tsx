@@ -5,9 +5,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useDismiss } from "./dismiss";
 import { Favicon } from "./Favicon";
-import { CaptureIcon, CodeIcon, Minus, Plus, ShareIcon, Speaker, SpeakerOff } from "./Icons";
+import { BracesIcon, CaptureIcon, CodeIcon, Minus, Plus, ShareIcon, Speaker, SpeakerOff } from "./Icons";
 import { Switch } from "./settings/fields";
-import { findTabInSpace, hostOf, IS_MAC, keyLabel, onSiteDataCleared, send, ZOOM_STEPS, type ClearReport, type PermissionKind, type PermissionRow, type PermissionValue, type TabItem, type TabRuntime, type UiState } from "./bridge";
+import { keysHint, keysLabel } from "./settings/shortcutKeys";
+import { findTabInSpace, hostOf, IS_MAC, onSiteDataCleared, send, ZOOM_STEPS, type ClearReport, type PermissionKind, type PermissionRow, type PermissionValue, type TabItem, type TabRuntime, type UiState } from "./bridge";
 
 const PERMISSION_LABEL: Record<PermissionKind, string> = {
   camera: "Camera",
@@ -151,13 +152,41 @@ function connection(item: TabItem, rt: TabRuntime | undefined): { text: string; 
   return { text: "Unavailable" };
 }
 
-export function SitePanel({ state, item, rt, onClose }: { state: UiState; item: TabItem; rt: TabRuntime | undefined; onClose: () => void }) {
+/**
+ * "Developer mode": the developer bar, the caution border and the console error count for
+ * this site, as for a page this computer serves (`developer.md`). Adds the
+ * site's host to Settings → Developer → "Also local", or takes it out. A
+ * page this computer serves (`own`) has them anyway.
+ */
+function DevSwitch({ state, url, own }: { state: UiState; url: string; own: boolean }) {
+  const dev = state.settings.developer;
+  // As the app compares it: lower case, without a dot at the end.
+  const host = /^https?:/.test(url) && URL.canParse(url) ? new URL(url).hostname.toLowerCase().replace(/\.$/, "") : "";
+  if (!dev.enabled || !host) return null;
+  const named = dev.hosts.includes(host);
+  // On whatever the switch says: this computer's page, or a name under a
+  // pattern (`*.test`), which taking the host out would not turn off.
+  const always = own ? "Always, on this computer" : dev.hosts.some((h) => h.startsWith("*.") && host.endsWith(h.slice(1))) ? "On for its domain" : null;
+  const set = (checked: boolean) => send({ cmd: "set_settings", settings: { developer: { ...dev, hosts: checked ? [...dev.hosts, host] : dev.hosts.filter((h) => h !== host) } } });
+  return (
+    <label className="panel-row" title="The developer bar, a caution border on the tab and the console error count for this site">
+      <span className="flex-1">Developer mode</span>
+      {always ? <span className="text-[12px] text-[var(--muted)]">{always}</span> : <Switch label="Developer mode" checked={named} onChange={set} />}
+    </label>
+  );
+}
+
+/** `inWindow`: the panel fills a window of its own below the top bar
+ * (`TopBarPopup.tsx`), which has the keyboard already. */
+export function SitePanel({ state, item, rt, onClose, inWindow = false }: { state: UiState; item: TabItem; rt: TabRuntime | undefined; onClose: () => void; inWindow?: boolean }) {
   const box = useRef<HTMLDivElement>(null);
-  useDismiss(onClose);
+  useDismiss(onClose, { takeFocus: !inWindow });
   useEffect(() => box.current?.focus(), []);
   const internal = item.url.startsWith("magnetite://");
   const conn = connection(item, rt);
   const zoom = rt?.site?.zoom ?? 100;
+  // The zoom the site has without one of its own (Settings → Appearance).
+  const baseZoom = rt?.site?.base_zoom || 100;
   const step = (dir: 1 | -1) => {
     const next = dir > 0 ? ZOOM_STEPS.find((z) => z > zoom) : [...ZOOM_STEPS].reverse().find((z) => z < zoom);
     if (next) send({ cmd: "set_zoom", percent: next });
@@ -173,7 +202,7 @@ export function SitePanel({ state, item, rt, onClose }: { state: UiState; item: 
 
   return (
     <>
-      <div className="fixed inset-0 z-40" onMouseDown={onClose} />
+      {!inWindow && <div className="fixed inset-0 z-40" onMouseDown={onClose} />}
       <div ref={box} tabIndex={-1} className="site-panel no-drag" role="dialog" aria-label={`Site controls for ${host}`}>
         <div className="flex items-center gap-2.5 px-3 pt-3 pb-2">
           <Favicon url={item.url} src={rt?.favicon} />
@@ -187,12 +216,13 @@ export function SitePanel({ state, item, rt, onClose }: { state: UiState; item: 
 
         <div className="panel-tools">
           {!internal && (
-            <button title={`Capture (${keyLabel("⇧⌘2")})`} onClick={() => { send({ cmd: "capture_start" }); onClose(); }}>
+            <button title={`Capture${keysHint(state.keys, "capture")}`} onClick={() => { send({ cmd: "capture_start" }); onClose(); }}>
               <CaptureIcon width={16} height={16} />
               <span>Capture</span>
-              <kbd>{keyLabel("⇧⌘2")}</kbd>
+              <kbd>{keysLabel(state.keys.capture)}</kbd>
             </button>
           )}
+          {/* The system's share menu: only macOS has one here. */}
           {IS_MAC && (
             <button title="Share" onClick={(e) => { send({ cmd: "share", id: item.id, x: e.clientX, y: e.clientY }); onClose(); }}>
               <ShareIcon width={16} height={16} />
@@ -200,10 +230,16 @@ export function SitePanel({ state, item, rt, onClose }: { state: UiState; item: 
             </button>
           )}
           {!internal && (
-            <button title={`Developer tools (${keyLabel("⌥⌘I", "Ctrl+Shift+I")})`} onClick={() => { send({ cmd: "toggle_devtools" }); onClose(); }}>
+            <button title={`Your own CSS and JavaScript for ${host}`} onClick={() => { send({ cmd: "new_tab", url: `magnetite://ui/settings#code=${encodeURIComponent(host)}` }); onClose(); }}>
+              <BracesIcon width={16} height={16} />
+              <span>Custom CSS & JS</span>
+            </button>
+          )}
+          {!internal && (
+            <button title={`Developer tools${keysHint(state.keys, "toggle_dev_tools")}`} onClick={() => { send({ cmd: "toggle_devtools" }); onClose(); }}>
               <CodeIcon width={16} height={16} />
               <span>Developer tools</span>
-              <kbd>{keyLabel("⌥⌘I", "Ctrl+Shift+I")}</kbd>
+              <kbd>{keysLabel(state.keys.toggle_dev_tools)}</kbd>
             </button>
           )}
         </div>
@@ -218,7 +254,7 @@ export function SitePanel({ state, item, rt, onClose }: { state: UiState; item: 
             <div className="panel-row">
               <span className="flex-1">Zoom</span>
               <button className="ib sm" aria-label="Zoom out" disabled={zoom <= ZOOM_STEPS[0]!} onClick={() => step(-1)}><Minus width={14} height={14} /></button>
-              <button className="zoom-value" aria-label="Reset zoom to 100%" title="Reset to 100%" onClick={() => send({ cmd: "set_zoom", percent: 100 })}>{zoom}%</button>
+              <button className="zoom-value" aria-label={`Reset zoom to ${baseZoom}%`} title={`Reset to ${baseZoom}%`} onClick={() => send({ cmd: "set_zoom", percent: 0 })}>{zoom}%</button>
               <button className="ib sm" aria-label="Zoom in" disabled={zoom >= ZOOM_STEPS[ZOOM_STEPS.length - 1]!} onClick={() => step(1)}><Plus width={14} height={14} /></button>
             </div>
             {/* Asked again when the tab goes to another site; the app takes the host from the address (without port). */}
@@ -227,6 +263,7 @@ export function SitePanel({ state, item, rt, onClose }: { state: UiState; item: 
               <span className="flex-1 text-left">{rt?.muted ? "Unmute tab" : "Mute tab"}</span>
               {rt?.muted ? <SpeakerOff width={15} height={15} /> : <Speaker width={15} height={15} />}
             </button>
+            <DevSwitch state={state} url={item.url} own={rt?.dev.clears ?? false} />
             {/* Per tab: a confirmation or a report is not the next tab's. */}
             <ClearData key={item.id} profileName={profile && !profile.is_default ? profile.name : null} noSite={rt?.site?.secure === null} />
           </div>

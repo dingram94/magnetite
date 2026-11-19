@@ -1,7 +1,8 @@
 //! Smart folders: connecting an account, saving a folder and fetching its
 //! items.
 
-use magnetite_core::smart::{Service, SmartFolder, SmartItem, SmartSource, item_key};
+use magnetite_core::smart::{Service, SmartFolder, SmartSource, item_key};
+use magnetite_core::{SidebarNode, UnixSeconds};
 use magnetite_engine::Engine;
 use serde_json::json;
 
@@ -79,7 +80,7 @@ impl MagnetiteApp {
         };
         std::thread::spawn(move || {
             let result = smart::fetch(&source, &token, &account.login, 6)
-                .map(|items| json!(items).to_string());
+                .map(|fetched| json!(fetched.items).to_string());
             Engine::post(Box::new(move || {
                 Engine::global().finish_reply(ticket, result);
             }));
@@ -125,6 +126,7 @@ impl MagnetiteApp {
                         .collect::<Vec<_>>(),
                 );
                 if let Some(o) = old.filter(|o| o.source == smart.source) {
+                    smart.snoozed = o.snoozed;
                     smart.hidden = o.hidden;
                     smart.filled = o.filled;
                 }
@@ -228,34 +230,53 @@ impl MagnetiteApp {
             return;
         };
         let id = id.to_string();
+        // Snoozed items are listed too: ask for that many more, so they do
+        // not take the places of items the folder shows.
+        let snoozed = u32::try_from(sf.snoozed.len()).unwrap_or(u32::MAX);
+        let asked = sf.limit.saturating_add(snoozed).min(smart::MOST_ITEMS);
         std::thread::spawn(move || {
-            let result = smart::fetch(&sf.source, &token, &login, sf.limit);
+            let result = smart::fetch(&sf.source, &token, &login, asked);
             Engine::post(Box::new(move || {
                 if let Some(app) = global() {
-                    app.smart_fetched(Engine::global(), &id, result);
+                    app.smart_fetched(Engine::global(), &id, &sf, result);
                 }
             }));
         });
     }
 
-    /// On the UI thread: put fetched items into folder `id`. Open tabs the
-    /// source dropped stay until closed; failures keep the items shown.
+    /// On the UI thread: put what the source answered into folder `id`.
+    /// `asked`: the folder as it was when the request went out; an answer
+    /// to a source or account the folder has left since is dropped (the
+    /// request for the new one is on its way). Open tabs the source dropped
+    /// stay until closed; failures keep the items shown.
     pub(super) fn smart_fetched(
         &self,
         engine: &Engine,
         id: &str,
-        result: Result<Vec<SmartItem>, String>,
+        asked: &SmartFolder,
+        result: Result<smart::Fetched, String>,
     ) {
+        let current = self.with_state(|s| {
+            s.smart_folders()
+                .into_iter()
+                .any(|(f, sf)| f == id && sf.source == asked.source && sf.account == asked.account)
+        });
+        if !current {
+            return;
+        }
         let changed = self.with_state(|s| {
             let st = s.smart_status.entry(id.to_string()).or_default();
             st.fetching = false;
-            let items = match result {
-                Ok(mut items) => {
+            let (items, complete) = match result {
+                Ok(smart::Fetched {
+                    mut items,
+                    complete,
+                }) => {
                     st.error = None;
                     st.updated_at = Some(now());
                     // Results come from a server: web addresses only.
                     items.retain(|i| url_policy::allowed(&i.url, url_policy::Source::Stored));
-                    items
+                    (items, complete)
                 }
                 Err(e) => {
                     st.error = Some(e);
@@ -268,8 +289,9 @@ impl MagnetiteApp {
                 .filter(|(_, r)| r.content.is_some())
                 .map(|(t, _)| t.clone())
                 .collect();
-            s.folder_mut(id)
-                .is_some_and(|f| f.apply_smart(&items, |t| open.contains(&t.id), new_id, now()))
+            s.folder_mut(id).is_some_and(|f| {
+                f.apply_smart(&items, complete, |t| open.contains(&t.id), new_id, now())
+            })
         });
         if changed {
             self.push_state(engine);
@@ -278,27 +300,61 @@ impl MagnetiteApp {
         }
     }
 
-    /// Take tab `id` out of its smart folder and keep it out (unloading it
-    /// first, which also moves on if it is the active tab).
-    pub(super) fn smart_hide(&self, engine: &Engine, id: &str) {
+    /// Put tab `id`, an item of its smart folder, away until `until`
+    /// (`None`: until it is woken by hand), unloading it first, which also
+    /// moves on if it is the active tab.
+    pub(super) fn smart_snooze(&self, engine: &Engine, id: &str, until: Option<UnixSeconds>) {
+        let own = self.with_state(|s| {
+            s.parent_folder_mut(id).is_some_and(|f| {
+                let smart = f.smart.as_ref();
+                f.children.iter().any(|n| {
+                    matches!(n, SidebarNode::Tab(t) if t.id == id
+                        && smart.is_some_and(|sm| sm.items.iter().any(|k| k == item_key(t))))
+                })
+            })
+        });
+        if !own {
+            return;
+        }
         self.close_tab(engine, id);
         self.with_state(|s| {
-            if let Some(f) = s.parent_folder_mut(id) {
-                let key = f.children.iter().find_map(|n| match n {
-                    magnetite_core::SidebarNode::Tab(t) if t.id == id => {
-                        Some(item_key(t).to_string())
-                    }
-                    _ => None,
-                });
-                if let (Some(smart), Some(key)) = (f.smart.as_mut(), key) {
-                    smart.items.retain(|k| *k != key);
-                    smart.hidden.push(key);
-                }
-                f.children
-                    .retain(|n| !matches!(n, magnetite_core::SidebarNode::Tab(t) if t.id == id));
+            if s.parent_folder_mut(id).is_some_and(|f| f.snooze(id, until)) {
+                s.runtime.remove(id);
             }
-            s.runtime.remove(id);
         });
         self.push_state(engine);
+    }
+
+    /// Bring the item `url`, snoozed in smart folder `id`, back now.
+    pub(super) fn smart_wake(&self, engine: &Engine, id: &str, url: &str) {
+        let woken = self.with_state(|s| {
+            s.folder_mut(id)
+                .is_some_and(|f| f.wake(|sn| sn.url == url, new_id, now()))
+        });
+        if woken {
+            self.push_state(engine);
+        }
+    }
+
+    /// Bring back the snoozed items whose time has come.
+    pub(super) fn smart_wake_due(&self, engine: &Engine) {
+        let now = now();
+        let woken = self.with_state(|s| {
+            let due: Vec<String> = s
+                .smart_folders()
+                .into_iter()
+                .filter(|(_, sf)| sf.snoozed.iter().any(|sn| sn.is_due(now)))
+                .map(|(id, _)| id)
+                .collect();
+            // Every one of them, so no short-circuiting `any`.
+            let woken = due.iter().filter(|id| {
+                s.folder_mut(id)
+                    .is_some_and(|f| f.wake(|sn| sn.is_due(now), new_id, now))
+            });
+            woken.count() > 0
+        });
+        if woken {
+            self.push_state(engine);
+        }
     }
 }

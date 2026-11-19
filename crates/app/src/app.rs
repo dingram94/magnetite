@@ -1,11 +1,12 @@
 //! The application: reacts to engine events and sidebar commands, keeps
 //! `AppState` consistent, and drives content windows.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock, Weak};
 
-use magnetite_engine::{ContentId, Engine};
+use magnetite_engine::{ContentId, Engine, WindowId};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -16,10 +17,13 @@ use crate::{capture, lock};
 mod adblocking;
 mod addresses;
 mod commands;
+mod dev;
 mod events;
 mod extensions;
 mod mini;
+mod panels;
 mod peek;
+mod record;
 mod screenshots;
 mod shortcuts;
 mod site;
@@ -29,6 +33,8 @@ mod syncing;
 mod tabs;
 
 mod updates;
+
+pub(crate) use events::launch_url;
 
 /// What UI pages get of the state: without bookkeeping they never need (sync
 /// versions, Chromium pins seen, smart folders allowed here), so less of it
@@ -44,6 +50,18 @@ fn for_ui(mut state: Value) -> Value {
     state
 }
 
+/// The state as the sidebar gets it, with the recording that runs
+/// (`recording`, `Recorder::for_ui`).
+fn ui_json(
+    state: &AppState,
+    extensions: &[magnetite_engine::ExtensionInfo],
+    recording: Value,
+) -> Value {
+    let mut ui = for_ui(json!(state.ui_state(extensions)));
+    ui["recording"] = recording;
+    ui
+}
+
 /// Where "Chrome Web Store…" goes: its extensions section.
 const EXTENSION_STORE: &str = "https://chromewebstore.google.com/category/extensions";
 
@@ -52,15 +70,16 @@ pub struct MagnetiteApp {
     data_dir: PathBuf,
     import: ArcImport,
     open_on_start: Option<String>,
-    /// A link another program started Magnetite with (Windows: it is the
-    /// default browser and was not running).
-    link_on_start: Option<String>,
+    /// Addresses from this start's command line, opened as links from
+    /// another app once the sidebar is up.
+    launch_urls: Vec<String>,
     sync: OnceLock<SyncClient>,
     /// A sync chain is being started or joined: a second request would make
     /// a second chain and replace the stored sync code.
     sync_connecting: AtomicBool,
-    /// Content windows shown by the last `present`, to detect tab switches.
-    visible: Mutex<Vec<ContentId>>,
+    /// Content windows shown by the last `present`, per window, to detect
+    /// tab switches.
+    visible: Mutex<HashMap<WindowId, Vec<ContentId>>>,
     capture: Mutex<CaptureState>,
     /// The extensions the sidebar was last shown (refreshed on tick).
     shown_extensions: Mutex<Vec<magnetite_engine::ExtensionInfo>>,
@@ -71,6 +90,10 @@ pub struct MagnetiteApp {
     save_queued: AtomicBool,
     show_pace: Mutex<ShowPace>,
     blocker: adblocking::Blocker,
+    /// The recording of a page that runs (`record.rs`).
+    record: Mutex<record::Recorder>,
+    /// The spaces' own keys the engine was last told (`apply_space_keys`).
+    space_keys: Mutex<Vec<magnetite_engine::Combo>>,
 }
 
 /// When the sidebar was last sent the state, and whether another sending
@@ -107,6 +130,8 @@ const PROMPT_SETTLE: std::time::Duration = std::time::Duration::from_secs(1);
 
 /// The page of the first start: sync, import, a few keys (`Welcome.tsx`).
 const WELCOME_URL: &str = "magnetite://ui/welcome";
+/// The page behind "All downloads" (`DownloadsPage.tsx`).
+const DOWNLOADS_URL: &str = "magnetite://ui/downloads";
 
 /// A sidebar tab being dragged over the page area (drop-zone overlay).
 #[derive(Default)]
@@ -129,6 +154,8 @@ const LATE_DROP: std::time::Duration = std::time::Duration::from_secs(1);
 #[derive(Default)]
 struct CaptureState {
     session: Option<(ContentId, magnetite_engine::FrozenFrame)>,
+    /// A capture set is being taken: the page changes size and colours.
+    set_running: bool,
     result: Option<capture::Capture>,
 }
 
@@ -173,6 +200,8 @@ enum PaletteMode {
     NewProfile,
     /// The quick search, from anywhere: the pick opens in a mini window.
     Quick,
+    /// The spaces by name, to go to one.
+    Spaces,
 }
 
 impl PaletteMode {
@@ -185,28 +214,36 @@ impl PaletteMode {
             Self::NewSpace => "new_space",
             Self::NewProfile => "new_profile",
             Self::Quick => "quick",
+            Self::Spaces => "spaces",
         }
     }
 }
 
 impl MagnetiteApp {
+    /// The languages websites are asked for, as the engine takes them at
+    /// its start.
+    pub fn accept_languages(&self) -> String {
+        self.with_state(|s| s.settings.languages.accept_languages())
+    }
+
     pub fn new(
         data_dir: PathBuf,
+        scriptlets: Option<PathBuf>,
         import: ArcImport,
         open_on_start: Option<String>,
-        link_on_start: Option<String>,
+        launch_urls: Vec<String>,
     ) -> Self {
         let state = AppState::load_or_default(&data_dir, import);
-        let blocker = adblocking::Blocker::start(&data_dir, &state.settings.adblock);
+        let blocker = adblocking::Blocker::start(&data_dir, scriptlets, &state.settings.adblock);
         Self {
             state: Mutex::new(state),
             data_dir,
             import,
             open_on_start,
-            link_on_start,
+            launch_urls,
             sync: OnceLock::new(),
             sync_connecting: AtomicBool::new(false),
-            visible: Mutex::new(Vec::new()),
+            visible: Mutex::new(HashMap::new()),
             capture: Mutex::new(CaptureState::default()),
             shown_extensions: Mutex::new(Vec::new()),
             split_drag: Mutex::new(SplitDrag::default()),
@@ -215,7 +252,14 @@ impl MagnetiteApp {
             save_queued: AtomicBool::new(false),
             show_pace: Mutex::new(ShowPace::default()),
             blocker,
+            record: Mutex::new(record::Recorder::default()),
+            space_keys: Mutex::new(Vec::new()),
         }
+    }
+
+    /// The pages on screen, in any window.
+    fn on_screen(&self) -> Vec<ContentId> {
+        lock(&self.visible).values().flatten().copied().collect()
     }
 
     /// Live content window of a tab.
@@ -223,8 +267,13 @@ impl MagnetiteApp {
         self.with_state(|s| s.runtime.get(tab_id).and_then(|r| r.content))
     }
 
+    /// Work on the state, as the engine's current window sees it: the
+    /// state follows whenever the engine has moved on to another window.
     fn with_state<R>(&self, f: impl FnOnce(&mut AppState) -> R) -> R {
         let mut guard = lock(&self.state);
+        if let Some(engine) = Engine::try_global() {
+            guard.enter(engine.current_window());
+        }
         f(&mut guard)
     }
 
@@ -232,6 +281,11 @@ impl MagnetiteApp {
     /// rather than at once. A loading page reports a dozen changes within
     /// a second, and each save waits for the disk.
     fn push_state(&self, engine: &Engine) {
+        // A private tab that closed takes its profile along.
+        let released = self.with_state(AppState::release_private_profiles);
+        if !released.is_empty() {
+            engine.forget_contexts(&released);
+        }
         self.save_soon();
         self.show_state_paced(engine);
     }
@@ -291,6 +345,36 @@ impl MagnetiteApp {
             shown: Some(std::time::Instant::now()),
             queued: false,
         };
+        // Every window shows the sidebar its own way; the current one last,
+        // for what there is one of (the extension menu, the mini windows'
+        // list of spaces).
+        let current = engine.current_window();
+        let mut windows = engine.windows();
+        windows.retain(|win| *win != current);
+        windows.push(current);
+        for win in windows {
+            engine.in_window(win, || self.show_window_state(engine));
+        }
+        self.apply_space_keys(engine);
+        // Another tab, split or peek on screen: other prompts may show.
+        self.show_prompts(engine);
+    }
+
+    /// Tell the engine the keys that spaces have of their own, when they
+    /// changed: here, by a space that came or went, or through sync.
+    fn apply_space_keys(&self, engine: &Engine) {
+        let keys: Vec<_> =
+            self.with_state(|s| s.space_keys().into_iter().map(|(_, keys)| keys).collect());
+        let mut told = lock(&self.space_keys);
+        if *told != keys {
+            engine.set_space_keys(&keys);
+            *told = keys;
+        }
+    }
+
+    /// The current window's part of `show_state`.
+    fn show_window_state(&self, engine: &Engine) {
+        self.settle_web_panel(engine);
         let context = self.with_state(|s| s.front_context());
         let extensions = engine.extensions(context.as_ref());
         let chromium: Vec<String> = extensions
@@ -304,18 +388,23 @@ impl MagnetiteApp {
                 s.persist();
             }
         });
+        let recording = lock(&self.record).for_ui();
         let (json, chrome, accent, pinned) = self.with_state(|s| {
             (
-                for_ui(json!(s.ui_state(&extensions))).to_string(),
+                ui_json(s, &extensions, recording).to_string(),
                 s.chrome_rgb(),
                 s.accent_rgb(),
                 s.settings.pinned_extensions.clone(),
             )
         });
         engine.set_extension_menu(context, pinned);
+        engine.set_dev_bar_visible(self.dev_bar_wanted());
         // "Open in" of mini windows: the active space first.
         let spaces = self.with_state(|s| {
+            // Not the private space: a page from elsewhere would not be
+            // private there.
             let mut spaces: Vec<(String, String)> = (s.sidebar.spaces.iter())
+                .filter(|sp| !s.is_private_space(&sp.id))
                 .map(|sp| (sp.id.clone(), sp.title.clone()))
                 .collect();
             if let Some(i) = spaces.iter().position(|(id, _)| *id == s.active_space) {
@@ -327,21 +416,33 @@ impl MagnetiteApp {
         *lock(&self.shown_extensions) = extensions;
         engine.set_chrome_color(0xFF00_0000 | chrome);
         engine.set_accent_color(0xFF00_0000 | accent);
-        engine
-            .set_empty_hint(self.with_state(|s| s.visible_panes().is_empty() && s.peek.is_none()));
         engine.ui_eval_all(&format!(
             "window.__magnetite && window.__magnetite.setState({json})"
         ));
-        // Another tab, split or peek on screen: other prompts may show.
-        self.show_prompts(engine);
     }
 
-    /// Send the download list to both sidebars and the notification panel.
+    /// Send the download list to both sidebars, the notification panel and
+    /// open "All downloads" tabs.
     fn show_downloads(&self, engine: &Engine) {
         let list = self.with_state(|s| s.downloads.for_ui());
         let js = format!("window.__magnetite && window.__magnetite.downloads({list})");
         engine.ui_eval_all(&js);
         engine.notifications_eval(&js);
+        for page in self.own_page_tabs(DOWNLOADS_URL) {
+            engine.content_ui_eval(page, &js);
+        }
+    }
+
+    /// The loaded tabs showing Magnetite's own page `url`: news such a page
+    /// shows but does not ask for goes to them.
+    fn own_page_tabs(&self, url: &str) -> Vec<ContentId> {
+        self.with_state(|s| {
+            s.sidebar
+                .all_tabs()
+                .filter(|t| t.url.starts_with(url))
+                .filter_map(|t| s.runtime.get(&t.id)?.content)
+                .collect()
+        })
     }
 
     fn ui_call(engine: &Engine, method: &str, arg: &Value) {
@@ -351,11 +452,15 @@ impl MagnetiteApp {
     }
 
     /// The page a command acts on: the page window a key came from, else the
-    /// open peek, else the active tab.
+    /// open peek, else the web panel while the keyboard is in it, else the
+    /// active tab.
     fn focused_content(&self, from: Option<ContentId>) -> Option<ContentId> {
         from.or_else(|| {
+            let panel = Engine::try_global()
+                .filter(|e| e.web_panel_focused())
+                .and_then(Engine::web_panel_content);
             self.with_state(|s| {
-                s.peek.as_ref().map(|p| p.content).or_else(|| {
+                (s.peek.as_ref().map(|p| p.content)).or(panel).or_else(|| {
                     s.active_tab_id()
                         .and_then(|t| s.runtime.get(t))
                         .and_then(|r| r.content)
@@ -364,7 +469,8 @@ impl MagnetiteApp {
         })
     }
 
-    /// Run `f` on the page in front: an open peek, else the active tab.
+    /// Run `f` on the page in front: an open peek, a web panel with the
+    /// keyboard, else the active tab.
     fn on_active_content(&self, engine: &Engine, f: impl FnOnce(&Engine, ContentId)) {
         if let Some(c) = self.focused_content(None) {
             f(engine, c);

@@ -1,12 +1,13 @@
 //! The window's own buttons (minimise, maximise, close) where the system
-//! draws none into a frameless window: Windows and Linux. macOS has its
-//! traffic lights.
+//! draws none into a frameless window: Windows. macOS has its traffic
+//! lights, and Linux leaves them to the top bar.
 //!
-//! They sit where those systems have them, at the top right: a row above the
-//! page area, in the frame window itself, so it moves and resizes with the
+//! They sit where Windows has them, at the top right: a row above the page
+//! area, in the frame window itself, so it moves and resizes with the
 //! frame. (A small window of its own trailed behind the frame's edge while
 //! it was resized.) The rest of the row drags the window
-//! (`apply_drag_regions`).
+//! (`apply_drag_regions`). With the top bar on, that has the buttons and
+//! the row goes.
 
 use cef::*;
 
@@ -52,30 +53,26 @@ impl Action {
     }
 }
 
-/// The page area with the buttons' row above it.
+/// The row of the window's buttons.
 #[derive(Clone)]
 pub(crate) struct Caption {
-    /// Row and page area, one above the other: what the frame lays out
-    /// beside the sidebar.
-    column: Panel,
     row: Panel,
     buttons: [(Action, LabelButton); 3],
 }
 
 impl Caption {
+    /// The row's height.
+    pub(crate) const HEIGHT: i32 = BUTTON.height;
+    /// The width the buttons take at the row's right end.
+    pub(crate) const BUTTONS_WIDTH: i32 = 3 * BUTTON.width;
+
     /// Whether the window's buttons are ours to draw.
     pub(crate) const fn wanted() -> bool {
-        !cfg!(target_os = "macos")
+        cfg!(target_os = "windows")
     }
 
-    /// Stack the buttons' row and `content` (the page area) in a column.
-    pub(crate) fn new(content: &Panel) -> Option<Self> {
-        let column = panel_create(None)?;
-        let layout = column.set_to_box_layout(Some(&BoxLayoutSettings {
-            horizontal: 0,
-            cross_axis_alignment: AxisAlignment::STRETCH,
-            ..Default::default()
-        }))?;
+    /// The row with its buttons at the right end.
+    pub(crate) fn new() -> Option<Self> {
         let row = panel_create(None)?;
         row.set_to_box_layout(Some(&BoxLayoutSettings {
             horizontal: 1,
@@ -88,12 +85,7 @@ impl Caption {
                 Some(&mut CaptionButton::new(action)),
                 Some(&CefString::from(action.sign(false))),
             )?;
-            let font = if cfg!(target_os = "windows") {
-                "Segoe UI Symbol, 13px"
-            } else {
-                "Sans, 13px"
-            };
-            button.set_font_list(Some(&CefString::from(font)));
+            button.set_font_list(Some(&CefString::from("Segoe UI Symbol, 13px")));
             button.set_horizontal_alignment(HorizontalAlignment::CENTER);
             button.set_minimum_size(Some(&BUTTON));
             button.set_maximum_size(Some(&BUTTON));
@@ -111,25 +103,16 @@ impl Caption {
             button(Action::Maximize)?,
             button(Action::Close)?,
         ];
-        column.add_child_view(Some(&mut View::from(&row)));
-        let mut content = View::from(content);
-        column.add_child_view(Some(&mut content));
-        layout.set_flex_for_view(Some(&mut content), 1);
-        Some(Self {
-            column,
-            row,
-            buttons,
-        })
+        Some(Self { row, buttons })
     }
 
-    /// What the frame lays out beside the sidebar.
+    /// What the frame lays out above the pages.
     pub(crate) fn view(&self) -> View {
-        View::from(&self.column)
+        View::from(&self.row)
     }
 
     /// Row and buttons on the chrome's colour `argb`.
     pub(crate) fn set_background(&self, argb: u32) {
-        self.column.set_background_color(argb);
         self.row.set_background_color(argb);
         for (action, button) in &self.buttons {
             let hot = matches!(button.state(), ButtonState::HOVERED | ButtonState::PRESSED);
@@ -138,42 +121,19 @@ impl Caption {
     }
 
     /// The window was maximised or restored: the middle button says what a
-    /// click does now. A full screen window has no row.
-    pub(crate) fn sync(&self, maximized: bool, fullscreen: bool) {
+    /// click does now. `shown`: whether the window has the row at all.
+    pub(crate) fn sync(&self, maximized: bool, shown: bool) {
         for (action, button) in &self.buttons {
             if *action == Action::Maximize {
                 button.set_text(Some(&CefString::from(action.sign(maximized))));
             }
         }
-        if (self.row.is_visible() != 0) == fullscreen {
-            self.row.set_visible((!fullscreen).into());
-            self.column.layout();
+        if (self.row.is_visible() != 0) != shown {
+            self.row.set_visible(shown.into());
+            if let Some(column) = self.row.parent_view() {
+                column.invalidate_layout();
+            }
         }
-    }
-
-    /// The row and, inside it, the buttons, both in the frame window's
-    /// coordinates: the row drags the window, the buttons take clicks.
-    pub(crate) fn regions(&self) -> (Rect, Rect) {
-        // The column is the frame's child, the row the column's.
-        let column = self.column.bounds();
-        let row = self.row.bounds();
-        let row = Rect {
-            x: column.x + row.x,
-            y: column.y + row.y,
-            width: row.width,
-            height: if self.row.is_visible() == 0 {
-                0
-            } else {
-                row.height
-            },
-        };
-        let width = (3 * BUTTON.width).min(row.width);
-        let buttons = Rect {
-            x: row.x + row.width - width,
-            width,
-            ..row.clone()
-        };
-        (row, buttons)
     }
 }
 
@@ -215,7 +175,7 @@ wrap_button_delegate! {
         fn on_button_state_changed(&self, button: Option<&mut Button>) {
             let Some(button) = button.and_then(|b| b.as_label_button()) else { return };
             let hot = matches!(button.state(), ButtonState::HOVERED | ButtonState::PRESSED);
-            let chrome = Engine::global().lock().chrome_color;
+            let chrome = Engine::global().lock().win.chrome_color;
             paint(&button, self.action, hot, chrome);
         }
     }

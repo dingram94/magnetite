@@ -22,7 +22,11 @@ impl Engine {
         if self.lock().notifications.is_some() {
             return;
         }
-        self.lock().notifications_height = FIRST_HEIGHT;
+        {
+            let mut inner = self.lock();
+            inner.notifications_height = FIRST_HEIGHT;
+            inner.notifications_win = inner.current;
+        }
         let bounds = self.notifications_bounds(FIRST_HEIGHT);
         self.create_overlay(bounds, URL, 12.0, true, false, Slot::Notifications, false);
     }
@@ -52,17 +56,37 @@ impl Engine {
         }
     }
 
-    /// Keep the panel at the page area's top right and above the pages
-    /// (call after pages were placed or raised).
+    /// The user turned to the current window: an open panel moves there,
+    /// where CEF can give a window another parent (`can_move_pages`).
+    pub(crate) fn notifications_follow(&self) {
+        if !self.can_move_pages() {
+            return;
+        }
+        {
+            let mut inner = self.lock();
+            if inner.notifications.is_none() || inner.notifications_win == inner.current {
+                return;
+            }
+            inner.notifications_win = inner.current;
+        }
+        // Shown again, it moves (`OverlayWindowDelegate::parent_window`).
+        self.place_notifications();
+    }
+
+    /// Keep the panel at the page area's top right of its window and above
+    /// the pages (call after pages were placed or raised).
     pub(crate) fn place_notifications(&self) {
-        let (window, height) = {
-            let inner = self.lock();
-            (inner.notifications.clone(), inner.notifications_height)
-        };
-        let Some(window) = window else { return };
-        window.set_bounds(Some(&self.notifications_bounds(height)));
-        window.layout();
-        crate::floatbar::show_quietly(&window);
+        let win = self.lock().notifications_win;
+        self.in_window(win, || {
+            let (window, height) = {
+                let inner = self.lock();
+                (inner.notifications.clone(), inner.notifications_height)
+            };
+            let Some(window) = window else { return };
+            window.set_bounds(Some(&self.notifications_bounds(height)));
+            window.layout();
+            crate::floatbar::show_quietly(&window);
+        });
     }
 
     fn notifications_bounds(&self, height: i32) -> Rect {

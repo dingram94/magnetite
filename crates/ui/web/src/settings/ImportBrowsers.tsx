@@ -22,7 +22,7 @@ export function ImportBrowsers() {
   return (
     <Field
       label="Import from another browser"
-      hint="Adds a space for each space or workspace of that browser, or for each profile if it has neither, with its open tabs, pinned tabs, tab groups and bookmarks. Some browsers are read from their default profile only. Your sidebar stays as it is. Passwords, cookies and extensions are not copied, and nothing leaves this computer."
+      hint="Adds a space for each space or workspace of that browser, or for each profile that has neither, with its tabs, tab groups and bookmarks. Your sidebar stays as it is. Passwords, cookies and extensions are not copied, and nothing leaves this computer."
     >
       {sources?.length === 0 && <p className="set-hint">No other browser found on this computer.</p>}
       {sources && sources.length > 0 && (
@@ -59,7 +59,7 @@ export function ImportBookmarksFile() {
   return (
     <Field
       label="Import a bookmarks file"
-      hint="The file a browser writes with “Export Bookmarks”. In Safari: File → Export → Bookmarks…. Its bookmarks and folders are added to the bookmarks of the current space; addresses that are there already are skipped."
+      hint="The file a browser writes with “Export Bookmarks” (Safari: File → Export → Bookmarks…). Its bookmarks join those of the current space; addresses already there are skipped."
     >
       <input
         ref={input}

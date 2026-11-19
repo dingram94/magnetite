@@ -73,6 +73,7 @@ pub fn run(config: EngineConfig, delegate: Arc<dyn EngineDelegate>) -> i32 {
         .as_ref()
         .map(|p| CefString::from(p.to_string_lossy().as_ref()))
         .unwrap_or_default();
+    let accept_languages = CefString::from(config.accept_languages.as_str());
     Engine::init(config, delegate);
 
     let mut app = BrowserApp::new();
@@ -82,6 +83,7 @@ pub fn run(config: EngineConfig, delegate: Arc<dyn EngineDelegate>) -> i32 {
         root_cache_path: CefString::from(root_cache.to_string_lossy().as_ref()),
         cache_path: CefString::from(default_cache.to_string_lossy().as_ref()),
         log_severity: LogSeverity::WARNING,
+        accept_language_list: accept_languages,
         // Development builds only: Chrome DevTools Protocol on localhost, so
         // tests can drive pages without synthetic input. Any local program
         // could drive it, so release builds ignore the variable.

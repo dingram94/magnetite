@@ -20,9 +20,9 @@ export CEF_PATH="$HOME/.local/share/cef"
 ```
 
 The official CEF builds come without the H.264, AAC and HEVC decoders. On
-macOS with Apple silicon, releases and CI use
+macOS with Apple silicon and on Linux x86_64, releases and CI use
 [Magnetite's own CEF build](https://github.com/magnetite-browser/magnetite-cef)
-instead, which has them and one patch. `scripts/cef.sh` fetches it (135 MB),
+instead, which has them and our patches. `scripts/cef.sh` fetches it,
 checks its hash and unpacks it:
 
 ```sh
@@ -33,8 +33,10 @@ Without that, the build uses the official CEF and everything but those
 formats works the same.
 
 All systems need [Rust](https://rustup.rs) (`rust-toolchain.toml` picks the
-version), CMake, Ninja, Node 22 and pnpm 10 (`corepack enable`, or
-`npm install -g pnpm@10`).
+version), CMake, Ninja, git, Node 22 and pnpm 10 (`corepack enable`, or
+`npm install -g pnpm@10`). Besides CEF, a build fetches uBlock Origin's
+source at a pinned commit once, for the ad blocker's scriptlets
+(`scripts/scriptlets.sh`).
 
 ## macOS
 
@@ -46,7 +48,8 @@ scripts/bundle.sh             # dev build -> target/bundle/Magnetite.app
 open target/bundle/Magnetite.app --args --mock-keychain
 ```
 
-`scripts/bundle.sh [--release]` is `scripts/build.sh` without the zip, into
+`scripts/bundle.sh [--release]` is `scripts/build.sh` without the zip and
+the disk image, into
 `target/bundle`. `--mock-keychain` avoids the macOS keychain prompt that
 unsigned dev builds trigger on every rebuild (cookies are then stored
 unencrypted in the dev profile). Other useful flags: `--load-extension <dir>`
@@ -92,12 +95,14 @@ Never run with `--no-sandbox`.
 From macOS (or anywhere with Podman or Docker), build and test for Linux in a
 container: `scripts/linux-container.sh build` or `scripts/linux-container.sh test`.
 
-In a Wayland session Magnetite runs as an X11 client, through XWayland, until
-its child windows work under Wayland (`docs/adr/0012-wayland.md`);
-`--ozone-platform=wayland` runs it as a Wayland client all the same, which
-needs a CEF with Magnetite's Wayland patch: with the official CEF of the
-build above it stops at the first page. A session without XWayland
-therefore needs that CEF. To test
+In a Wayland session Magnetite runs as a Wayland client if its CEF has
+Magnetite's Wayland patch (`docs/adr/0012-wayland.md`): the package then
+holds `magnetite-patches.txt`, from Magnetite's CEF build, which names it.
+The Linux x86_64 releases have it. With the official CEF (a build without
+`scripts/cef.sh`, or aarch64) it runs as an X11 client, through
+XWayland, and `--ozone-platform=wayland` stops it at the first page; a
+session without XWayland therefore needs Magnetite's CEF.
+`--ozone-platform=x11` or `=wayland` picks one by hand. To test
 either without a desktop, `scripts/wayland-test.sh` runs a container build in
 a headless Wayland session:
 

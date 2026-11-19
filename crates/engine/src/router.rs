@@ -171,6 +171,10 @@ wrap_task! {
             let engine = Engine::global();
             CURRENT.with(|c| *c.borrow_mut() = Some(self.callback.clone()));
             SENDER.set(Some(self.sender));
+            // The window that asks is the one the user works in.
+            if let Some(win) = engine.window_of_browser(self.sender) {
+                engine.enter(win);
+            }
             let result = engine.delegate.on_ui_query(engine, &self.origin, &self.request);
             SENDER.set(None);
             // Still current: answer now. Taken: the delegate answers later.

@@ -1,5 +1,6 @@
 // What the Settings page works with.
 import type { Color, DefaultBrowser, ExtensionInfo, Settings } from "../bridge";
+import type { ShortcutAction } from "./shortcutKeys";
 
 /** Everything the Settings page shows (`get_settings`). */
 export interface Info {
@@ -8,7 +9,8 @@ export interface Info {
   /** `synced` false: stays on this device, because only spaces kept here use it. */
   profiles: { id: string; name: string; is_default: boolean; ephemeral?: boolean; synced: boolean }[];
   /** `synced` false: kept on this device alone ("Only on this device"). */
-  spaces: { id: string; title: string; icon?: string; accent?: Color | null; profile_id: string; synced: boolean }[];
+  /** `keys`: the keys that go to the space (Settings → Shortcuts), null without. `shortcut`: the keys saved for it, which may not count here (fixed on this system, or something else has them). */
+  spaces: { id: string; title: string; icon?: string; accent?: Color | null; profile_id: string; synced: boolean; keys: string | null; shortcut: string | null }[];
   active_space: string;
   favorites: { id: string; title: string; url: string; profile_id?: string | null }[];
   archive_count: number;
@@ -22,6 +24,8 @@ export interface Info {
   repository: string;
   engine: { chromium: string; cef: string };
   data_dir: string;
+  /** The chosen download folder is not there (any more). */
+  download_folder_missing: boolean;
   /** Installed extensions of the page in front's profile. */
   extensions: ExtensionInfo[];
   /** The filter lists one can subscribe to, and whether downloads are under way. */
@@ -29,6 +33,8 @@ export interface Info {
     lists: { id: string; name: string; about: string; host: string; fetched_at: number | null; error: string | null }[];
     working: boolean;
   };
+  /** Every shortcut whose keys can be changed, with the keys it has and those it began with (null: none). */
+  shortcuts: { action: ShortcutAction; keys: string | null; default: string | null }[];
   /** Where Chromium keeps its encryption key: macOS Keychain, or its fixed test key (`--mock-keychain`). */
   keychain: "keychain" | "test";
 }

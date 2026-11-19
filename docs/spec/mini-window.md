@@ -9,13 +9,15 @@ a tab.
 
 | Trigger | Result |
 |---|---|
-| A link from another app | A mini window, if Settings → General → "Open links from other apps in" says "a mini window" |
+| A link from another app | A mini window, while Settings → Links → "Open links from other apps in" says "a mini window" (the default) and no rule names a space for its site (`spaces.md`, "Links from other apps") |
 | `Cmd+Option+N`, in any app | The quick search (below); Enter opens the pick in a mini window |
 | File → New Mini Window (`Cmd+Option+N`) | The same, from Magnetite's menu bar |
 | "Open Link in New Window" in a page's menu | A mini window with that link, in the page's profile |
 
-- The default for links from other apps stays "a new tab in the current
-  space"; "a peek window" is the third choice (`peek.md`).
+- A new installation opens links from other apps in a mini window; the
+  welcome page asks (`first-start.md`). "A new tab in the current space"
+  and "a peek window" (`peek.md`) are the other choices. An installation
+  from before mini windows were the default keeps what it had.
 - An address Magnetite does not open from that source, such as
   `javascript:` or `data:`, opens nothing (`docs/design/security.md`).
 - Several mini windows can be open at once. Each new one opens centred on
@@ -63,7 +65,7 @@ A row above the page holds, from left to right:
   follows the rules for pages (`peek.md`): it opens in the main window, as
   a peek or a tab, and the main window comes to the front.
 - In the page, `Cmd+W` closes the mini window; `Esc` belongs to the page.
-  Reload, back, forward, zoom, Copy Link, Print and developer tools, by key
+  Reload, back, forward, zoom, find, Copy Link, Print and developer tools, by key
   or from the menu bar, act on the mini window's page. Developer tools open
   in a window of their own. Every other Magnetite shortcut brings the main
   window to the front and acts there.

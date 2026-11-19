@@ -123,12 +123,13 @@ Open settings match by keyword only ("archive"; "settings", "preferences").
 
 | Group | Commands |
 |---|---|
-| Spaces and tabs | New space, New folder, Archive all Today tabs, Reopen last archived tab, Switch to <space> (each other space) |
+| Spaces and tabs | New space, Show all spaces… (the list of spaces, `spaces.md`), New folder, Archive all Today tabs, Reopen last archived tab, Switch to <space> (each other space) |
 | This tab | Pin tab or Unpin tab, Back to pinned page (a pinned tab or favorite away from its page), Add tab to favorites or Remove tab from favorites, Keep tab active or Stop keeping tab active, Move tab to <space> (each other space), Duplicate tab, Close other Today tabs |
-| Views | Open archive, Open history, Open downloads, Open bookmarks, Open settings, Toggle sidebar, Import from another browser… |
+| Views | Open archive, Open history, Open downloads, Open bookmarks, Open settings, Toggle sidebar, Toggle top bar, Import from another browser… |
 | Links | Copy link without trackers, Copy original link, Copy link as Markdown, Bookmark this page |
-| Page | Print page, Reset zoom, Toggle developer tools, Capture page…, Copy last capture |
-| Split view | Add right split…, Add left split…, Add top split…, Add bottom split…, Even out split sizes, Separate split tabs |
+| Page | Find in page…, Print page, Reset zoom, Toggle developer tools, Capture page…, Copy last capture |
+| Developer (`developer.md`) | Open console, Pick an element, Open network panel, Open storage and service workers, Reset page, the emulation commands (Show page in dark mode, Take page offline, …, Show page as it is), Responsive split, Capture set, Record page as a video, Open beside as <profile> |
+| Split view | Add right split…, Add left split…, Add top split…, Add bottom split…, Even out split sizes, Arrange split as grid, Separate split tabs |
 
 "This tab" is the active tab (with a split on screen, the pane last
 clicked), and only what fits it is listed: a favorite cannot be pinned,
@@ -141,7 +142,11 @@ space but the active one. "Print page" prints the page in front, a peek
 included (`site-controls.md`).
 
 "New space" creates a space named "New space" at once; `Cmd+Shift+N` asks
-for the name first. The copy commands are confirmed in the sidebar, since
+for the name first. "Open private space" opens the private space or goes to
+it, and "Close private space" and "Hide private space" show while it is
+open and not hidden (`spaces.md`). For a
+tab of the private space only "Duplicate tab" is offered: it opens the
+address in a new private tab. The copy commands are confirmed in the sidebar, since
 the command bar closes at once: the link button of the address row for a
 link, a short note for a capture.
 

@@ -3,7 +3,7 @@
 //! Settings and the site panel show. The lists are `adblock.rs`.
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -31,6 +31,9 @@ pub(super) struct Blocker {
     /// The lists from before compiled while the engine starts
     /// (`Blocker::start`), awaited before the first page is made.
     starting: Arc<Mutex<Option<JoinHandle<()>>>>,
+    /// The file with the scriptlets' code, where the package has one
+    /// (`adblock.rs`).
+    scriptlets: Arc<Option<PathBuf>>,
 }
 
 /// How often a tick (one a minute) looks for lists to fetch again
@@ -40,8 +43,13 @@ const LOOK_EVERY_TICKS: u32 = 60;
 impl Blocker {
     /// Compile the lists downloaded before, on a thread, while the engine
     /// starts: pages restored at start are blocked from their first request.
-    pub(super) fn start(data_dir: &Path, settings: &AdblockSettings) -> Self {
+    pub(super) fn start(
+        data_dir: &Path,
+        scriptlets: Option<PathBuf>,
+        settings: &AdblockSettings,
+    ) -> Self {
         let blocker = Self {
+            scriptlets: Arc::new(scriptlets),
             generation: Arc::new(Mutex::new(0)),
             working: Arc::new(AtomicUsize::new(0)),
             errors: Arc::new(Mutex::new(HashMap::new())),
@@ -73,7 +81,10 @@ impl Blocker {
     /// Compile `lists` and block with them, unless the settings changed
     /// since `generation`.
     fn compile_and_hand_over(&self, generation: u64, dir: &Path, lists: &[String]) {
-        let filters = Filters::compile(adblock::load(dir, lists));
+        // Without the scriptlets' file (a run from the checkout) the
+        // lists' scriptlet rules stay unused.
+        let scriptlets = (self.scriptlets.as_deref()).and_then(|p| std::fs::read_to_string(p).ok());
+        let filters = Filters::compile(adblock::load(dir, lists), scriptlets.as_deref());
         let current = lock(&self.generation);
         if *current == generation {
             magnetite_engine::set_filters(Some(filters));
@@ -191,7 +202,7 @@ impl MagnetiteApp {
                     "id": l.id,
                     "name": l.name,
                     "about": l.about,
-                    "host": url::Url::parse(l.url).ok().and_then(|u| u.host_str().map(str::to_string)),
+                    "host": l.urls.first().and_then(|u| url::Url::parse(u).ok()).and_then(|u| u.host_str().map(str::to_string)),
                     "fetched_at": fetched,
                     "error": errors.get(l.id),
                 })

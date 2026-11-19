@@ -4,16 +4,18 @@ import { useEffect, useRef, useState } from "react";
 import type { MenuItem } from "./ContextMenu";
 import { Check, LinkIcon, LockAlert, SiteIcon, SpeakerOff } from "./Icons";
 import { SitePanel } from "./SitePanel";
-import { hostOf, keyLabel, onCopied, onOpenSitePanel, send, type CopyResult, type LinkVariant, type TabItem, type TabRuntime, type UiState } from "./bridge";
+import { keysHint } from "./settings/shortcutKeys";
+import { hostOf, onCopied, onOpenSitePanel, send, type CopyResult, type LinkVariant, type TabItem, type TabRuntime, type UiState } from "./bridge";
 
 /** Every non-default state of a page, most important first. */
 export function siteStates(rt: TabRuntime | undefined): { key: string; label: string }[] {
   if (!rt) return [];
   const out: { key: string; label: string }[] = [];
   if (rt.camera || rt.microphone) out.push({ key: "capture", label: rt.camera && rt.microphone ? "Using camera and microphone" : rt.camera ? "Using the camera" : "Using the microphone" });
+  if (rt.shared) out.push({ key: "capture", label: "This tab is being shared" });
   if (rt.site?.cert_error) out.push({ key: "connection", label: "Certificate problem" });
   else if (rt.site?.secure === false) out.push({ key: "connection", label: "Not encrypted" });
-  if (rt.site && rt.site.zoom !== 100) out.push({ key: "zoom", label: `Zoom ${rt.site.zoom}%` });
+  if (rt.site && rt.site.zoom !== (rt.site.base_zoom || 100)) out.push({ key: "zoom", label: `Zoom ${rt.site.zoom}%` });
   if (rt.muted) out.push({ key: "muted", label: "Muted" });
   return out;
 }
@@ -29,6 +31,14 @@ function ChipIcon({ state }: { state?: string }) {
   );
 }
 
+/** `url` without what every address has: `https://`, `www.` and a lone `/`. */
+export function shownAddress(url: string): string {
+  return url.replace(/^https:\/\//, "").replace(/^www\./, "").replace(/^([^/?#]+)\/$/, "$1");
+}
+
+/** The copy menu's size as a window (three rows of `ContextMenu`). */
+const COPY_MENU = { width: 208, height: 8 + 3 * 28 };
+
 function statusText(r: CopyResult): string {
   if (!r.copied) return "Could not copy";
   if (r.variant === "original") return "Copied original link";
@@ -37,12 +47,18 @@ function statusText(r: CopyResult): string {
   return "Copied";
 }
 
-export function AddressRow({ state, item, rt, onEdit, openMenu }: {
+/** The site panel's width as a window below the top bar. */
+const SITE_POPUP_WIDTH = 320;
+
+export function AddressRow({ state, item, rt, onEdit, openMenu, popups = false }: {
   state: UiState;
   item: TabItem | null;
   rt: TabRuntime | undefined;
   onEdit: () => void;
   openMenu: (x: number, y: number, items: MenuItem[]) => void;
+  /** In the top bar: the site panel and the copy menu open as windows below
+   * it, which its short page cannot hold. */
+  popups?: boolean;
 }) {
   const [status, setStatus] = useState<CopyResult | null>(null);
   const [panel, setPanel] = useState(false);
@@ -55,13 +71,19 @@ export function AddressRow({ state, item, rt, onEdit, openMenu }: {
   };
   const copy = async (variant: LinkVariant) => show(await send({ cmd: "copy_link", variant }));
   useEffect(() => onCopied(show), []);
-  // The panel belongs to a page. With none it neither opens (⇧⌘O) nor stays
+  // The panel belongs to a page. With none it neither opens (its shortcut) nor stays
   // asked for, or it would appear by itself with the next tab.
   const hasPage = item !== null;
+  const openPanel = () => {
+    if (!popups) return setPanel(true);
+    const r = chip.current?.getBoundingClientRect();
+    if (r) send({ cmd: "top_bar_popup", popup: "site", x: Math.round(r.left), y: Math.round(r.bottom + 6), width: SITE_POPUP_WIDTH, height: 360 });
+  };
   useEffect(() => {
     if (!hasPage) return setPanel(false);
-    return onOpenSitePanel(() => setPanel(true));
-  }, [hasPage]);
+    return onOpenSitePanel(openPanel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasPage, popups]);
   const states = siteStates(rt);
   const top = states[0]?.key;
 
@@ -81,23 +103,28 @@ export function AddressRow({ state, item, rt, onEdit, openMenu }: {
           className="addr-chip no-drag"
           data-state={top}
           aria-label={`Site controls${states.length ? `: ${states.map((s) => s.label).join(", ")}` : ""}`}
-          title={states.length ? states.map((s) => s.label).join(" · ") : `Site controls (${keyLabel("⇧⌘O")})`}
+          title={states.length ? states.map((s) => s.label).join(" · ") : `Site controls${keysHint(state.keys, "site_panel")}`}
           aria-expanded={panel}
-          onClick={() => setPanel((p) => !p)}
+          onClick={() => (popups ? openPanel() : setPanel((p) => !p))}
         >
           <ChipIcon state={top} />
         </button>
-        <button type="button" className="addr-text no-drag" onClick={onEdit} title={item.url} aria-label={`Address: ${item.url}. Edit (${keyLabel("⌘L")})`}>
-          <span className="truncate">{hostOf(item.url)}</span>
+        <button type="button" className="addr-text no-drag" onClick={onEdit} title={item.url} aria-label={`Address: ${item.url}. Edit${keysHint(state.keys, "focus_address")}`}>
+          {/* The top bar has room for the whole address. */}
+          <span className="truncate">{popups ? shownAddress(item.url) : hostOf(item.url)}</span>
         </button>
         <button
           type="button"
           className="addr-copy no-drag"
-          aria-label={`Copy link (${keyLabel("⇧⌘C")}). Right-click for more.`}
-          title={`Copy link (${keyLabel("⇧⌘C")})`}
+          aria-label={`Copy link${keysHint(state.keys, "copy_link")}. Right-click for more.`}
+          title={`Copy link${keysHint(state.keys, "copy_link")}`}
           onClick={() => copy("clean")}
           onContextMenu={(e) => {
             e.preventDefault();
+            if (popups) {
+              send({ cmd: "top_bar_popup", popup: "copy", x: e.clientX, y: e.clientY, width: COPY_MENU.width, height: COPY_MENU.height });
+              return;
+            }
             openMenu(e.clientX, e.clientY, [
               { label: "Copy link", onClick: () => copy("clean") },
               { label: "Copy original link", onClick: () => copy("original") },

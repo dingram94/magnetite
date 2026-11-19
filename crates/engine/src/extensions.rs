@@ -11,7 +11,8 @@
 //! (`devpipe.rs`), for the tab target of the page in front. Chromium anchors
 //! the popup to its own toolbar, which every page window has out of sight
 //! (`content.rs`), so the popup opens at the page's top-left corner, next to
-//! the sidebar.
+//! the sidebar, or with the top bar on at its top-right corner, below the top
+//! bar's buttons.
 
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
@@ -38,6 +39,9 @@ pub struct ExtensionInfo {
     pub options_url: Option<String>,
     /// Pinned in Chromium's own UI ("Pin to toolbar" on its extensions page).
     pub chromium_pinned: bool,
+    /// "Allow in Incognito" is on for it on Chromium's extensions page.
+    #[serde(skip)]
+    pub incognito: bool,
 }
 
 /// Chromium's preference with the ids pinned in its own UI.
@@ -58,7 +62,7 @@ wrap_preference_observer! {
 pub(crate) fn watch_pins(ctx: &RequestContext) {
     let name = CefString::from(PINS);
     match ctx.add_preference_observer(Some(&name), Some(&mut PinWatch::new())) {
-        Some(watch) => Engine::global().lock().pin_watches.push(watch),
+        Some(watch) => Engine::global().lock().pref_watches.push(watch),
         None => crate::trace("cannot watch Chromium's extension pins"),
     }
 }
@@ -159,6 +163,7 @@ fn extension(profile_dir: &Path, id: &str, entry: &Value) -> Option<ExtensionInf
         options_url: options
             .map(|p| format!("chrome-extension://{id}/{}", p.trim_start_matches('/'))),
         chromium_pinned: false,
+        incognito: entry.get("incognito").and_then(Value::as_bool) == Some(true),
     })
 }
 
@@ -249,10 +254,20 @@ pub(crate) struct ExtensionCache {
 }
 
 impl Engine {
-    /// Installed extensions of `profile`'s context (none for in-memory ones).
+    /// Installed extensions of `profile`'s context. An in-memory context
+    /// has none of its own: Chromium makes it an off-the-record child of
+    /// the default profile, and runs in it those of the default profile's
+    /// extensions that have "Allow in Incognito" on. They are listed
+    /// without their options page, which only opens in the profile an
+    /// extension is installed in.
     pub fn extensions(&self, profile: Option<&ContextProfile>) -> Vec<ExtensionInfo> {
         if profile.is_some_and(|p| p.ephemeral) {
-            return Vec::new();
+            let mut list = self.extensions(None);
+            list.retain(|e| e.incognito);
+            for e in &mut list {
+                e.options_url = None;
+            }
+            return list;
         }
         let dir = match profile.filter(|p| !p.id.is_empty()) {
             Some(p) => self.config.profile_dir(&p.id),

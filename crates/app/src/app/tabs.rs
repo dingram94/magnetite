@@ -4,10 +4,21 @@
 use magnetite_core::sidebar::Section;
 use magnetite_engine::{ContentId, Engine, MemoryPressure, host_of};
 
-use crate::state::{AppState, folder_in_tree_mut, now};
+use crate::state::{AppState, TabOrder, folder_in_tree_mut, now};
 use crate::{lock, trace, url_policy};
 
-use super::{MagnetiteApp, WELCOME_URL};
+use super::{DOWNLOADS_URL, MagnetiteApp, WELCOME_URL, global};
+
+/// The list of the tabs `Ctrl+Tab` goes through (`Switcher.tsx`).
+const SWITCHER_URL: &str = "magnetite://ui/switcher";
+/// Its width and the height of one of its rows, in points at the normal
+/// text size (`.switcher .result`).
+const SWITCHER_WIDTH: f64 = 440.0;
+const SWITCHER_ROW: f64 = 40.0;
+/// How long the modifier is held before the list shows.
+const SWITCHER_DELAY_MS: i64 = 150;
+/// How often a round looks whether the modifier is still held.
+const SWITCHER_WATCH_MS: i64 = 30;
 
 /// Drag and drop: put tab `id` at `index` of `section` (of space
 /// `space_id`); `folder` places it inside a pinned folder of that space.
@@ -45,6 +56,16 @@ pub(super) fn move_tab(s: &mut AppState, id: &str, to: &Destination) {
         Section::Pinned | Section::Today if s.space(space_id).is_none() => return,
         Section::Pinned | Section::Today => None,
     };
+    // Nothing moves into the private space or out of it, and inside it
+    // there are only Today tabs: a tab kept elsewhere would outlive it.
+    let from = s
+        .find_tab(id)
+        .and_then(|(sp, _)| sp.map(|sp| sp.id.clone()));
+    let private = |space: Option<&str>| space.is_some_and(|sp| s.is_private_space(sp));
+    let to_private = section != Section::Favorites && private(Some(space_id));
+    if private(from.as_deref()) != to_private || (to_private && section != Section::Today) {
+        return;
+    }
     let Some((mut tab, _)) = s.take_tab(id) else {
         return;
     };
@@ -88,6 +109,8 @@ pub(super) fn move_tab(s: &mut AppState, id: &str, to: &Destination) {
             if tab.home_url.take().is_some() {
                 tab.last_active_at = Some(now());
             }
+            // Only favorites and pinned tabs open as web panels.
+            tab.end_panel();
             if let Some(sp) = s.space_mut(space_id) {
                 let i = index.min(sp.today.len());
                 sp.today.insert(i, tab);
@@ -103,6 +126,11 @@ impl MagnetiteApp {
     /// Make `tab_id` the active tab of its space (switching spaces if needed),
     /// creating its content window on first use.
     pub(super) fn activate_tab(&self, engine: &Engine, tab_id: &str) {
+        // A favorite that opens as a web panel never takes the page area.
+        if self.with_state(|s| s.is_web_panel(tab_id)) {
+            self.open_web_panel(engine, tab_id);
+            return;
+        }
         self.close_peek(engine);
         let space_id = self.with_state(|s| {
             let (space, _) = s.find_tab(tab_id)?;
@@ -113,71 +141,135 @@ impl MagnetiteApp {
             return;
         };
 
-        self.with_state(|s| {
+        let switching = self.with_state(|s| {
+            // A tab of the hidden private space is gone to only by the
+            // user's own doing (a private mini window kept as a tab), which
+            // shows the space again.
+            if s.is_hidden_space(&space_id) {
+                s.private_hidden = false;
+            }
             s.active_space.clone_from(&space_id);
             s.active_tab.insert(space_id, tab_id.to_string());
+            s.note_tab_use(tab_id);
             if let Some(t) = s.find_tab_mut(tab_id) {
                 t.last_active_at = Some(now());
                 t.unread = false;
             }
+            // Chosen some other way while Ctrl is held: the round is over.
+            s.switcher.take().is_some()
         });
+        if switching {
+            engine.close_overlay();
+        }
         self.present(engine);
     }
 
-    /// Make the content windows match the state: create windows for the
-    /// visible panes, lay them out, hide everything else.
-    pub(super) fn present(&self, engine: &Engine) {
-        let panes = self.with_state(|s| s.visible_panes());
-        let mut contents = Vec::new();
-        for tab_id in &panes {
-            let c = if let Some(c) = self.content_of(tab_id) {
-                c
-            } else {
-                let (url, home, profile) = self.with_state(|s| {
-                    let (url, home) = s
-                        .find_tab(tab_id)
-                        .map(|(_, t)| (t.url.clone(), t.home_url.clone()))
-                        .unwrap_or_default();
-                    // Magnetite's own pages are served by the default context only.
-                    let profile = if url.starts_with("magnetite://") {
-                        None
-                    } else {
-                        s.context(s.profile_for_tab(tab_id).as_deref())
-                    };
-                    (url, home, profile)
-                });
-                let c = engine.create_content(&url, profile.as_ref());
-                self.with_state(|s| {
-                    s.content_to_tab.insert(c, tab_id.clone());
-                    let rt = s.runtime.entry(tab_id.clone()).or_default();
-                    rt.content = Some(c);
-                    rt.loaded = true;
-                });
-                engine.set_content_lock(c, home.as_deref().and_then(host_of));
-                c
-            };
-            contents.push(c);
+    /// One press of `Ctrl+Tab` or `Ctrl+Shift+Tab` in the order Settings
+    /// say. By last use the first press begins a round, which lasts while
+    /// the modifier is held (`watch_tab_switch`): the tab changes when it
+    /// is let go, and a round longer than `SWITCHER_DELAY_MS` shows its
+    /// list.
+    pub(super) fn cycle_tab(&self, engine: &Engine, forward: bool) {
+        if self.with_state(|s| s.settings.tab_order) == TabOrder::Sidebar {
+            if let Some(t) = self.with_state(|s| s.cycle_tab(forward)) {
+                self.activate_tab(engine, &t);
+            }
+            return;
         }
-        let others: Vec<ContentId> = self.with_state(|s| {
-            s.runtime
-                .values()
-                .filter_map(|r| r.content)
-                .filter(|c| !contents.contains(c))
-                .collect()
+        // The round a first press began, if this was one.
+        let began = self.with_state(|s| {
+            let began = s.switcher.is_none();
+            if !s.switch_tab(forward) {
+                return None;
+            }
+            let round = s.switcher.as_ref()?.round;
+            Some(began.then_some(round))
         });
-        for c in others {
-            engine.hide_content(c);
+        match began {
+            Some(Some(round)) => {
+                Self::watch_tab_switch();
+                // A quick press and release just switches, without the list:
+                // it shows only if this round is still on after the delay.
+                Engine::post_delayed(
+                    Box::new(move || {
+                        let Some(app) = global() else { return };
+                        let size = app.with_state(|s| {
+                            let on = s.switcher.as_ref().filter(|r| r.round == round)?;
+                            // The page zooms with the text size; so must its window.
+                            let scale =
+                                f64::from(s.settings.appearance.clone().clamped().text_scale)
+                                    / 100.0;
+                            let rows = f64::from(u32::try_from(on.tabs.len()).unwrap_or(1));
+                            let points = |n: f64| (n * scale).ceil();
+                            Some((points(SWITCHER_WIDTH), points(SWITCHER_ROW * rows + 12.0)))
+                        });
+                        if let Some((width, height)) = size {
+                            #[allow(clippy::cast_possible_truncation)] // a few hundred points
+                            Engine::global().open_panel(SWITCHER_URL, width as i32, height as i32);
+                        }
+                    }),
+                    SWITCHER_DELAY_MS,
+                );
+            }
+            // The list follows the round.
+            Some(None) => self.show_state(engine),
+            None => {}
         }
-        match (self.split_on_screen(&panes, &contents), contents.as_slice()) {
-            (_, []) => {}
-            (Some((tree, focus)), _) => engine.show_split(&tree, focus),
-            (None, [one, ..]) => engine.show_content(*one),
+    }
+
+    /// Look every `SWITCHER_WATCH_MS` whether Ctrl (the modifiers of the
+    /// shortcut's keys, should the user have changed them) is still held,
+    /// and end the round of `Ctrl+Tab` once it is not. Where
+    /// the system does not say, the round ends at once: every press
+    /// switches to the tab used before.
+    fn watch_tab_switch() {
+        Engine::post_delayed(
+            Box::new(|| {
+                let Some(app) = global() else { return };
+                let engine = Engine::global();
+                if app.with_state(|s| s.switcher.is_none()) {
+                    return;
+                }
+                if engine.tab_switch_keys_held() == Some(true) {
+                    Self::watch_tab_switch();
+                } else {
+                    app.end_tab_switch(engine);
+                }
+            }),
+            SWITCHER_WATCH_MS,
+        );
+    }
+
+    /// Ctrl was let go: the tab the round of `Ctrl+Tab` stands on is chosen.
+    fn end_tab_switch(&self, engine: &Engine) {
+        let Some(chosen) = self.with_state(|s| s.switcher.is_some().then(|| s.end_tab_switch()))
+        else {
+            return;
+        };
+        engine.close_overlay();
+        if let Some(tab) = chosen {
+            self.activate_tab(engine, &tab);
         }
+    }
+
+    /// Make the content windows match the state: the current window shows
+    /// its panes, and a window that showed one of them until now (a tab is
+    /// on screen in one window at most) shows what it has left.
+    pub(super) fn present(&self, engine: &Engine) {
+        self.dev_drop_stale_phones(engine);
+        let before = self.on_screen();
+        let robbed = self.with_state(AppState::claim_panes);
+        // The current window first: a page that moves leaves the other
+        // window by being shown here.
+        self.present_window(engine);
+        for win in robbed {
+            engine.in_window(win, || self.present_window(engine));
+        }
+        let shown = self.on_screen();
         // A page that leaves the screen was in use until now: its unload and
         // auto-archive periods start here, not when it was selected.
-        let left: Vec<ContentId> = lock(&self.visible)
-            .iter()
-            .filter(|c| !contents.contains(c))
+        let left: Vec<ContentId> = (before.iter())
+            .filter(|c| !shown.contains(c))
             .copied()
             .collect();
         if !left.is_empty() {
@@ -192,14 +284,14 @@ impl MagnetiteApp {
                 }
             });
         }
-        self.follow_pictures(engine, &contents);
+        self.follow_pictures(engine, &before, &shown);
         // A capture never moves to another tab: drop it if its page left the screen.
         let stale = {
             let state = lock(&self.capture);
             state
                 .session
                 .as_ref()
-                .is_some_and(|(c, _)| !contents.contains(c))
+                .is_some_and(|(c, _)| !shown.contains(c))
         };
         if stale {
             engine.close_overlay();
@@ -208,10 +300,100 @@ impl MagnetiteApp {
         self.push_state(engine);
     }
 
+    /// The page window of tab `tab_id` for the current window, made if the
+    /// tab has none.
+    pub(super) fn page_of(&self, engine: &Engine, tab_id: &str) -> ContentId {
+        let win = engine.current_window();
+        // A page in another window comes over as it is where the engine
+        // can move it; elsewhere it is closed there and made again here.
+        let kept = self.content_of(tab_id).filter(|c| {
+            let movable = engine.content_window(*c) == win || engine.can_move_pages();
+            if !movable {
+                self.with_state(|s| s.detach_content(tab_id));
+                engine.close_content(*c);
+            }
+            movable
+        });
+        if let Some(c) = kept {
+            return c;
+        }
+        let (url, home, profile) = self.with_state(|s| {
+            let (url, home) = s
+                .find_tab(tab_id)
+                .map(|(_, t)| (t.url.clone(), t.home_url.clone()))
+                .unwrap_or_default();
+            // Magnetite's own pages are served by the default context only.
+            let profile = if url.starts_with("magnetite://") {
+                None
+            } else {
+                s.context(s.profile_for_tab(tab_id).as_deref())
+            };
+            (url, home, profile)
+        });
+        let c = engine.create_content(&url, profile.as_ref());
+        self.with_state(|s| {
+            s.content_to_tab.insert(c, tab_id.to_string());
+            let rt = s.runtime.entry(tab_id.to_string()).or_default();
+            rt.content = Some(c);
+            rt.loaded = true;
+        });
+        engine.set_content_lock(c, home.as_deref().and_then(host_of));
+        c
+    }
+
+    /// The current window's part of `present`: create windows for its
+    /// panes, lay them out, hide its other pages.
+    fn present_window(&self, engine: &Engine) {
+        let win = engine.current_window();
+        let panes = self.with_state(|s| s.visible_panes());
+        let mut contents = Vec::new();
+        for tab_id in &panes {
+            contents.push(self.page_of(engine, tab_id));
+        }
+        // The pages of the other windows are theirs to show or hide, and
+        // the web panel stays over whatever is shown.
+        let over = engine.web_panel_content();
+        // The phone of a responsive split shows with its tab.
+        let phones: Vec<ContentId> = self.with_state(|s| {
+            (s.phones.iter())
+                .filter(|p| panes.contains(&p.tab))
+                .map(|p| p.page.content)
+                .collect()
+        });
+        let others: Vec<ContentId> = self.with_state(|s| {
+            s.runtime
+                .values()
+                .filter_map(|r| r.content)
+                .chain(s.phones.iter().map(|p| p.page.content))
+                .filter(|c| !contents.contains(c) && !phones.contains(c) && Some(*c) != over)
+                .filter(|c| engine.content_window(*c) == win)
+                .collect()
+        });
+        for c in others {
+            engine.hide_content(c);
+        }
+        match (
+            self.split_on_screen(engine, &panes, &contents),
+            contents.as_slice(),
+        ) {
+            (_, []) => {}
+            (Some((tree, focus)), _) => engine.show_split(&tree, focus),
+            (None, [one, ..]) => engine.show_content(*one),
+        }
+        contents.extend(phones);
+        lock(&self.visible).insert(win, contents);
+    }
+
     /// Pop-out: a video playing in a tab that just got hidden goes
     /// picture-in-picture; coming back to its tab ends picture-in-picture.
-    pub(super) fn follow_pictures(&self, engine: &Engine, shown: &[ContentId]) {
-        let previous = std::mem::replace(&mut *lock(&self.visible), shown.to_vec());
+    /// `previous` and `shown` are the pages on screen before and now, in
+    /// any window: a page that moves to another window stays on screen.
+    pub(super) fn follow_pictures(
+        &self,
+        engine: &Engine,
+        previous: &[ContentId],
+        shown: &[ContentId],
+    ) {
         let (auto_pip, media) = self.with_state(|s| {
             let media: std::collections::HashMap<ContentId, magnetite_engine::MediaState> = s
                 .content_to_tab
@@ -246,13 +428,74 @@ impl MagnetiteApp {
         match switched {
             Some(Some(tab)) => self.activate_tab(engine, &tab),
             // A space without tabs: every page leaves the screen, the other
-            // pages of a split and a peek included.
+            // pages of a split and a peek included. A round of `Ctrl+Tab`
+            // is over, as when a tab is chosen.
             Some(None) => {
+                if self.with_state(|s| s.switcher.take().is_some()) {
+                    engine.close_overlay();
+                }
                 self.close_peek(engine);
                 self.present(engine);
             }
             None => {}
         }
+    }
+
+    /// Open the private space, or go to it if it is open.
+    pub(super) fn open_private_space(&self, engine: &Engine) {
+        let id = self.with_state(AppState::open_private_space);
+        self.activate_space(engine, &id);
+    }
+
+    /// A link from another app is not private browsing: with the private
+    /// space in front, the space beside it comes to the front for it.
+    pub(super) fn leave_private_space(&self, engine: &Engine) {
+        let beside = self.with_state(|s| {
+            (s.is_private_space(&s.active_space)).then(|| s.lasting_space(&s.active_space))
+        });
+        if let Some(space) = beside {
+            self.activate_space(engine, &space);
+        }
+    }
+
+    /// Hide the private space: nothing lists it any more, its pages are
+    /// paused and taken back from picture-in-picture, and every window
+    /// that showed it shows the space it goes on in. It stays open;
+    /// `open_private_space` shows it again.
+    pub(super) fn hide_private_space(&self, engine: &Engine) {
+        let others = self.with_state(|s| s.other_windows_in_private_space());
+        let Some(pages) = self.with_state(AppState::hide_private_space) else {
+            return;
+        };
+        for c in pages {
+            engine.content_media(c, magnetite_engine::MediaAction::Pause);
+            engine.content_picture_in_picture(c, false);
+        }
+        let show = || {
+            let space = self.with_state(|s| s.active_space.clone());
+            self.activate_space(engine, &space);
+        };
+        for win in others {
+            engine.in_window(win, show);
+        }
+        show();
+    }
+
+    /// Close the private space with everything opened from it. Every
+    /// window that showed it shows the space it goes on in.
+    pub(super) fn close_private_space(&self, engine: &Engine) {
+        let others = self.with_state(|s| s.other_windows_in_private_space());
+        for c in self.with_state(AppState::close_private_space) {
+            engine.close_content(c);
+        }
+        let show = || {
+            let space = self.with_state(|s| s.active_space.clone());
+            self.activate_space(engine, &space);
+        };
+        for win in others {
+            engine.in_window(win, show);
+        }
+        show();
     }
 
     /// Open `url` (typed, or from Magnetite's UI) as a new Today tab (see
@@ -285,14 +528,16 @@ impl MagnetiteApp {
     /// Open `url` from `source` as a new Today tab of the active space, in
     /// the opener's `context` (profile id, `""` the default) when there is
     /// one, so a page opened from a private or separate profile does not get
-    /// the space's cookies. Addresses the policy refuses are not opened.
+    /// the space's cookies. A private opener's tab goes to the private space
+    /// instead, and no other one into it (`open_tab_from`). Addresses the
+    /// policy refuses are not opened.
     /// Returns the tab's id; internal pages are singletons and return the
     /// existing tab.
     pub(super) fn open_url_from(
         &self,
         engine: &Engine,
         url: &str,
-        background: bool,
+        mut background: bool,
         source: url_policy::Source,
         context: Option<&str>,
     ) -> Option<String> {
@@ -310,13 +555,14 @@ impl MagnetiteApp {
             "Settings".to_string()
         } else if url.starts_with(WELCOME_URL) {
             "Welcome".to_string()
+        } else if url.starts_with(DOWNLOADS_URL) {
+            "Downloads".to_string()
         } else {
             url.clone()
         };
         // An internal page that is open already, asked for at another place.
         let mut revisit = false;
         let id = self.with_state(|s| {
-            let space = s.active_space.clone();
             // Internal pages are singletons: focus an existing one instead.
             // The part after `#` is a place in the page (a section of
             // Settings), not another page.
@@ -330,20 +576,19 @@ impl MagnetiteApp {
                     .map(|t| t.id.clone())
             {
                 revisit = s.find_tab(&existing).is_some_and(|(_, t)| t.url != url);
-                return existing;
+                return Some(existing);
             }
-            let id = s.new_today_tab(&space, &url, &title);
-            let space_profile = s.active_space().profile_id.clone();
-            // An override only when it differs from the space's profile.
-            let profile = context
-                .and_then(|c| s.profile_for_context(c))
-                .filter(|p| *p != space_profile);
+            let opener = context.and_then(|c| s.profile_for_context(c));
+            let id = s.open_tab_from(opener.as_deref(), &url, &title)?;
+            // What a page of the hidden private space opens stays out of
+            // sight with it: a tab in the background.
+            let (space, _) = s.find_tab(&id)?;
+            background |= space.is_some_and(|sp| s.is_hidden_space(&sp.id));
             if let Some(t) = s.find_tab_mut(&id) {
                 t.unread = background;
-                t.profile_id = profile;
             }
-            id
-        });
+            Some(id)
+        })?;
         if background {
             self.push_state(engine);
         } else {
@@ -354,6 +599,24 @@ impl MagnetiteApp {
             engine.content_load_url(c, &url);
         }
         Some(id)
+    }
+
+    /// Open `url`, a link from another app, as a background Today tab of
+    /// space `space` (the one a link rule names), which stays where it is:
+    /// the tab is marked unread and runs in that space's profile.
+    pub(super) fn open_background_in_space(&self, engine: &Engine, url: &str, space: &str) {
+        let url = url.trim();
+        if !url_policy::allowed(url, url_policy::Source::OtherApp) {
+            trace(|| "not opening an address from another app with this scheme".to_string());
+            return;
+        }
+        self.with_state(|s| {
+            let id = s.new_today_tab(space, url, url);
+            if let Some(t) = s.find_tab_mut(&id) {
+                t.unread = true;
+            }
+        });
+        self.push_state(engine);
     }
 
     /// Load `url` in the page of tab `tab_id`. Magnetite's own pages are
@@ -445,6 +708,8 @@ impl MagnetiteApp {
     pub(super) fn set_pinned(&self, engine: &Engine, id: &str, pinned: bool) {
         self.with_state(|s| {
             let space = s.find_tab(id).and_then(|(sp, _)| sp.map(|x| x.id.clone()));
+            // The private space has only Today tabs.
+            let space = space.filter(|sid| !s.is_private_space(sid));
             if let Some(sp) = space.and_then(|sid| s.space_mut(&sid)) {
                 if pinned {
                     sp.pin(id);
@@ -454,6 +719,8 @@ impl MagnetiteApp {
                     // Its time in Today starts now: it must not be archived
                     // for the hours it was pinned and not looked at.
                     t.last_active_at = Some(now());
+                    // A Today tab opens as no web panel.
+                    t.end_panel();
                 }
             }
         });
@@ -556,5 +823,49 @@ impl MagnetiteApp {
         } else {
             self.save_soon();
         }
+    }
+}
+
+impl MagnetiteApp {
+    /// Another window on the same sidebar: the same space in front, no tab
+    /// yet. It is the current window from here on.
+    pub(super) fn new_window(&self, engine: &Engine) {
+        let win = engine.create_frame();
+        self.with_state(|s| {
+            s.open_window(win);
+            s.persist_later();
+        });
+    }
+
+    /// At start: the windows of the last run besides the first one open
+    /// again, each showing what it showed, if several windows are on
+    /// (Settings); else they are forgotten.
+    pub(super) fn reopen_windows(&self, engine: &Engine) {
+        let (reopen, on) =
+            self.with_state(|s| (std::mem::take(&mut s.reopen), s.settings.several_windows));
+        if !on {
+            return;
+        }
+        for saved in reopen {
+            let win = engine.create_frame();
+            self.with_state(|s| s.reopen_window(win, saved));
+        }
+    }
+
+    /// Window `win` closed, one of several: its view goes. Its pages went
+    /// to another window or closed with it (`Engine::close_window`).
+    pub(super) fn window_closed(&self, engine: &Engine, win: magnetite_engine::WindowId) {
+        // Quitting closes every window; each one stays in the state, so any
+        // save from here on keeps them all for the next start.
+        if engine.is_quitting() {
+            return;
+        }
+        let next = engine.current_window();
+        self.with_state(|s| {
+            s.close_window(win, next);
+            s.persist_later();
+        });
+        lock(&self.visible).remove(&win);
+        self.push_state(engine);
     }
 }

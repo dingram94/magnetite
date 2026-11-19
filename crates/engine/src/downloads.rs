@@ -12,6 +12,100 @@ use cef::*;
 use crate::engine::Engine;
 use crate::events::{DownloadReport, DownloadState, EngineEvent};
 
+/// Where downloads go, as the app's settings keep it. Chromium saves the
+/// files; these are its preferences, in every profile alike.
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct DownloadPrefs {
+    /// The folder downloads are saved to, as an absolute path. Empty:
+    /// Chromium's own choice, the system's Downloads folder.
+    pub folder: String,
+    /// Ask where to save each file.
+    pub ask: bool,
+}
+
+/// Chromium's preference for the folder downloads go to. The folder "Save
+/// as" starts in is another one, which Chromium keeps as the user last
+/// left it: Magnetite does not touch it.
+const FOLDER: &str = "download.default_directory";
+const ASK: &str = "download.prompt_for_download";
+
+impl DownloadPrefs {
+    /// Set them on `ctx`. False if Chromium refused one (a context that is
+    /// not initialised yet refuses all; it gets them in `prepare_context`).
+    pub(crate) fn apply(&self, ctx: &RequestContext) -> bool {
+        let folder = (!self.folder.is_empty()).then_some(self.folder.as_str());
+        crate::autofill::set_bool_pref(ctx, ASK, self.ask)
+            & crate::autofill::set_string_pref(ctx, FOLDER, folder)
+    }
+}
+
+/// What hears which folder the user chose, once.
+type Chosen = std::sync::Arc<std::sync::Mutex<Option<Box<dyn FnOnce(Option<PathBuf>) + Send>>>>;
+
+// The folder the user chose in the system's dialog, or none.
+wrap_run_file_dialog_callback! {
+    struct FolderChosen {
+        done: Chosen,
+    }
+    impl RunFileDialogCallback {
+        fn on_file_dialog_dismissed(&self, file_paths: Option<&mut CefStringList>) {
+            let chosen = file_paths.and_then(crate::client::first_string).map(PathBuf::from);
+            if let Some(done) = self.done.lock().ok().and_then(|mut d| d.take()) {
+                done(chosen);
+            }
+        }
+    }
+}
+
+impl Engine {
+    /// Use `prefs` from now on: in every profile that exists, and in those
+    /// made later.
+    pub fn set_downloads(&self, prefs: &DownloadPrefs) {
+        let contexts: Vec<RequestContext> = {
+            let mut inner = self.lock();
+            inner.downloads.clone_from(prefs);
+            inner.contexts.values().cloned().collect()
+        };
+        for ctx in request_context_get_global_context()
+            .into_iter()
+            .chain(contexts)
+        {
+            prefs.apply(&ctx);
+        }
+    }
+
+    /// Whether a dialog of the system's can open now: there is a window
+    /// to open it over.
+    pub fn can_open_dialog(&self) -> bool {
+        self.dialog_host().is_some()
+    }
+
+    /// Let the user choose a folder in the system's dialog, starting at
+    /// `start`. `done` gets it on the UI thread, or `None` when the dialog
+    /// was closed without a choice or could not open.
+    pub fn choose_folder(
+        &self,
+        title: &str,
+        start: Option<&std::path::Path>,
+        done: Box<dyn FnOnce(Option<PathBuf>) + Send>,
+    ) {
+        let Some(host) = self.dialog_host() else {
+            return done(None);
+        };
+        let start = start.map(|p| CefString::from(p.to_string_lossy().as_ref()));
+        let mut callback =
+            FolderChosen::new(std::sync::Arc::new(std::sync::Mutex::new(Some(done))));
+        host.run_file_dialog(
+            FileDialogMode::OPEN_FOLDER,
+            Some(&CefString::from(title)),
+            start.as_ref(),
+            None,
+            Some(&mut callback),
+        );
+    }
+}
+
 /// A download: its profile's context and Chromium's id.
 type Key = (Option<String>, u32);
 

@@ -14,7 +14,8 @@ This is an engineering review, not legal advice.
 Nothing found is incompatible with publishing Magnetite's source and binaries
 under the EUPL-1.2. Everything compiled into our own binaries is permissive.
 The copyleft code we ship (LGPL, MPL, APSL) lives inside the CEF library,
-which keeps its own licences. We ship it unmodified, except on macOS with
+which keeps its own licences, and in one data file of the ad blocker
+(GPL-3.0, "Ad blocker's scriptlets"). We ship it unmodified, except on macOS with
 Apple silicon, where we build it ourselves with public changes ("CEF and
 Chromium").
 
@@ -145,15 +146,15 @@ are not enough on their own. The full texts ship in `THIRD_PARTY_NOTICES.md`.
 ## CEF and Chromium
 
 We ship the CEF binary distribution unmodified, except on macOS with Apple
-silicon (below): the CEF library and its files next to it. On Windows these are `libcef.dll`, `chrome_elf.dll`,
+silicon and Linux on x86_64 (below): the CEF library and its files next to it. On Windows these are `libcef.dll`, `chrome_elf.dll`,
 `d3dcompiler_47.dll`, `dxcompiler.dll`, `vk_swiftshader.dll` and
 `vulkan-1.dll`. On Linux they are `libcef.so`, `libvk_swiftshader.so` and
 `libvulkan.so.1`. On macOS they are inside
 `Chromium Embedded Framework.framework`. Every platform also ships the `.pak`
 files, `icudtl.dat` and the V8 snapshot. Proprietary codecs are off, except
-on macOS with Apple silicon (next paragraph).
+on macOS with Apple silicon and Linux on x86_64 (next paragraph).
 
-**macOS on Apple silicon** ships a CEF we build ourselves from the same
+**macOS on Apple silicon and Linux on x86_64** ship a CEF we build ourselves from the same
 sources, in [magnetite-cef](https://github.com/magnetite-browser/magnetite-cef).
 It differs from the official build in two ways, both public there with the
 build script: the H.264, AAC and HEVC decoders are on (`proprietary_codecs`,
@@ -227,13 +228,16 @@ What `CREDITS.html` (macOS arm64 distribution) contains, by licence type.
    (MPL-2.0 §3.2). The upstream links plus the offer cover this.
 4. **APSL-2.0**: include the licence (in `CREDITS.html`). We make no changes.
 
-**CEF source.** The corresponding source is Chromium 156.0.8078.88
-(<https://chromium.googlesource.com/chromium/src/+/refs/tags/156.0.8078.88>)
-plus CEF commit `8ea0c73b5dbed1389c8dafb911a98c41246bb8cb`, which contains
+**CEF source.** The corresponding source is Chromium 156.0.8078.107
+(<https://chromium.googlesource.com/chromium/src/+/refs/tags/156.0.8078.107>)
+for our own CEF build (macOS on Apple silicon, Linux on x86_64) and
+156.0.8078.96
+(<https://chromium.googlesource.com/chromium/src/+/refs/tags/156.0.8078.96>)
+for the official one, each plus CEF commit `6028375a4532fb89d23b58635f5c0d3a82c93959`, which contains
 CEF's Chromium patches. Google's official tarballs are
 `chromium-<version>.tar.xz` (4.4 GB) and `…-lite.tar.xz` (2.0 GB) in
 `commondatastorage.googleapis.com/chromium-browser-official/`, but there is
-none for 156.0.8078.88 (checked 2026-11-09). For a version without one, we
+none for either version (checked 2026-11-16). For a version without one, we
 pack a full checkout of the tag (`gclient sync`, with all of its DEPS)
 ourselves. GitHub release files must stay under 2 GiB, so the full tarball
 cannot be a release asset.
@@ -241,7 +245,7 @@ Options, simplest first:
 
 - **A. Written offer plus a private archive.** Already in
   `THIRD_PARTY_NOTICES.md`. For each CEF version we ship, keep the Chromium
-  tarball and a CEF source archive (`git archive 8ea0c73`) for at least
+  tarball and a CEF source archive (`git archive 6028375`) for at least
   three years after we last ship that version. For the CEF we build
   ourselves, keep with them what turns that source into the shipped library:
   the magnetite-cef commit the release was built from (its `patches/` and
@@ -290,6 +294,44 @@ there follows the same policy (`deny.toml`): no GPL or LGPL code.
   says so under "Name and logo".
 - **`InfoPlist.strings`**, `devtools_menu.js`, `media_hook.js`: our own code.
 
+## Ad blocker's scriptlets
+
+Every package carries a folder `scriptlets/` with three files
+(`scripts/scriptlets.sh` makes it):
+
+- `scriptlets.json`: the scriptlets of
+  [uBlock Origin](https://github.com/gorhill/uBlock), GPL-3.0, from the
+  release pinned in the script. Each scriptlet is one JavaScript function,
+  taken unchanged as text.
+- `LICENSE.txt`: the GPL-3.0, uBlock Origin's own copy.
+- `README.txt`: what the file is, the repository and commit it is from, the
+  copyright holders.
+
+Why this does not make Magnetite a GPL work:
+
+- Nothing of the file is compiled into our binaries or linked with them.
+  The ad blocker reads it at run time as data and hands the scriptlets a
+  filter list asks for to Chromium, which runs them in the web page, next
+  to the page's own scripts. Magnetite runs without the file (a run from
+  the checkout has none); the file works with any program that reads
+  adblock-rust's resource format.
+- The two are separate works distributed together. The GPL calls that an
+  aggregate and leaves the other works' licences alone (GPL-3.0 section 5,
+  last paragraph); the EUPL's copyleft covers derivative works of
+  Magnetite, which the file is not.
+- `deny.toml` still keeps GPL code out of what is compiled: the file is not
+  a crate and never passes through cargo.
+
+Duties, met by the folder itself: the licence text goes along (section 4),
+the file is the source in its preferred form (section 6: JavaScript
+functions as text, with the commit they are from), and no term of ours
+restricts it.
+
+This reading has not been checked by a lawyer.
+
+The filter lists are not distributed by us: each user's copy is downloaded
+from its publisher.
+
 ## CI and tools (used, not distributed)
 
 No duties, because none of these is distributed:
@@ -316,6 +358,8 @@ Source files for packaging:
 - [ ] `Contents/Resources/THIRD_PARTY_NOTICES.md`
 - [ ] `Contents/Resources/CREDITS.html`
 - [ ] `Contents/Resources/COPYRIGHT-library.html`
+- [ ] `Contents/Resources/scriptlets/` with `scriptlets.json`, `LICENSE.txt`
+      and `README.txt` ("Ad blocker's scriptlets")
 - [ ] CEF framework unmodified (re-signing is fine); on Apple silicon the
       one from the magnetite-cef release pinned in `scripts/cef.sh`
 - [ ] Patent question for H.264, AAC and HEVC decided ("CEF and Chromium")
@@ -332,6 +376,7 @@ Source files for packaging:
 - [ ] Next to `magnetite.exe`: `LICENSE.txt` (copy of `LICENSE`),
       `THIRD_PARTY_NOTICES.md`, `CREDITS.html` (Windows CEF distribution),
       `COPYRIGHT-library.html`
+- [ ] The folder `scriptlets` next to `magnetite.exe`, with its three files
 - [ ] CEF files unmodified, including `d3dcompiler_47.dll` and
       `dxcompiler.dll`. If `dxil.dll` is present, add it to the notices.
 - [ ] MSVC runtime: static (`+crt-static`), or Microsoft's redistribution terms
@@ -342,13 +387,17 @@ Source files for packaging:
 
 **Linux build**:
 
-- [ ] Tarball: the four files at the top level, next to the binary
+- [ ] Tarball: the four files at the top level, next to the binary, and the
+      folder `scriptlets` with its three files (the `.deb` and `.rpm` carry
+      it in `/opt/magnetite/`)
 - [ ] `.deb`/`.rpm`: the four files in `/usr/share/doc/magnetite/`. For
       `.deb`, also a `copyright` file there that names EUPL-1.2 and points to
       the notices.
 - [ ] Flatpak: the four files in `/app/share/licenses/<app-id>/`
 - [ ] No bundled system libraries (GTK, NSS, …). If any are bundled, add
       their notices and sources.
+- [ ] On x86_64, CEF from the magnetite-cef release pinned in
+      `scripts/cef.sh` (`magnetite-patches.txt` next to `libcef.so`)
 - [ ] Same About page as macOS
 
 **Source repository (GitHub)**:

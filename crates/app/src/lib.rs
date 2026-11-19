@@ -3,6 +3,8 @@
 mod adblock;
 mod app;
 mod capture;
+mod dev;
+mod devices;
 mod downloads;
 mod files;
 mod smart;
@@ -49,6 +51,9 @@ struct Cli {
     /// Open this URL as a new tab after start (also used by tests).
     #[arg(long)]
     open: Option<String>,
+    /// Addresses or files to open, as links from another app (`%U` in the
+    /// desktop entry).
+    urls: Vec<String>,
 }
 
 /// The command line. CEF helper processes never reach here (separate
@@ -135,6 +140,8 @@ pub fn run() -> i32 {
         ui_url,
         sidebar_width: 264,
         use_mock_keychain: keychain_mode(&data_dir, cli.mock_keychain),
+        // Filled in below, once the settings are read.
+        accept_languages: String::new(),
         load_extensions: cli.load_extension,
         chrome_toolbar: cli.chrome_toolbar,
         helper: helper_path(),
@@ -146,8 +153,23 @@ pub fn run() -> i32 {
     } else {
         state::ArcImport::Ask
     };
-    let delegate = Arc::new(app::MagnetiteApp::new(data_dir, import, cli.open, link));
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let launch_urls = (cli.urls.iter())
+        .map(|a| app::launch_url(a, &cwd))
+        .chain(link)
+        .collect();
+    let delegate = Arc::new(app::MagnetiteApp::new(
+        data_dir,
+        packaged_scriptlets(),
+        import,
+        cli.open,
+        launch_urls,
+    ));
     app::install_global(&delegate);
+    let config = EngineConfig {
+        accept_languages: delegate.accept_languages(),
+        ..config
+    };
     magnetite_engine::run(config, delegate)
 }
 
@@ -159,7 +181,7 @@ const SINGLE_ARGUMENT: &str = "--single-argument";
 /// Split the command line at `--single-argument`: our own arguments before
 /// it, and the link after it (the arguments after it joined by spaces, as
 /// a link with spaces would have been split).
-fn split_link(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
+pub(crate) fn split_link(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
     let Some(at) = args.iter().position(|a| a == SINGLE_ARGUMENT) else {
         return (args, None);
     };
@@ -240,22 +262,28 @@ fn helper_path() -> Option<PathBuf> {
     helper.is_file().then_some(helper)
 }
 
-/// macOS bundle: `<App>.app/Contents/Resources/ui`. Linux and Windows
-/// packages: `ui` next to the executable. Dev: `crates/ui/web/dist`.
+/// The folder a package keeps `name` in: `<App>.app/Contents/Resources` in
+/// the macOS bundle, next to the executable in Linux and Windows packages.
+fn packaged(name: &str) -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?;
+    Some(if cfg!(target_os = "macos") {
+        dir.join("../Resources").join(name)
+    } else {
+        dir.join(name)
+    })
+}
+
+/// The package's `ui` folder. Dev: `crates/ui/web/dist`.
 fn default_ui_dir() -> PathBuf {
-    if let Ok(exe) = std::env::current_exe()
-        && let Some(dir) = exe.parent()
-    {
-        let packaged = if cfg!(target_os = "macos") {
-            dir.join("../Resources/ui")
-        } else {
-            dir.join("ui")
-        };
-        if packaged.is_dir() {
-            return packaged;
-        }
-    }
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../ui/web/dist")
+    (packaged("ui").filter(|dir| dir.is_dir()))
+        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../ui/web/dist"))
+}
+
+/// The scriptlets' code for the ad blocker (`adblock.rs`), a file of its
+/// own in every package. A run from the checkout has none.
+fn packaged_scriptlets() -> Option<PathBuf> {
+    packaged("scriptlets/scriptlets.json").filter(|file| file.is_file())
 }
 
 #[cfg(test)]
@@ -321,5 +349,26 @@ mod tests {
         assert!(parsed.no_import && parsed.mock_keychain);
         // A real mistake is an error, not a start on the default profile.
         assert!(cli(&["magnetite", "--data-dir"]).is_err());
+    }
+
+    /// Links and files from other apps arrive as plain arguments
+    /// (`magnetite %U`): they are kept, in order, next to our own options and
+    /// switches we do not know, and an option's value is never one of them.
+    #[test]
+    fn addresses_from_other_apps_survive_next_to_options_and_unknown_switches() {
+        let parsed = cli(&[
+            "magnetite",
+            "--enable-features=Foo",
+            "--data-dir",
+            "/tmp/d",
+            "https://a.example/",
+            "page.html",
+        ])
+        .unwrap();
+        assert_eq!(parsed.urls, ["https://a.example/", "page.html"]);
+        assert_eq!(
+            parsed.data_dir.as_deref(),
+            Some(std::path::Path::new("/tmp/d"))
+        );
     }
 }

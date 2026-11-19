@@ -9,8 +9,6 @@ use cef::*;
 use crate::client::MagnetiteClient;
 use crate::engine::Engine;
 
-/// Room left free above the panel: the frame's traffic lights.
-const TOP: i32 = 40;
 /// Gap between the panel and the window edges.
 const MARGIN: i32 = 6;
 /// Width of the hover zone along the left edge (the page gap).
@@ -33,7 +31,7 @@ impl Engine {
         let Some(bounds) = self.float_bounds() else {
             return;
         };
-        let existing = self.lock().float_bar.as_ref().map(|f| f.window.clone());
+        let existing = self.lock().win.float_bar.as_ref().map(|f| f.window.clone());
         match existing {
             Some(Some(window)) => {
                 if show {
@@ -48,28 +46,52 @@ impl Engine {
             // `shown` says so), or nothing to hide.
             _ => {}
         }
-        if let Some(f) = self.lock().float_bar.as_mut() {
+        if let Some(f) = self.lock().win.float_bar.as_mut() {
             f.shown = show;
         }
     }
 
     /// Whether the floating sidebar is out.
     pub fn float_sidebar_shown(&self) -> bool {
-        self.lock().float_bar.as_ref().is_some_and(|f| f.shown)
+        self.lock().win.float_bar.as_ref().is_some_and(|f| f.shown)
     }
 
     /// The floating sidebar's page, once it exists.
     pub(crate) fn float_sidebar_browser(&self) -> Option<Browser> {
         self.lock()
+            .win
             .float_bar
             .as_ref()
             .and_then(|f| f.view.browser())
+    }
+
+    /// A two-finger swipe began somewhere in the app (macOS). Both sidebars
+    /// hear of it: wheel events do not say where one swipe ends and the next
+    /// begins, and the momentum of a swipe outlasts the fingers
+    /// (`useSpaceSwipe.ts`).
+    #[cfg(target_os = "macos")]
+    pub(crate) fn swipe_began(&self) {
+        let docked = self
+            .lock()
+            .win
+            .frame
+            .as_ref()
+            .and_then(|f| f.sidebar_view.browser());
+        for browser in [docked, self.float_sidebar_browser()].into_iter().flatten() {
+            if let Some(frame) = browser.main_frame() {
+                self.eval_in_ui(
+                    &frame,
+                    "window.__magnetite && window.__magnetite.swipeBegan()",
+                );
+            }
+        }
     }
 
     /// Focus the floating sidebar (its pop-ups ask for focus).
     pub(crate) fn focus_float_sidebar(&self) {
         let handles = self
             .lock()
+            .win
             .float_bar
             .as_ref()
             .and_then(|f| Some((f.window.clone()?, f.view.clone())));
@@ -84,32 +106,36 @@ impl Engine {
         let (frame, hidden) = (self.frame_window(), !self.sidebar_visible());
         let Some(frame) = frame else { return };
         let b = frame.bounds();
+        // Not beside the top bar: its left end holds the window's buttons.
+        let top = self.top_bar_offset();
         let zone = Rect {
             x: b.x,
-            y: b.y + TOP,
+            y: b.y + top,
             width: EDGE,
-            height: (b.height - TOP).max(1),
+            height: (b.height - top).max(1),
         };
         #[cfg(target_os = "macos")]
         crate::mac::set_edge_zone(frame.window_handle(), hidden.then_some(&zone));
         #[cfg(target_os = "windows")]
         {
             let _ = zone;
-            crate::win::set_edge_zone(frame.window_handle(), hidden.then_some((EDGE, TOP)));
+            crate::win::set_edge_zone(frame.window_handle(), hidden.then_some((EDGE, top)));
         }
         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         let _ = (zone, hidden);
     }
 
-    /// Below the traffic lights, along the left edge, the sidebar's width.
+    /// Along the left edge, the window's height (below the top bar while it
+    /// is on), the sidebar's width.
     fn float_bounds(&self) -> Option<Rect> {
         let frame = self.frame_window()?;
         let b = frame.bounds();
+        let top = self.top_bar_offset() + MARGIN;
         Some(Rect {
             x: b.x + MARGIN,
-            y: b.y + TOP,
+            y: b.y + top,
             width: self.sidebar_width(),
-            height: (b.height - TOP - MARGIN).max(100),
+            height: (b.height - top - MARGIN).max(100),
         })
     }
 
@@ -120,7 +146,7 @@ impl Engine {
             Some(&mut client),
             Some(&CefString::from("magnetite://ui/?float")),
             Some(&BrowserSettings {
-                background_color: self.lock().chrome_color,
+                background_color: self.lock().win.chrome_color,
                 ..Default::default()
             }),
             None,
@@ -129,7 +155,7 @@ impl Engine {
         ) else {
             return;
         };
-        self.lock().float_bar = Some(FloatBar {
+        self.lock().win.float_bar = Some(FloatBar {
             window: None,
             view: view.clone(),
             shown: true,
@@ -140,13 +166,17 @@ impl Engine {
 }
 
 /// Show the panel on top without taking the keyboard from the page: hovering
-/// is not choosing. A click into the panel focuses it as usual.
+/// is not choosing. A click into the panel focuses it as usual, and the
+/// pointer moves over it as over a focused window (hover, pointer-out).
 pub(crate) fn show_quietly(window: &Window) {
     #[cfg(target_os = "macos")]
-    crate::mac::without_taking_focus(|| {
-        window.show();
-        window.bring_to_top();
-    });
+    {
+        crate::mac::hover_without_focus(window.window_handle());
+        crate::mac::without_taking_focus(|| {
+            window.show();
+            window.bring_to_top();
+        });
+    }
     #[cfg(not(target_os = "macos"))]
     {
         window.show();
@@ -180,10 +210,12 @@ wrap_window_delegate! {
             crate::mac::round_window_corners(window.window_handle(), 10.0, true);
             #[cfg(target_os = "windows")]
             crate::win::round_window_corners(window.window_handle(), true);
+            #[cfg(target_os = "macos")]
+            crate::mac::mark_as_part(window.window_handle());
             let engine = Engine::global();
             let show = {
                 let mut inner = engine.lock();
-                let bar = inner.float_bar.as_mut();
+                let bar = inner.win.float_bar.as_mut();
                 bar.map(|f| {
                     f.window = Some(window.clone());
                     f.shown
@@ -194,7 +226,7 @@ wrap_window_delegate! {
             }
         }
         fn on_window_destroyed(&self, _window: Option<&mut Window>) {
-            Engine::global().lock().float_bar = None;
+            Engine::global().lock().win.float_bar = None;
         }
         fn parent_window(
             &self,

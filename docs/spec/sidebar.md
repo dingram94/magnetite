@@ -25,7 +25,8 @@ From top to bottom:
    archive (`bookmarks.md`, `history.md`, `archive.md`; its menu also opens
    Settings), one icon
    per space, and
-   "+" (New Space, New Folder, New Smart Folder, New Split, New Tab).
+   "+" (New Space, Private Space, New Folder, New Smart Folder, New Split,
+   New Tab).
 
 If the sidebar's page crashes, Magnetite loads it again and it shows the
 current state; the same holds for the command bar and the notification
@@ -48,18 +49,20 @@ the row turns the icon into a back arrow that takes the page back.
 ## Tab rows
 
 - A row shows the icon, the title, a speaker button while the tab plays or
-  is muted, and a close button on hover. A bold title marks a tab that
+  is muted, a red screen mark while the tab is being shared (below), and a
+  close button on hover. A bold title marks a tab that
   opened in the background and was not viewed yet.
 - A click shows the tab and loads its page if needed. Tabs without a loaded
   page are dimmed. A page is unloaded once it has been off screen for more
   than 4 hours (Settings → Tabs & archive: 10 minutes, 30 minutes,
-  2, 4 or 12 hours, or never), unless it has media, is the tab its space
+  2, 4 or 12 hours, or never), unless it has media, is being shared, is the tab its space
   returns to, is a favorite or pinned, or is kept active. When the system runs short
   of memory, such pages are unloaded without waiting, also with "never":
   at the system's warning the half that was off screen the longest, at its
   critical level all of them.
 - While no page is on screen (every tab closed, or a new space), the page
-  area shows the logo and "Press ⌘T to open a tab".
+  area shows the logo and "Press ⌘T to open a tab", or the picture chosen
+  for the space's empty window (`spaces.md`, "Look").
 - **Favorites and pinned tabs stay loaded** once opened, until they are
   closed, also when the system runs short of memory.
 - Closing a favorite or a pinned tab unloads it and takes it back to its
@@ -72,14 +75,56 @@ the row turns the icon into a back arrow that takes the page back.
   it. Middle-click closes a tab.
 - The context menu has the actions that fit the tab, among them Reload,
   Share…, Copy link, Pin tab, Unpin tab, Add to favorites, Remove from
-  favorites, Open in split view, Rename, Move to another space, and Archive
-  (Today) or Close.
+  favorites, Open in split view, Duplicate tab, Rename, Move to another
+  space, and Archive (Today) or Close. "Duplicate tab" opens the tab's
+  address as a new Today tab; a favorite has "Duplicate favorite" instead.
+
+## Shared tabs
+
+While a page shares a tab's picture (screen sharing in a meeting, "Tab" in
+the share dialog), that tab is marked wherever it shows:
+
+- Its row carries a red screen mark, also on hover; so does its cell in a
+  split row, where the close button takes the mark's place on hover. A
+  shared favorite has a red dot on its tile.
+- The address row's chip has the red dot while the shared tab is the
+  current one; the tooltip says "This tab is being shared".
+- The mark follows "Share this tab instead" and goes when the sharing ends:
+  "Stop sharing", the meeting page ending it, or the meeting tab closing or
+  loading another page.
+- A shared tab is not unloaded or archived in the background.
+
+Sharing a window or the whole screen marks no tab.
+
+How it works: CEF does not say which tab a capture shows, so the pages
+tell. Every web page gets a capture handle, a random text set with
+`setCaptureHandleConfig`. A page that calls `getDisplayMedia` has its
+tracks watched (copies made with `clone` too), reads the handle of the tab
+they show and reports it; this covers frames inside the page, also ones
+without an address of their own (`srcdoc`). The hook reads a track through
+the browser's own functions, so a page cannot make a live capture look
+ended by redefining them. A tab is shared while such a report names its
+handle. The handle is new with every page load, and only a page that
+captures the tab can read it; it names nothing about the user or the tab.
+
+Not marked, for that reason:
+
+- pages without a secure context (plain `http`, except this computer's
+  own addresses) and Magnetite's own pages;
+- a page that sets a capture handle of its own, which replaces ours;
+- captures started by an extension.
+
+Code: `crates/engine/src/tabshare.rs`, `tabshare_hook.js`;
+`crates/app/src/state/tabs.rs` (`in_use`); `crates/ui/web/src/Rows.tsx`.
 
 ## Moving tabs
 
-- Drag a tab to reorder it, or to a favorites list (added at the end),
-  Pinned, a folder or Today. Dropped on the middle of another tab's row or
-  on the page area, it opens in split view (`split-view.md`).
+- Drag a tab to reorder it, or to a favorites list, Pinned, a folder or
+  Today. Dropped on the middle of another tab's row or on the page area, it
+  opens in split view (`split-view.md`).
+- Over a favorites list the dragged tab or favorite shows as a tile where it
+  would land, and the other tiles make room: over another tile it takes
+  that tile's place. Dropped on the list's title, it is added at the end.
 - `Cmd+D` pins the active Today tab at the top of Pinned, or moves the active
   pinned tab to the top of Today. It does nothing for a favorite.
 - A tab that comes to Today from Pinned or the favorites counts as used at
@@ -111,6 +156,8 @@ the row turns the icon into a back arrow that takes the page back.
   profile's list, and "New profile for this favorite…" makes a profile and
   a list for it. "Duplicate favorite" plus another profile gives two
   accounts of one site, each in its list.
+- "Open as panel" makes a favorite or a pinned tab a web panel: a click then opens it
+  over the page in front instead of in its place (`web-panels.md`).
 
 ## Folders
 
@@ -120,31 +167,61 @@ the row turns the icon into a back arrow that takes the page back.
   tabs. The sidebar page keeps this on the device, not in `state.json`.
 - Double-click or the context menu renames a folder; "Change icon…" picks
   one of 27 glyphs or the default icon.
-- A tab dropped on a folder goes to its top. A dragged folder is placed
-  among the top-level items of Pinned.
-- Folders inside folders are shown (an import can bring them), but the
-  sidebar cannot nest a folder.
+- A tab dropped on a folder goes to its top.
+- Folders nest: a folder dropped on the middle of another goes to its top,
+  one dropped on the upper or lower edge of a row is placed there, at any
+  level, and one dropped below the pinned items goes to the end of the top
+  level. "New folder inside" in a folder's context menu makes one at its
+  top. A folder does not go into itself, into a smart folder or more than
+  32 folders deep.
 - "Delete folder (keep tabs)" in the context menu removes the folder; its
   tabs stay where it was. A smart folder is deleted with the items it
   listed.
 - A folder can fill itself from a service (`smart-folders.md`).
+- "Copy link to share" in the context menu makes a link that carries the
+  folder (`sharing.md`).
 
 ## Hiding and resizing
 
 `Cmd+S` or the sidebar button hides the sidebar: the pages take the whole
-window and the keyboard. `Cmd+S` shows it again. In a window that is not
-full screen, a strip above the pages stays free for the window's close,
-minimize and zoom buttons. (On Windows and Linux those buttons are in a
-row above the pages at the top right, with or without the sidebar.) While
-it is hidden on macOS or Windows,
+window and the keyboard. `Cmd+S` shows it again. (On Windows and Linux the
+window's buttons are in a row above the pages at the top right, with or
+without the sidebar.) While it is hidden on macOS or Windows,
 moving the pointer to the window's left edge slides the sidebar out over the
-pages without taking the keyboard from the page. It leaves when the pointer
-does, or on Esc; its sidebar button or `Cmd+S` docks it again. The sidebar
-is docked at every start.
+pages, along the window's whole height, without taking the keyboard from the
+page. It leaves when the pointer does, or on Esc; its sidebar button or
+`Cmd+S` docks it again. The sidebar is docked at every start.
+
+The pages cover the window's close, minimize and full screen buttons while
+the sidebar is hidden, so the sidebar that slides out has them, in its title
+band. With the top bar on they stay in the top bar. The gap above the pages
+still drags the window.
 
 Dragging the sidebar's right edge sets its width (220 to 360 points, 264 by
 default; double-click resets). Settings → Appearance has the width too, plus
-text size (85 to 130 %) and row density (compact, comfortable, spacious).
+text size (85 to 130 %), row density (compact, comfortable, spacious) and
+the layout (below).
+
+## Top bar
+
+Settings → Appearance → Layout → **Top bar** (off by default), or "Toggle
+top bar" in the command bar, moves the sidebar's title band and address row
+into a bar across the whole window, above the sidebar and the pages. It
+switches at once, without a restart.
+
+- From left to right: the sidebar button, back, forward and reload, the
+  address, the pinned extensions, and outside macOS minimize, maximize and
+  close. On macOS the window's own buttons sit at its left end. The address
+  keeps at least 240 points: pinned extensions that do not fit beside it are
+  left out, as in the sidebar (`extensions.md`).
+- The address shows the whole address without `https://` and `www.`; a
+  click opens the command bar with it, as in the sidebar. An open peek shows
+  its controls in its place.
+- The site controls, the copy menu (right-click on the copy button) and an
+  extension's menu open in small windows just below the bar.
+- The sidebar keeps the rest: favorites, tabs, the footer. Hidden (`Cmd+S`),
+  it still slides out over the pages, below the bar.
+- Empty space in the bar drags the window; a double-click maximizes it.
 
 ## Keyboard
 
@@ -154,24 +231,43 @@ text size (85 to 130 %) and row density (compact, comfortable, spacious).
 | Change the address | Cmd+L |
 | Close the tab | Cmd+W |
 | Reopen the last archived tab | Cmd+Shift+T |
-| Next / previous tab of the space (below) | Ctrl+Tab / Ctrl+Shift+Tab |
+| The tab used before this one, and further back or forth (below) | Ctrl+Tab / Ctrl+Shift+Tab |
 | Tab 1 to 9 of the space (pinned first, then Today) | Cmd+1 to Cmd+9 |
 | Pin or unpin the active tab | Cmd+D |
 | Show or hide the sidebar | Cmd+S |
 | Back / forward / reload | Cmd+[ / Cmd+] / Cmd+R |
 | History | Cmd+Y |
 | Print the page | Cmd+P |
+| Find in the page / next / previous match | Cmd+F / Cmd+G / Cmd+Shift+G |
 
-`Cmd+S`, `Cmd+D` and `Cmd+P` go to the page first, which may use them
-itself. The six shortcuts above `Cmd+D` are taken before the page sees the
-key.
+These are the keys until the user changes them (`shortcuts.md`); the digits,
+back, forward and reload are fixed. "Show or hide the sidebar", "Pin or
+unpin the active tab", print and find go to the page first, which may use
+the key itself. The six shortcuts above "Pin or unpin" are taken before the
+page sees the key.
 
-`Ctrl+Tab` and `Ctrl+Shift+Tab` go through the rows of the current space
-in the order of `Cmd+1` to `Cmd+9`: the pinned tabs, those in folders
-included (also closed ones), then Today; after the last comes the first.
-The tabs of a split count one by one, so the keys can leave a split or
-move within it. Favorites are not part of the round; from a favorite the
-keys go to the first or the last row.
+`Ctrl+Tab` goes to the tab used before this one, and pressed again, back:
+the tabs are taken by last use, the favorites and the tabs of the current
+space together. With Ctrl held, each further Tab goes one tab further back
+(`Ctrl+Shift+Tab`: the other way), around the nine used last, and after
+150 ms a list over the page shows them with the one it stands on marked.
+Letting go of Ctrl chooses that tab; choosing a tab or a space some other
+way ends the round. The list never takes the keyboard.
+
+| Setting | Values | Default |
+|---|---|---|
+| Settings → Tabs & archive → "Ctrl+Tab goes through the tabs" | by last use, in sidebar order | by last use |
+
+In sidebar order the two keys go through the rows of the current space in
+the order of `Cmd+1` to `Cmd+9`: the pinned tabs, those in folders included
+(also closed ones), then Today; after the last comes the first. The tabs of
+a split count one by one, so the keys can leave a split or move within it.
+Favorites are not part of the round; from a favorite the keys go to the
+first or the last row.
+
+The order of last use is kept while Magnetite runs; after a restart the
+tabs count by the time they were last chosen. The setting stays on the
+device.
 
 ## Data
 
@@ -191,6 +287,9 @@ not opened.
 
 - Changing the home page of a pinned tab or favorite without pinning it
   again, and a "back to home page" control for favorites.
+- Outside macOS, the round with Ctrl held and its list: there the system
+  does not say whether the key is still down, so every `Ctrl+Tab` switches
+  at once to the tab used before.
 
 Code: `crates/core/src/{model,sidebar}.rs`, `crates/app/src/app/tabs.rs`,
 `crates/app/src/state/{tabs,folders,profiles}.rs`,

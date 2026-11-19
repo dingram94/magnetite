@@ -56,7 +56,7 @@ search; search and site search addresses are `https://` with `%s` only
 are dropped (`state::drop_unsafe_tabs`).
 
 Magnetite asks the system to become the default browser only on the user's
-click (Settings → General, or the welcome page's switch once "Start
+click (Settings → Links, or the welcome page's switch once "Start
 browsing" is pressed), and macOS confirms with the user
 (`Engine::make_default_browser`); on Windows the user chooses in Windows'
 own Settings, which that click opens.
@@ -89,7 +89,21 @@ from a context Magnetite did not make is not opened.
   (`adopt_sidebar`).
 - They leave no history: their pages are not recorded (`history.rs`,
   `record_visit`), in a tab or a peek.
-- Their favicons are not cached on disk.
+- Their favicons are not cached on disk, and the icon address of a tab
+  that is not saved is not saved either (`saved_form`).
+- The private space (`state/private.rs`) goes further: the space and its
+  profiles are never saved or synced, and each tab the user opens there has
+  an in-memory profile of its own; a page opened from such a tab runs in
+  that tab's profile. A profile is taken off the list once nothing runs in
+  it (`release_private_profiles`), and the engine lets go of its context
+  (`Engine::forget_contexts`) and closes the popup windows still open in
+  it, so Chromium drops it with its cookies and storage. Nothing moves into
+  the space or out of it (`move_tab`, `keep_space`, `open_tab_from`), and
+  its profiles cannot be given to another space or tab.
+- In-memory contexts are off-the-record children of the default profile,
+  so Chromium runs the default profile's extensions in them if, and only
+  if, "Allow in Incognito" is on for the extension. Such an extension sees
+  every private tab it runs in.
 - The sidebar (default context) never loads a remote favicon of a page in
   another profile: it would send the default profile's cookies to that site.
 
@@ -108,6 +122,30 @@ from a context Magnetite did not make is not opened.
 - `MAGNETITE_DEVTOOLS_PORT` works in development builds only. A data folder
   that ever ran with `--mock-keychain` keeps that mode (Chromium resets its
   protected settings when the key changes) and Settings says so.
+
+## Developer features
+
+- Console errors are counted only for local pages, and only counted (their
+  texts are not kept): served by this computer or a host the user named (`dev::is_local`, on the parsed host, so `localhost.example.org` is
+  not local).
+- Developer mode for a site that this computer does not serve (the switch
+  in its site controls) gives it the bar, the caution border and the error count,
+  nothing more: no reset of its data by key.
+- Waiting for a server connects only to loopback addresses, whatever the
+  page's host resolves to.
+- "Reset page" clears site data only for a page this computer serves; on
+  any other page, a named "also local" host included, the key only reloads.
+- No program outside Magnetite can reach a page: there is no remote
+  debugging port and no socket for other programs. A bridge that let coding
+  agents read local pages was built and taken out again (ADR-0014).
+- The picture of an element copied as context is a 0600 file in the data
+  folder, removed at quit.
+- A recording is made only when the user starts one, of one page, and
+  written only to the user's Downloads folder under a name Magnetite makes.
+  The page's pictures and the video's pieces travel between the app and
+  Magnetite's own UI pages (`magnetite://ui`), which web pages cannot reach.
+- The time zone a page is shown in is checked to be a zone's name before it
+  goes to the browser.
 
 ## Pages and extensions are untrusted input
 
@@ -147,9 +185,15 @@ from a context Magnetite did not make is not opened.
   of the first start, which shows the same controls, may read the code or
   change the chain. Details in `docs/spec/sync.md` and ADR-0005.
 - Ad blocking: the filter lists the user chose, and nothing while it is off.
-  `https://` only, at most 5 redirects, 16 MB per list, a web page in place
+  `https://` only, at most 5 redirects, 16 MB per file, a web page in place
   of a list is refused. Only the download is sent; what pages are opened
   and what is blocked stays on this computer (`docs/spec/ad-blocking.md`).
+  A list can make pages run scriptlets, but only code that came with the
+  package (`scriptlets/scriptlets.json`, uBlock Origin's at a pinned
+  commit): a list names a scriptlet and its arguments, it cannot bring
+  script of its own. The scriptlets that can do a page anything are open to
+  uBlock Origin's lists alone, so whoever publishes those lists is trusted
+  with the pages of users who chose them.
 - Sync server: lives in the magnetite-sync repository, with its own
   security notes (README "Limits", `docs/design.md`,
   `docs/public-instance.md`).
@@ -222,6 +266,8 @@ panel instead of Chromium's bubble at the page's top left (`prompts.rs`).
   Private profiles' downloads are listed while Magnetite runs, never saved.
 - The UI names a list entry, never a path: Magnetite opens or reveals only
   files Chromium reported as downloaded, through the system's own opener.
+  Copying a file or its path goes the same way: the app puts it on the
+  clipboard, the page does not get it.
 
 ## Updates
 
@@ -252,3 +298,9 @@ panel instead of Chromium's bubble at the page's top left (`prompts.rs`).
   off (Settings → About). Development builds may read a signed feed from
   this computer (`MAGNETITE_UPDATE_FEED`, `MAGNETITE_UPDATE_KEY`); release
   builds ignore both.
+- A Magnetite installed from the rpm or deb (the `system-package` file next
+  to its binary) never asks for updates itself: the system's package manager
+  fetches them from Magnetite's package repository and checks them against
+  the GPG key the package installed (ADR-0011). Magnetite only watches its
+  own binary, which only root can replace; once the file changed, it runs
+  it with `--version` and offers a restart if that version is newer.

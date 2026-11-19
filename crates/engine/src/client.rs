@@ -12,6 +12,8 @@ use crate::keys;
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     Sidebar,
+    /// The top bar above the sidebar and the pages (`frame.rs`).
+    TopBar,
     Content,
     /// A `magnetite://ui` page in an overlay window above a page (capture tool).
     Overlay,
@@ -24,7 +26,7 @@ pub enum Kind {
 
 /// Our own UI asks with the app's trust; everything else is a page.
 fn url_source(kind: Kind) -> UrlSource {
-    if matches!(kind, Kind::Sidebar | Kind::Overlay) {
+    if matches!(kind, Kind::Sidebar | Kind::TopBar | Kind::Overlay) {
         UrlSource::Ui
     } else {
         UrlSource::Page
@@ -86,6 +88,15 @@ wrap_client! {
                 Engine::global().on_media_report(browser.as_deref(), &json);
                 return 1;
             }
+            // Every frame of a page may report what it captures.
+            if self.kind == Kind::Content
+                && let (Some(frame), Some(msg)) = (frame.as_deref(), message.as_ref())
+                && CefString::from(&msg.name()).to_string() == crate::tabshare::MESSAGE
+            {
+                let text = |index| msg.argument_list().map(|a| CefString::from(&a.string(index)).to_string()).unwrap_or_default();
+                Engine::global().on_share_report(browser.as_deref(), frame, &text(0), &text(1));
+                return 1;
+            }
             let router = Engine::global().lock().router.clone();
             match router {
                 Some(r) => r.on_process_message_received(browser.cloned(), frame.cloned(), source_process, message.cloned()).into(),
@@ -98,6 +109,9 @@ wrap_client! {
 impl MagnetiteClient {
     pub fn sidebar() -> Client {
         MagnetiteClient::new(Kind::Sidebar)
+    }
+    pub fn top_bar() -> Client {
+        MagnetiteClient::new(Kind::TopBar)
     }
     pub fn content() -> Client {
         MagnetiteClient::new(Kind::Content)
@@ -147,11 +161,21 @@ wrap_display_handler! {
         fn on_console_message(
             &self,
             browser: Option<&mut Browser>,
-            _level: LogSeverity,
+            level: LogSeverity,
             message: Option<&CefString>,
-            _source: Option<&CefString>,
-            _line: ::std::os::raw::c_int,
+            source: Option<&CefString>,
+            line: ::std::os::raw::c_int,
         ) -> ::std::os::raw::c_int {
+            if self.kind == Kind::Content {
+                // Errors only. The app counts them for local pages alone.
+                let engine = Engine::global();
+                if *level.as_ref() as i32 >= sys::cef_log_severity_t::LOGSEVERITY_ERROR as i32
+                    && let Some(id) = engine.content_id_for(browser.as_deref())
+                {
+                    engine.emit(EngineEvent::ConsoleError { id });
+                }
+                return 0;
+            }
             if self.kind != Kind::DevTools { return 0; }
             let text = message.map(CefString::to_string).unwrap_or_default();
             Engine::global().devtools_menu_message(browser.as_deref(), &text).into()
@@ -162,6 +186,26 @@ wrap_display_handler! {
             if let Some(id) = engine.content_id_for(browser.as_deref()) {
                 engine.show_status(id, &value.map(CefString::to_string).unwrap_or_default());
             }
+        }
+        /// Chromium shows a cursor only in the window that has the keyboard;
+        /// ours also show it while a page has it (`show_cursor_without_focus`).
+        fn on_cursor_change(
+            &self,
+            browser: Option<&mut Browser>,
+            cursor: OsCursor,
+            _type: CursorType,
+            _custom_cursor_info: Option<&CursorInfo>,
+        ) -> ::std::os::raw::c_int {
+            #[cfg(target_os = "macos")]
+            if let Some(host) = browser.and_then(|b| b.host()) {
+                // SAFETY: the view of a browser that is alive in this
+                // callback, and the `NSCursor` CEF reports with it; CEF
+                // holds both until the callback returns.
+                unsafe { crate::mac::show_cursor_without_focus(host.window_handle(), cursor) };
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (browser, cursor);
+            0
         }
         fn on_favicon_urlchange(&self, browser: Option<&mut Browser>, icon_urls: Option<&mut CefStringList>) {
             if self.kind != Kind::Content { return; }
@@ -267,6 +311,9 @@ wrap_life_span_handler! {
             if let Some(r) = engine.lock().router.clone() {
                 r.on_before_close(browser.as_deref().cloned());
             }
+            if let Some(b) = browser.as_deref() {
+                crate::scriptlets::page_closed(b.identifier());
+            }
             engine.on_browser_closed(self.kind, browser.as_deref());
         }
     }
@@ -286,6 +333,9 @@ wrap_focus_handler! {
             if let Some(id) = page {
                 // A click into a page closes an open palette.
                 engine.blur_overlay();
+                // The window of the page the user turns to is the current one.
+                let home = engine.lock().home_of(id);
+                engine.enter(home);
                 // The outline follows the keyboard at once, before the app hears of it.
                 engine.update_focus_ring(Some(id));
                 engine.emit(EngineEvent::ContentFocused { id });
@@ -360,6 +410,21 @@ wrap_load_handler! {
             if self.kind == Kind::DevTools && frame.is_main() != 0 {
                 Engine::global().devtools_loaded(browser);
             }
+            // The page behind the tabs may have loaded after they were
+            // placed: it learns where they are.
+            // In its own window, current or not.
+            if self.kind == Kind::Overlay && frame.is_main() != 0 {
+                let engine = Engine::global();
+                if let Some(win) = engine.window_of_browser(browser.identifier()) {
+                    engine.in_window(win, || engine.update_page_shadows());
+                }
+            }
+            // The user's own CSS and JavaScript for the site.
+            if self.kind == Kind::Content && frame.is_main() != 0 {
+                let engine = Engine::global();
+                engine.put_site_style(frame);
+                engine.run_site_script(frame);
+            }
         }
         fn on_load_start(&self, browser: Option<&mut Browser>, frame: Option<&mut Frame>, _transition_type: TransitionType) {
             let engine = Engine::global();
@@ -369,17 +434,45 @@ wrap_load_handler! {
             if let (Some(b), Some(f)) = (browser.as_deref(), frame.as_deref())
                 && f.is_main() != 0
             {
-                engine.note_loaded_url(b.identifier(), CefString::from(&f.url()).to_string());
+                let url = CefString::from(&f.url()).to_string();
+                Engine::keep_own_page_unzoomed(b, &url);
+                engine.note_loaded_url(b.identifier(), url);
             }
             if self.kind != Kind::Content { return; }
             if let (Some(id), Some(f)) = (engine.content_id_for(browser.as_deref()), frame) {
                 engine.note_origin(id, &CefString::from(&f.url()).to_string());
                 // A new page in the tab: the old one's connection state no
-                // longer holds, and nothing of it plays any more.
+                // longer holds, and nothing of it plays or captures any more.
                 if f.is_main() != 0 {
                     engine.emit_site_state(id);
                     engine.on_media_report(browser.as_deref(), "null");
+                    engine.end_captures(id);
+                    // Before the page shows anything: the user's own CSS.
+                    engine.put_site_style(f);
                 }
+            }
+        }
+        fn on_load_error(
+            &self,
+            browser: Option<&mut Browser>,
+            frame: Option<&mut Frame>,
+            error_code: Errorcode,
+            _error_text: Option<&CefString>,
+            failed_url: Option<&CefString>,
+        ) {
+            if self.kind != Kind::Content || frame.is_some_and(|f| f.is_main() == 0) { return; }
+            let code = *error_code.as_ref() as i32;
+            // Given up before anything changed (a download, a load that was
+            // stopped): the tab still shows the page it showed.
+            if code == sys::cef_errorcode_t::ERR_ABORTED as i32 { return; }
+            let engine = Engine::global();
+            if let Some(id) = engine.content_id_for(browser.as_deref()) {
+                let refused = code == sys::cef_errorcode_t::ERR_CONNECTION_REFUSED as i32;
+                let url = failed_url.map(CefString::to_string).unwrap_or_default();
+                // The error page stands at the failed address, and CEF
+                // reports no address change for it.
+                engine.update_mini_address(id, &url);
+                engine.emit(EngineEvent::LoadFailed { id, url, refused });
             }
         }
         fn on_loading_state_change(
@@ -410,7 +503,7 @@ wrap_load_handler! {
                         engine.emit(EngineEvent::SidebarLoaded);
                     }
                 }
-                Kind::Overlay | Kind::DevTools | Kind::Stray => {}
+                Kind::TopBar | Kind::Overlay | Kind::DevTools | Kind::Stray => {}
             }
         }
     }
@@ -434,7 +527,7 @@ wrap_request_handler! {
             // The sidebar, the floating sidebar and overlays show our UI only:
             // a link dropped on them must not turn them into a web page that
             // then receives the app's state.
-            if matches!(self.kind, Kind::Sidebar | Kind::Overlay) && main {
+            if matches!(self.kind, Kind::Sidebar | Kind::TopBar | Kind::Overlay) && main {
                 let url = request.as_ref().map(|r| CefString::from(&r.url()).to_string()).unwrap_or_default();
                 if !engine.is_own_ui(&url) {
                     return 1;
@@ -520,16 +613,19 @@ wrap_request_handler! {
             _error_string: Option<&CefString>,
         ) {
             let engine = Engine::global();
-            // What the page played died with its renderer.
+            // What the page played or captured died with its renderer.
             if self.kind == Kind::Content {
                 engine.on_media_report(browser.as_deref(), "null");
+                if let Some(id) = engine.content_id_for(browser.as_deref()) {
+                    engine.end_captures(id);
+                }
             }
             if let Some(r) = engine.lock().router.clone() {
                 r.on_render_process_terminated(browser.as_deref().cloned());
             }
             // Our own pages have no "this page crashed" view to reload from:
             // without this the sidebar stays blank until the app restarts.
-            if matches!(self.kind, Kind::Sidebar | Kind::Overlay)
+            if matches!(self.kind, Kind::Sidebar | Kind::TopBar | Kind::Overlay)
                 && let Some(browser) = browser.as_deref().cloned()
                 && engine.may_reload_ui(browser.identifier())
             {
@@ -561,7 +657,11 @@ wrap_command_handler! {
             // A window Chromium opened itself (the DevTools of an extension
             // popup): its keys are its own, not commands for our tabs.
             if self.kind == Kind::Stray { return 0; }
-            let Some(shortcut) = keys::shortcut_for_chrome_command(command_id) else { return 0 };
+            let shortcut = match keys::shortcut_for_chrome_command(command_id) {
+                keys::ChromeCommand::Pass => return 0,
+                keys::ChromeCommand::Drop => return 1,
+                keys::ChromeCommand::Run(shortcut) => shortcut,
+            };
             // Keys in DevTools act on their page.
             let owner = engine.devtools_owner(browser.as_deref());
             let from = engine.content_id_for(browser.as_deref()).or(owner);
@@ -572,6 +672,12 @@ wrap_command_handler! {
         }
     }
 }
+
+/// The cursor CEF hands along; its type differs per OS.
+#[cfg(target_os = "macos")]
+type OsCursor = *mut u8;
+#[cfg(not(target_os = "macos"))]
+type OsCursor = CursorHandle;
 
 /// The native key event CEF hands along (unused); its type differs per OS.
 #[cfg(target_os = "macos")]
@@ -596,9 +702,16 @@ wrap_keyboard_handler! {
             _is_keyboard_shortcut: Option<&mut ::std::os::raw::c_int>,
         ) -> ::std::os::raw::c_int {
             let engine = Engine::global();
-            // A hidden sidebar can still hold focus, and Chromium drops input
-            // to hidden pages: its shortcuts (Cmd+S to show it again) run here.
-            if self.kind == Kind::Sidebar && !engine.sidebar_visible() {
+            // The sidebar's and the top bar's shortcuts run here, not in their pages: the keys are
+            // the user's (`keymap.rs`), and a hidden sidebar can still hold
+            // focus while Chromium drops input to hidden pages.
+            // The floating sidebar is an overlay window; the other overlays
+            // (the command bar, the capture tool) keep their keys.
+            let floating = self.kind == Kind::Overlay
+                && engine.float_sidebar_browser().is_some_and(|float| {
+                    browser.as_deref().is_some_and(|b| b.identifier() == float.identifier())
+                });
+            if matches!(self.kind, Kind::Sidebar | Kind::TopBar) || floating {
                 let Some(shortcut) = event.and_then(|e| keys::shortcut_for_key(e).or_else(|| keys::yieldable_shortcut(e))) else { return 0 };
                 engine.emit(EngineEvent::Shortcut { from: None, shortcut });
                 return 1;
@@ -729,7 +842,7 @@ wrap_context_menu_handler! {
             model: Option<&mut MenuModel>,
         ) {
             let Some(m) = model else { return };
-            if matches!(self.kind, Kind::Sidebar | Kind::Overlay) {
+            if matches!(self.kind, Kind::Sidebar | Kind::TopBar | Kind::Overlay) {
                 m.clear();
             } else if self.kind == Kind::Content
                 && let Some(incognito) = keys::command_id_for("IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD")
@@ -764,20 +877,37 @@ wrap_drag_handler! {
         kind: Kind,
     }
     impl DragHandler {
-        /// `-webkit-app-region: drag` areas of the sidebar page become the
-        /// frame window's draggable regions (the sidebar view sits at 0,0).
+        /// `-webkit-app-region: drag` areas of the sidebar and the top bar
+        /// page become their frame window's draggable regions.
         fn on_draggable_regions_changed(
             &self,
-            _browser: Option<&mut Browser>,
+            browser: Option<&mut Browser>,
             frame: Option<&mut Frame>,
             regions: Option<&[DraggableRegion]>,
         ) {
-            if self.kind != Kind::Sidebar || frame.is_some_and(|f| f.is_main() == 0) {
+            if frame.is_some_and(|f| f.is_main() == 0) || !matches!(self.kind, Kind::Sidebar | Kind::TopBar) {
                 return;
             }
+            let regions = regions.map(<[DraggableRegion]>::to_vec).unwrap_or_default();
             let engine = Engine::global();
-            engine.lock().sidebar_drag = regions.map(<[DraggableRegion]>::to_vec).unwrap_or_default();
-            engine.apply_drag_regions();
+            // The developer bar drags nothing: it is no part of the frame's
+            // draggable area (`apply_drag_regions`).
+            let id = browser.as_ref().map(|b| b.identifier());
+            if id.is_some() && engine.dev_bar_browser().map(|b| b.identifier()) == id {
+                return;
+            }
+            // The window whose sidebar or top bar this is, current or not.
+            let win = browser
+                .and_then(|b| engine.window_of_browser(b.identifier()))
+                .unwrap_or_else(|| engine.current_window());
+            engine.in_window(win, || {
+                if self.kind == Kind::Sidebar {
+                    engine.lock().win.sidebar_drag = regions;
+                } else {
+                    engine.lock().win.top_bar_drag = regions;
+                }
+                engine.apply_drag_regions();
+            });
         }
     }
 }

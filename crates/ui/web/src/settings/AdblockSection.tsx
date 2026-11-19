@@ -3,7 +3,7 @@
 // Nothing is downloaded until the user turns blocking on and picks a list.
 import { useEffect } from "react";
 import { send } from "../bridge";
-import { Switch, Toggle } from "./fields";
+import { Group, Switch, Toggle } from "./fields";
 import type { Info, SettingsPatch } from "./types";
 
 /** When a list was downloaded, in words. */
@@ -29,27 +29,22 @@ export function AdblockChoice({ info, reload }: { info: Info; reload: () => void
   }, [working, info, reload]);
   return (
     <>
+      <Group>
       <Toggle
         label="Block ads and trackers"
         hint="Requests of web pages to ad and tracking servers are stopped before they load. Only with the lists you choose below."
         checked={adblock.enabled}
         onChange={(enabled) => change({ cmd: "set_adblock_enabled", enabled })}
       />
+      </Group>
       {adblock.enabled && (
-        <div className="set-card flex flex-col gap-4">
-          <div>
-            <div className="set-label">Filter lists</div>
-            <p className="set-hint">
-              Volunteers keep these lists. Each one you choose is downloaded straight from its publisher, who sees your IP
-              address as any website does, and again every four days. What you browse is never sent.
-            </p>
-          </div>
-          {adblock.lists.length === 0 && <p className="set-hint" style={{ color: "var(--warn)" }}>Choose at least one list: without one, nothing is blocked.</p>}
+        <Group title="Filter lists" hint="Volunteers keep these lists. Each one you choose is downloaded from its publisher, who sees your IP address as any website does, and again every four days. What you browse is never sent.">
+          {adblock.lists.length === 0 && <p className="set-row set-hint" style={{ color: "var(--warn)", marginTop: 0 }}>Choose at least one list: without one, nothing is blocked.</p>}
           {info.adblock.lists.map((l) => {
             const on = adblock.lists.includes(l.id);
             return (
-              <label key={l.id} className="flex cursor-default items-start gap-4">
-                <span className="min-w-0 flex-1">
+              <label key={l.id} className="set-row flex cursor-default items-start gap-4" data-search-row>
+                <span className="min-w-0 flex-1" data-search-name>
                   <span className="set-label block">{l.name}</span>
                   <span className="set-hint block">{l.about} From {l.host}.</span>
                   {on && (
@@ -62,7 +57,7 @@ export function AdblockChoice({ info, reload }: { info: Info; reload: () => void
               </label>
             );
           })}
-        </div>
+        </Group>
       )}
     </>
   );
@@ -74,22 +69,20 @@ export function AdblockSection({ info, update, reload }: { info: Info; update: (
     <>
       <AdblockChoice info={info} reload={reload} />
       {adblock.enabled && (
-        <div className="set-card">
-          <div className="set-label">Sites where ads are not blocked</div>
-          <p className="set-hint">Turned off in the site panel (the button left of the address) for a site that does not work with blocking.</p>
+        <Group title="Sites where ads are not blocked" hint="Turned off in the site panel (the button left of the address) for a site that does not work with blocking.">
           {adblock.allowed_sites.length === 0 ? (
-            <p className="set-hint mt-3">None.</p>
+            <p className="set-row set-hint" style={{ marginTop: 0 }}>None.</p>
           ) : (
-            <ul className="mt-3 flex flex-col gap-2">
+            <ul>
               {adblock.allowed_sites.map((site) => (
-                <li key={site} className="flex items-center gap-3">
+                <li key={site} className="set-row flex items-center gap-3" data-search-row>
                   <span className="flex-1 truncate">{site}</span>
                   <button className="btn sm" onClick={() => update({ adblock: { ...adblock, allowed_sites: adblock.allowed_sites.filter((s) => s !== site) } })}>Block again</button>
                 </li>
               ))}
             </ul>
           )}
-        </div>
+        </Group>
       )}
     </>
   );

@@ -29,9 +29,18 @@ impl EngineDelegate for MagnetiteApp {
                     )
                 });
                 engine.set_quick_search_key(quick);
+                self.apply_shortcut_keys(engine);
+                engine.set_site_code(self.with_state(|s| s.settings.site_code.clone()));
                 // Before any profile exists: each gets these when it is made.
                 engine.set_autofill(autofill);
+                magnetite_engine::set_global_privacy_control(
+                    self.with_state(|s| s.settings.global_privacy_control),
+                );
+                engine.set_downloads(&self.with_state(|s| s.settings.downloads.clone()));
+                engine.set_default_zoom(self.with_state(|s| s.settings.page_zoom));
+                engine.set_languages(&self.with_state(|s| s.settings.languages.clone()));
                 engine.set_sidebar_width(width);
+                engine.set_top_bar_visible(self.with_state(|s| s.settings.appearance.top_bar));
                 if toolbar {
                     engine.set_chrome_toolbar(true);
                 }
@@ -48,12 +57,15 @@ impl EngineDelegate for MagnetiteApp {
                     );
                 }
                 engine.create_frame();
+                self.reopen_windows(engine);
             }
-            EngineEvent::FrameCreated
+            EngineEvent::WindowClosed { win } => self.window_closed(engine, win),
+            EngineEvent::FrameCreated { .. }
             | EngineEvent::FrameBoundsChanged
             | EngineEvent::ContentCreated { .. } => {}
             EngineEvent::SidebarLoaded => self.push_state(engine),
             EngineEvent::ContentClosed { id } => {
+                self.record_page_closed(engine, id);
                 self.with_prompts(|p| p.open.retain(|q| q.content != id));
                 self.show_prompts(engine);
                 // Closed by the app, the window is unknown here by now; one
@@ -66,6 +78,7 @@ impl EngineDelegate for MagnetiteApp {
                         s.peek = None;
                     }
                     s.minis.retain(|m| m.content != id);
+                    s.drop_phone(id);
                     let tab = s.content_to_tab.remove(&id);
                     if let Some(rt) = tab.as_ref().and_then(|tab| s.runtime.get_mut(tab)) {
                         rt.unload();
@@ -97,13 +110,18 @@ impl EngineDelegate for MagnetiteApp {
                     if let Some(p) = s.page_outside_mut(id) {
                         p.url.clone_from(&url);
                     }
-                    s.record_visit(id, &url);
+                    // The phone of a responsive split shows what its tab
+                    // shows: one visit, the tab's.
+                    if !s.is_phone(id) {
+                        s.record_visit(id, &url);
+                    }
                     if let Some(tab) = s.content_to_tab.get(&id).cloned()
                         && let Some(t) = s.find_tab_mut(&tab)
                     {
-                        t.url = url;
+                        t.url.clone_from(&url);
                     }
                 });
+                self.dev_url_changed(engine, id, &url);
                 self.push_state(engine);
             }
             EngineEvent::FaviconChanged { id, url } => {
@@ -121,6 +139,14 @@ impl EngineDelegate for MagnetiteApp {
                     }
                 });
                 self.show_state_paced(engine);
+            }
+            EngineEvent::ShareChanged { id, shared } => {
+                self.with_state(|s| {
+                    if let Some(rt) = s.page_runtime(id) {
+                        rt.shared = shared;
+                    }
+                });
+                self.push_state(engine);
             }
             EngineEvent::Download(report) => {
                 let changed = self.with_state(|s| {
@@ -148,6 +174,17 @@ impl EngineDelegate for MagnetiteApp {
                 self.show_prompts(engine);
             }
             EngineEvent::ExtensionPinsChanged => self.show_state(engine),
+            EngineEvent::AutofillChanged(autofill) => {
+                self.with_state(|s| s.settings.autofill = autofill);
+                self.save_soon();
+                engine.set_autofill(autofill);
+                // An open Settings page shows these switches: it asks for
+                // its data again (`SettingsPage.tsx`).
+                let js = r#"window.dispatchEvent(new Event("magnetite-settings-changed"))"#;
+                for page in self.own_page_tabs("magnetite://ui/settings") {
+                    engine.content_ui_eval(page, js);
+                }
+            }
             EngineEvent::ExtensionMenu(action) => match action {
                 ExtensionMenuAction::Open(id) => self.open_extension(engine, &id),
                 ExtensionMenuAction::TogglePin(id) => {
@@ -174,6 +211,11 @@ impl EngineDelegate for MagnetiteApp {
                 can_go_back,
                 can_go_forward,
             } => {
+                if loading {
+                    self.dev_load_started(id);
+                } else {
+                    self.dev_load_ended(id);
+                }
                 self.with_state(|s| {
                     if let Some(rt) = s.page_runtime(id) {
                         rt.loading = loading;
@@ -199,8 +241,20 @@ impl EngineDelegate for MagnetiteApp {
                     UrlSource::OtherApp => url_policy::Source::OtherApp,
                     UrlSource::Chromium => url_policy::Source::Chromium,
                 };
+                if source == url_policy::Source::OtherApp {
+                    self.leave_private_space(engine);
+                }
+                // A link from another app to a site with a rule belongs to
+                // the rule's space.
+                let ruled = (source == url_policy::Source::OtherApp)
+                    .then(|| self.link_rule_space(&url))
+                    .flatten();
                 let (target, from_mini) = self.with_state(|s| {
-                    let from_peek = from.is_some() && from == s.peek.as_ref().map(|p| p.content);
+                    // A web panel counts as the peek does: narrow, and over
+                    // the page, it is no place for a second page.
+                    let from_peek = from.is_some()
+                        && (from == s.peek.as_ref().map(|p| p.content)
+                            || from == engine.web_panel_content());
                     let ask = Ask {
                         source,
                         locked,
@@ -208,15 +262,22 @@ impl EngineDelegate for MagnetiteApp {
                         own_window,
                         background,
                         from_peek,
+                        ruled: ruled.is_some(),
                     };
                     let from_mini = from.is_some_and(|c| s.minis.iter().any(|m| m.content == c));
                     (ask.target(&s.settings.external_links), from_mini)
                 });
+                let context = context.as_deref();
                 match target {
-                    Target::Peek => self.open_peek(engine, &url, source, context.as_deref()),
-                    Target::Mini => self.open_mini(engine, &url, source, context.as_deref()),
+                    Target::Peek => self.open_peek(engine, &url, source, context),
+                    Target::Mini => self.open_mini(engine, &url, source, context),
                     Target::Tab => {
-                        self.open_url_from(engine, &url, background, source, context.as_deref());
+                        if let Some(space) = &ruled
+                            && self.with_state(|s| s.active_space != *space)
+                        {
+                            self.activate_space(engine, space);
+                        }
+                        self.open_url_from(engine, &url, background, source, context);
                     }
                 }
                 // A link from another app, or what a mini window's page
@@ -257,12 +318,27 @@ impl EngineDelegate for MagnetiteApp {
                 }
             }
             EngineEvent::Shortcut {
-                shortcut: Shortcut::OpenDevTools,
+                shortcut: shortcut @ (Shortcut::Find | Shortcut::FindNext | Shortcut::FindPrevious),
                 from,
             } => {
                 if let Some(c) = self.focused_content(from) {
-                    engine.content_show_devtools(c);
+                    engine.content_find(c, shortcut);
                 }
+            }
+            EngineEvent::Shortcut {
+                shortcut: Shortcut::DevPanel(panel),
+                from,
+            } => self.dev_panel(engine, from, panel),
+            EngineEvent::Shortcut {
+                shortcut: Shortcut::DevReset,
+                from,
+            } => self.dev_reset(engine, from),
+            EngineEvent::ConsoleError { id } => self.dev_console_error(engine, id),
+            EngineEvent::ScreencastFrame { id, jpeg } => self.record_picture(engine, id, jpeg),
+            EngineEvent::LoadFailed { id, url, refused } => {
+                self.with_state(|s| s.load_failed(id, &url));
+                self.push_state(engine);
+                self.dev_load_failed(engine, id, &url, refused);
             }
             EngineEvent::Shortcut { shortcut, .. } => self.handle_shortcut(engine, shortcut),
             EngineEvent::SiteChanged { id, state } => {
@@ -296,7 +372,10 @@ impl EngineDelegate for MagnetiteApp {
                 DividerAction::Release => self.push_state(engine),
                 DividerAction::Equalize => self.split_equalize(engine, &path),
             },
+            EngineEvent::WebPanelResized { id, width } => self.web_panel_resized(engine, id, width),
+            EngineEvent::WebPanelClose => self.close_web_panel(engine),
             EngineEvent::ContentFocused { id } => {
+                self.page_focused(engine, id);
                 // Clicking into a split page makes it the active tab, so the
                 // address row and sidebar follow the page you work in.
                 let changed = self.with_state(|s| {
@@ -323,11 +402,29 @@ impl EngineDelegate for MagnetiteApp {
                 });
                 self.show_state_paced(engine);
             }
+            EngineEvent::Relaunched { argv, cwd } => {
+                // Parsed as at start: an option's value is no address, and
+                // what follows `--single-argument` is one link (Windows).
+                let cwd = cwd.unwrap_or_default();
+                let (argv, link) = crate::split_link(argv);
+                let given = crate::parse_cli(argv)
+                    .map(|cli| cli.urls)
+                    .unwrap_or_default();
+                let urls: Vec<String> = (given.iter().map(|a| launch_url(a, &cwd)))
+                    .chain(link)
+                    .collect();
+                if urls.is_empty() {
+                    engine.activate_frame();
+                }
+                self.open_from_other_app(engine, urls);
+            }
             EngineEvent::QuitRequested => {
                 self.with_state(|s| {
                     s.persist();
                     s.history.save();
                 });
+                // The picture of the last element copied as context.
+                let _ = std::fs::remove_file(self.context_picture());
                 engine.quit();
             }
             EngineEvent::MemoryPressure(level) => self.unload_under_pressure(engine, level),
@@ -339,6 +436,7 @@ impl EngineDelegate for MagnetiteApp {
                     self.show_state(engine);
                 }
                 self.housekeeping(engine);
+                self.smart_wake_due(engine);
                 self.smart_refresh_due(engine);
                 self.update_tick(engine);
                 self.adblock_tick();
@@ -367,7 +465,8 @@ impl EngineDelegate for MagnetiteApp {
             serde_json::from_str(request).map_err(|e| format!("bad command: {e}"))?;
         // The sync code and the chain's lifecycle belong to Settings and to
         // the welcome page, which shows the same controls at the first
-        // start: a flaw in any other page of ours must not reach them.
+        // start: a flaw in any other page of ours must not reach them. Nor
+        // may another page change the shortcuts' keys or switch them off.
         let settings_only = matches!(
             cmd,
             UiCommand::SyncCode
@@ -375,9 +474,25 @@ impl EngineDelegate for MagnetiteApp {
                 | UiCommand::SyncJoin { .. }
                 | UiCommand::SyncLeave
                 | UiCommand::SyncDeleteChain
+                | UiCommand::SetShortcut { .. }
+                | UiCommand::SetSpaceShortcut { .. }
+                | UiCommand::ResetShortcut { .. }
+                | UiCommand::RecordShortcut { .. }
         );
         let trusted = ["magnetite://ui/settings", WELCOME_URL];
         if settings_only && !trusted.iter().any(|page| origin.starts_with(page)) {
+            return Err("only the Settings page may do that".into());
+        }
+        // Pictures are stored from Settings alone: the welcome page has no
+        // use for them. Nor for the list of every site's permissions, which
+        // no other page may read or change.
+        if matches!(
+            cmd,
+            UiCommand::SetAppearanceImage { .. }
+                | UiCommand::AllPermissions { .. }
+                | UiCommand::SetProfilePermission { .. }
+        ) && !origin.starts_with("magnetite://ui/settings")
+        {
             return Err("only the Settings page may do that".into());
         }
         // Granting a site a permission is the prompt's job alone.
@@ -389,6 +504,74 @@ impl EngineDelegate for MagnetiteApp {
         let value = self.handle_command(engine, cmd)?;
         Ok(value.to_string())
     }
+}
+
+impl MagnetiteApp {
+    /// The space a rule names for a link from another app to `url`
+    /// (Settings → Links).
+    fn link_rule_space(&self, url: &str) -> Option<String> {
+        self.with_state(|s| {
+            (s.settings)
+                .link_space(url, |id| s.space(id).is_some())
+                .cloned()
+        })
+    }
+
+    /// Open `urls` as links from another app: as macOS hands them over,
+    /// following the setting for links from outside, except those to a site
+    /// with a rule, which become tabs in the rule's space. There is one
+    /// peek, and opening it closes the one before: of several addresses the
+    /// last gets it, the others become background tabs.
+    pub(super) fn open_from_other_app(&self, engine: &Engine, urls: Vec<String>) {
+        let peek = self.with_state(|s| s.settings.external_links == "peek");
+        self.leave_private_space(engine);
+        // The space in front when the links arrive: where those without a
+        // rule belong, also after one with a rule brought its space forward.
+        let front = self.with_state(|s| s.active_space.clone());
+        let last = urls.len().saturating_sub(1);
+        for (i, url) in urls.into_iter().enumerate() {
+            if peek && i < last {
+                // A background tab: in the space a rule names for its site,
+                // else in the one in front.
+                match self.link_rule_space(&url) {
+                    Some(space) => self.open_background_in_space(engine, &url, &space),
+                    None => {
+                        self.open_url_from(engine, &url, true, url_policy::Source::OtherApp, None);
+                    }
+                }
+                continue;
+            }
+            if self.link_rule_space(&url).is_none() && self.with_state(|s| s.active_space != front)
+            {
+                self.activate_space(engine, &front);
+            }
+            self.on_event(
+                engine,
+                EngineEvent::OpenUrlRequested {
+                    from: None,
+                    url,
+                    background: false,
+                    new_window: false,
+                    own_window: false,
+                    locked: false,
+                    source: UrlSource::OtherApp,
+                    context: None,
+                },
+            );
+        }
+    }
+}
+
+/// An address for `arg`, which another program put on Magnetite's command
+/// line (`magnetite %U` in the menu entry, a path typed in a terminal): a
+/// file or folder that exists, relative to `cwd`, becomes its `file://`
+/// address; anything else stays as given, for `url_policy` to judge.
+pub(crate) fn launch_url(arg: &str, cwd: &std::path::Path) -> String {
+    let path = cwd.join(arg);
+    if arg.contains("://") || !path.is_absolute() || !path.exists() {
+        return arg.to_string();
+    }
+    url::Url::from_file_path(&path).map_or_else(|()| arg.to_string(), String::from)
 }
 
 /// Where `OpenUrlRequested` opens an address.
@@ -408,21 +591,24 @@ struct Ask {
     /// The user chose "Open Link in New Window".
     own_window: bool,
     background: bool,
-    /// The peek asked: what it opens becomes a tab.
+    /// The peek or a web panel asked: what it opens becomes a tab.
     from_peek: bool,
+    /// A link from another app to a site with a rule (Settings → Links).
+    ruled: bool,
 }
 
 impl Ask {
     /// "Open Link in New Window" gets a mini window. A link from another app
-    /// goes where Settings say (`external_links`:
-    /// "tab", "peek" or "mini"). A page locked to its site, or one that asks
+    /// goes where Settings say (`external_links`: "tab", "peek" or "mini"),
+    /// unless a rule names a space for its site: then it is a tab there. A
+    /// page locked to its site, or one that asks
     /// for a new window, gets a peek, unless it is the peek itself or the
     /// link opens in the background. Everything else becomes a tab.
     fn target(&self, external_links: &str) -> Target {
         if self.own_window {
             return Target::Mini;
         }
-        if self.source == url_policy::Source::OtherApp {
+        if self.source == url_policy::Source::OtherApp && !self.ruled {
             match external_links {
                 "peek" => return Target::Peek,
                 "mini" => return Target::Mini,
@@ -450,6 +636,7 @@ mod tests {
             own_window: false,
             background: false,
             from_peek: false,
+            ruled: false,
         }
     }
 
@@ -475,6 +662,17 @@ mod tests {
     }
 
     #[test]
+    fn a_link_with_a_rule_becomes_a_tab_whatever_the_setting_says() {
+        let ruled = Ask {
+            ruled: true,
+            ..ask(Source::OtherApp)
+        };
+        for setting in ["tab", "peek", "mini"] {
+            assert_eq!(ruled.target(setting), Target::Tab);
+        }
+    }
+
+    #[test]
     fn popups_and_locked_pages_peek_unless_the_peek_or_the_background_asks() {
         let popup = Ask {
             new_window: true,
@@ -492,5 +690,31 @@ mod tests {
             ..ask(Source::Page)
         };
         assert_eq!(locked_background.target("tab"), Target::Tab);
+    }
+
+    /// A file handed over by another app or typed in a terminal opens as its
+    /// `file://` address, whether given relative to the working folder or
+    /// absolute. An address, or anything that is no existing path, stays as
+    /// given, even where a folder happens to be named like an address.
+    #[test]
+    fn launch_arguments_that_are_existing_files_become_file_addresses() {
+        let dir = crate::files::test_dir("launch-url");
+        std::fs::create_dir_all(dir.join("https:").join("a.example")).unwrap();
+        std::fs::write(dir.join("my page.html"), "").unwrap();
+        let file_url = url::Url::from_file_path(dir.join("my page.html"))
+            .unwrap()
+            .to_string();
+        assert!(file_url.starts_with("file:///") && file_url.ends_with("/my%20page.html"));
+
+        assert_eq!(super::launch_url("my page.html", &dir), file_url);
+        let absolute = dir.join("my page.html");
+        assert_eq!(
+            super::launch_url(absolute.to_str().unwrap(), std::path::Path::new("/")),
+            file_url
+        );
+        for given in ["https://a.example", "example.org", "about:blank"] {
+            assert_eq!(super::launch_url(given, &dir), given);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

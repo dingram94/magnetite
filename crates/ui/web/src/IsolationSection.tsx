@@ -1,4 +1,5 @@
 // Settings → Isolation: which spaces and favorites share logins, in plain words.
+import { Group } from "./settings/fields";
 import { Favicon } from "./Favicon";
 import { SpaceGlyph } from "./Glyphs";
 import { PrivateIcon, SeparateIcon, SharedIcon, type IconComponent } from "./Icons";
@@ -32,18 +33,19 @@ export function IsolationSection({ info, reload }: { info: Info; reload: () => v
   const defaultId = info.profiles.find((p) => p.is_default)?.id ?? "default";
   return (
     <>
-      <div className="grid grid-cols-3 gap-3">
-        {LEVELS.map(({ id, label, Icon, text }) => (
-          <div key={id} className="set-card">
-            <Icon width={20} height={20} className="text-[var(--accent)]" />
-            <div className="mt-2 font-semibold">{label}</div>
-            <p className="hint" style={{ marginTop: 4 }}>{text}</p>
-          </div>
-        ))}
-      </div>
+      <Group title="Three levels">
+        <div className="set-row grid grid-cols-3 gap-5">
+          {LEVELS.map(({ id, label, Icon, text }) => (
+            <div key={id}>
+              <Icon width={20} height={20} className="text-[var(--accent)]" />
+              <div className="set-label mt-2">{label}</div>
+              <p className="set-hint">{text}</p>
+            </div>
+          ))}
+        </div>
+      </Group>
 
-      <div>
-        <div className="label" style={{ fontSize: 13, color: "var(--fg)" }}>Spaces</div>
+      <Group title="Spaces" hint="Everything in a space uses its setting: pinned tabs and today's tabs.">
         <div className="iso-list">
           {info.spaces.map((sp) => (
             <IsolationRow
@@ -56,12 +58,10 @@ export function IsolationSection({ info, reload }: { info: Info; reload: () => v
             />
           ))}
         </div>
-        <p className="hint">Everything in a space uses its setting: pinned tabs and today's tabs.</p>
-      </div>
+      </Group>
 
       {info.favorites.length > 0 && (
-        <div>
-          <div className="label" style={{ fontSize: 13, color: "var(--fg)" }}>Favorites</div>
+        <Group title="Favorites" hint="Tip: right-click a favorite → Duplicate favorite, then make the copy Separate to use a second account of the same site.">
           <div className="iso-list">
             {info.favorites.map((f) => (
               <IsolationRow
@@ -74,8 +74,7 @@ export function IsolationSection({ info, reload }: { info: Info; reload: () => v
               />
             ))}
           </div>
-          <p className="hint">Tip: right-click a favorite → Duplicate favorite, then make the copy Separate to use a second account of the same site.</p>
-        </div>
+        </Group>
       )}
 
       <ProfileList info={info} reload={reload} />
@@ -102,9 +101,9 @@ function IsolationRow({ target, icon, info, defaultId, reload }: { target: Targe
     else void createFor(next === "private");
   };
   return (
-    <div className="iso-row">
+    <div className="iso-row" data-search-row>
       {icon}
-      <span className="min-w-0 flex-1 truncate">{target.title}</span>
+      <span className="min-w-0 flex-1 truncate" data-search-name>{target.title}</span>
       {level === "separate" && (
         <select
           className="field"
@@ -137,8 +136,7 @@ function ProfileList({ info, reload }: { info: Info; reload: () => void }) {
     ...info.favorites.filter((f) => f.profile_id === id).map((f) => f.title || hostOf(f.url)),
   ];
   return (
-    <div>
-      <div className="label" style={{ fontSize: 13, color: "var(--fg)" }}>Separate logins</div>
+    <Group title="Separate logins" hint="Deleting removes the logins, cookies and site data of that profile from this computer the next time Magnetite starts. Other devices you sync with keep it until you delete it there.">
       <div className="iso-list">
         {separate.map((p) => {
           const used = usedBy(p.id);
@@ -173,7 +171,6 @@ function ProfileList({ info, reload }: { info: Info; reload: () => void }) {
           );
         })}
       </div>
-      <p className="hint">Deleting removes the logins, cookies and site data of that profile from this computer the next time Magnetite starts. Other devices you sync with keep the profile until you delete it there. Private logins need no cleanup: they are never written to disk.</p>
-    </div>
+    </Group>
   );
 }

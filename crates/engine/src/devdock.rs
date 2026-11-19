@@ -10,7 +10,7 @@ use cef::*;
 use serde::{Deserialize, Serialize};
 
 use crate::engine::Engine;
-use crate::events::{ContentId, DevToolsAction, DividerAction, EngineEvent};
+use crate::events::{ContentId, DevPanel, DevToolsAction, DividerAction, EngineEvent};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -124,6 +124,22 @@ impl Engine {
         }
     }
 
+    /// Open page `id`'s `DevTools` on `panel` (they open if they are not),
+    /// or start their element picker.
+    pub fn content_show_panel(&self, id: ContentId, panel: DevPanel) {
+        let view = self.lock().docked.get(&id).map(|d| d.view.clone());
+        if let Some(view) = view.filter(|_| self.content_has_devtools(id)) {
+            show_panel(&view, panel);
+            if let Some(b) = view.browser().and_then(|b| b.host()) {
+                b.set_focus(1);
+            }
+        } else {
+            // Shown once their page has loaded (`devtools_loaded`).
+            self.lock().pending_panels.insert(id, panel);
+            self.content_show_devtools(id);
+        }
+    }
+
     /// The page whose `DevTools` run in `browser`, if any.
     pub(crate) fn devtools_owner(&self, browser: Option<&Browser>) -> Option<ContentId> {
         let ident = browser.map(ImplBrowser::identifier)?;
@@ -187,6 +203,10 @@ impl Engine {
         if let (Some(view), Some(frame)) = (view, browser.main_frame()) {
             frame.execute_java_script(Some(&CefString::from(MENU_JS)), None, 0);
             tell_dock(&view, dock);
+            let panel = owner.and_then(|id| self.lock().pending_panels.remove(&id));
+            if let Some(panel) = panel {
+                show_panel(&view, panel);
+            }
         }
     }
 
@@ -476,6 +496,27 @@ impl Engine {
 }
 
 /// Tell the `DevTools` menu in `view` which dock choice is current.
+/// Show `panel` in the `DevTools` page in `view`. The frontend takes the
+/// request only once it is up, which is a moment after its page loaded:
+/// asked again until its tabs are there.
+fn show_panel(view: &BrowserView, panel: DevPanel) {
+    let name = panel.frontend_name();
+    let then = if panel == DevPanel::Picker {
+        "DevToolsAPI.enterInspectElementMode();"
+    } else {
+        ""
+    };
+    let js = format!(
+        "(() => {{ let tries = 0; const go = () => {{ \
+           const up = document.querySelector('.tabbed-pane, .main-tabbed-pane, .root-view'); \
+           if (!up || !window.DevToolsAPI) {{ if (++tries < 80) setTimeout(go, 50); return; }} \
+           DevToolsAPI.showPanel('{name}'); {then} }}; go(); }})()"
+    );
+    if let Some(frame) = view.browser().and_then(|b| b.main_frame()) {
+        frame.execute_java_script(Some(&CefString::from(js.as_str())), None, 0);
+    }
+}
+
 fn tell_dock(view: &BrowserView, dock: DevToolsDock) {
     let key = dock.as_str();
     if let Some(frame) = view.browser().and_then(|b| b.main_frame()) {
@@ -584,12 +625,13 @@ wrap_window_delegate! {
             if self.separate {
                 return None;
             }
-            Engine::global().frame_window()
+            // They move with their page (`ContentWindowDelegate::parent_window`).
+            Engine::global().home_frame(self.id)
         }
         fn is_frameless(&self, _window: Option<&mut Window>) -> ::std::os::raw::c_int { (!self.separate).into() }
         fn with_standard_window_buttons(&self, _window: Option<&mut Window>) -> ::std::os::raw::c_int { self.separate.into() }
-        // Resizable under Wayland, as a page is (content.rs `can_resize`).
-        fn can_resize(&self, _window: Option<&mut Window>) -> ::std::os::raw::c_int { (self.separate || crate::cef_app::wayland()).into() }
+        // Resizable on Linux, as a page is (content.rs `can_resize`).
+        fn can_resize(&self, _window: Option<&mut Window>) -> ::std::os::raw::c_int { (self.separate || cfg!(target_os = "linux")).into() }
         fn can_maximize(&self, _window: Option<&mut Window>) -> ::std::os::raw::c_int { self.separate.into() }
         fn can_minimize(&self, _window: Option<&mut Window>) -> ::std::os::raw::c_int { self.separate.into() }
         fn can_close(&self, _window: Option<&mut Window>) -> ::std::os::raw::c_int { 1 }

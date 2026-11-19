@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeSet, HashSet};
 
-use magnetite_core::{SidebarNode, SidebarSnapshot, TabItem, UnixSeconds};
+use magnetite_core::{Id, SidebarNode, SidebarSnapshot, TabItem, UnixSeconds};
 use magnetite_engine::ContentId;
 
 use super::{AppState, now};
@@ -68,7 +68,8 @@ fn drop_taken(nodes: &mut Vec<SidebarNode>, taken: &HashSet<String>) {
 /// Make data from elsewhere (sync, imports) safe to keep: colours finite and
 /// in range (a non-finite one would be saved as `null` and make `state.json`
 /// unreadable), timestamps no later than tomorrow, smart folder settings in
-/// the Settings page's ranges, IDs unique (later duplicates are dropped),
+/// the Settings page's ranges and their snoozed items web addresses, IDs
+/// unique (later duplicates are dropped),
 /// profiles with an ID each, and every tab what its place says it is: a
 /// favorite or pinned tab has a home page, a Today tab has none. (Without
 /// its home page a private pinned tab would be saved where it went.) A
@@ -102,6 +103,10 @@ pub fn sanitise_snapshot(snap: &mut SidebarSnapshot) {
                 if let Some(smart) = &mut f.smart {
                     smart.limit = smart.limit.clamp(1, 100);
                     smart.refresh_minutes = smart.refresh_minutes.clamp(1, 24 * 60);
+                    // A snoozed item becomes a tab when it wakes.
+                    smart.snoozed.retain(|s| {
+                        crate::url_policy::allowed(&s.url, crate::url_policy::Source::Stored)
+                    });
                 }
                 nodes(&mut f.children, seen, latest);
                 seen.insert(f.id.clone())
@@ -117,6 +122,7 @@ pub fn sanitise_snapshot(snap: &mut SidebarSnapshot) {
                 t.profile_id = None;
                 t.unread = false;
                 t.keep_active = false;
+                t.end_panel();
                 seen.insert(t.id.clone())
             }
             SidebarNode::Folder(f) => {
@@ -377,12 +383,38 @@ impl AppState {
         }
     }
 
+    /// The space a tab taken over from another device opens in: the one it
+    /// `names`, else the one in front, else the first that may take it. Never the
+    /// private space: its tabs are not kept. Nor a space kept on this
+    /// device, which other devices do not change, unless no space here
+    /// syncs: the tab was sent to this device, and has to open somewhere.
+    pub fn device_tab_space(&self, names: Option<&Id>) -> Id {
+        let usable = |id: &Id| {
+            self.space(id).is_some()
+                && !self.is_private_space(id)
+                && !self.unsynced_spaces.contains(id)
+        };
+        let front = self.lasting_space(&self.active_space);
+        let synced = || (self.sidebar.spaces.iter().map(|sp| &sp.id)).find(|id| usable(id));
+        (names.filter(|id| usable(id)))
+            .or_else(|| usable(&front).then_some(&front))
+            .or_else(synced)
+            .unwrap_or(&front)
+            .clone()
+    }
+
     /// The profiles that stay on this device with the spaces kept here
     /// (`unsynced_spaces`): those that only such spaces use. A profile that
     /// a synced space uses too is needed on the other devices, and the
     /// default profile is on every device.
     pub fn unsynced_profiles(&self) -> BTreeSet<String> {
-        let kept = |sp: &&magnetite_core::Space| self.unsynced_spaces.contains(&sp.id);
+        self.profiles_only_of(&self.unsynced_spaces)
+    }
+
+    /// The profiles that only the spaces `spaces` use, the default profile
+    /// left out.
+    fn profiles_only_of(&self, spaces: &BTreeSet<String>) -> BTreeSet<String> {
+        let kept = |sp: &&magnetite_core::Space| spaces.contains(&sp.id);
         let default = self.default_profile_id();
         let synced: HashSet<&str> = (self.sidebar.spaces.iter())
             .filter(|sp| !kept(sp))
@@ -437,11 +469,13 @@ impl AppState {
     ///
     /// Spaces and profiles keep their places in the lists.
     fn keep_unsynced(&self, remote: &mut SidebarSnapshot) {
-        let kept = &self.unsynced_spaces;
+        // The private space is never sent either, and stays the same way.
+        let mut kept = self.unsynced_spaces.clone();
+        kept.extend(self.private_space.clone());
         if kept.is_empty() {
             return;
         }
-        let here = self.unsynced_profiles();
+        let here = self.profiles_only_of(&kept);
         remote.spaces.retain(|sp| !kept.contains(&sp.id));
         remote.profiles.retain(|p| !here.contains(&p.id));
         remote.favorites.retain(|f| !here.contains(&f.profile_id));
@@ -474,9 +508,12 @@ impl AppState {
 
     /// The sidebar as saved: Today tabs of private profiles stay in memory,
     /// like their pages (pinned tabs and favorites, which the user keeps on
-    /// purpose, stay).
+    /// purpose, stay). Nothing of the private space is in it: not the
+    /// space, not its profiles.
     pub fn lasting_sidebar(&self) -> SidebarSnapshot {
         let mut snap = self.sidebar.clone();
+        (snap.spaces).retain(|sp| Some(&sp.id) != self.private_space.as_ref());
+        (snap.profiles).retain(|p| !self.private_profiles.contains(&p.id));
         // Private pinned tabs and favorites keep their home address, not
         // where they went: the page's later addresses and titles are
         // browsing in a private profile.
@@ -832,6 +869,37 @@ mod tests {
         assert_eq!(s.runtime["a"].content, Some(1), "and it stays open");
         assert_eq!(close, vec![2], "the moved page closes");
         assert_eq!(s.runtime["b"].content, None);
+    }
+
+    #[test]
+    fn a_tab_of_another_device_opens_in_a_space_that_syncs_and_is_kept() {
+        let mut s = state();
+        let first = s.active_space.clone();
+        let local: Id = "local".into();
+        s.sidebar.spaces.push(magnetite_core::Space {
+            id: local.clone(),
+            pinned: vec![],
+            today: vec![],
+            ..s.sidebar.spaces[0].clone()
+        });
+        s.set_space_synced(&local, false);
+        let private = s.open_private_space();
+        let gone: Id = "gone".into();
+
+        // Named or in front, a space kept here or the private one is passed over.
+        for front in [&first, &local, &private] {
+            s.active_space.clone_from(front);
+            for names in [&first, &local, &private, &gone] {
+                assert_eq!(s.device_tab_space(Some(names)), first, "{names} in {front}");
+            }
+        }
+        // The private space first in the list: still the one beside it.
+        s.move_space(&private, 0);
+        assert_eq!(s.device_tab_space(None), first);
+        // No space syncs: the one in front, so the tab is not lost.
+        s.set_space_synced(&first, false);
+        s.active_space.clone_from(&local);
+        assert_eq!(s.device_tab_space(Some(&first)), local);
     }
 
     #[test]

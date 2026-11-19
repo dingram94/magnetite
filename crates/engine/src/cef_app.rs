@@ -60,34 +60,87 @@ fn add_to_list(cmd: &mut CommandLine, switch: &str, item: &str) {
     cmd.append_switch_with_value(Some(&name), Some(&CefString::from(value.as_str())));
 }
 
-/// Run as an X11 client, also in a Wayland session (through `XWayland`).
-/// Under Wayland, CEF stops the program when it makes a window with a
-/// parent, which every page is (ADR-0012). An `--ozone-platform` on the
-/// command line wins, and without an X server Chromium keeps its choice.
-/// Notes the outcome for `wayland()`.
+/// The patch to CEF that makes a window with a parent a subsurface of it
+/// under Wayland (magnetite-cef, `patches/`). Without it CEF stops the
+/// program when it makes such a window, which every page is (ADR-0012).
 #[cfg(target_os = "linux")]
-fn through_xwayland(cmd: &mut CommandLine) {
-    let name = CefString::from("ozone-platform");
-    if cmd.has_switch(Some(&name)) == 0
-        && std::env::var_os("DISPLAY").is_some_and(|d| !d.is_empty())
-    {
-        cmd.append_switch_with_value(Some(&name), Some(&CefString::from("x11")));
-    }
-    let platform = CefString::from(&cmd.switch_value(Some(&name))).to_string();
-    let wayland = platform == "wayland"
-        || (platform.is_empty() && std::env::var_os("WAYLAND_DISPLAY").is_some());
-    WAYLAND.store(wayland, std::sync::atomic::Ordering::Relaxed);
+const WAYLAND_PATCH: &str = "wayland-child-windows.patch";
+
+/// The patch to CEF that gives a window another parent when it is shown
+/// (magnetite-cef, `patches/`): a page moves to another window with it.
+#[cfg(target_os = "linux")]
+const REPARENT_PATCH: &str = "window-reparent.patch";
+
+/// The list of Magnetite's patches in the CEF in use, one file name a line.
+/// Magnetite's CEF build carries it, and packaging puts it next to the
+/// executable; the official CEF has none.
+#[cfg(target_os = "linux")]
+const CEF_PATCHES_FILE: &str = "magnetite-patches.txt";
+
+/// Whether `patches`, the text of `CEF_PATCHES_FILE`, lists `patch`.
+#[cfg(target_os = "linux")]
+fn lists_patch(patches: &str, patch: &str) -> bool {
+    patches.lines().any(|line| line.trim() == patch)
 }
 
+/// The platform Chromium runs on when the command line names none: Wayland
+/// in a Wayland session if the CEF in use can do child windows there, else
+/// X11 wherever an X server is (in a Wayland session: `XWayland`). `None`
+/// leaves the choice to Chromium.
 #[cfg(target_os = "linux")]
-static WAYLAND: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+fn default_platform(
+    wayland_session: bool,
+    x_server: bool,
+    cef_has_patch: bool,
+) -> Option<&'static str> {
+    if wayland_session && cef_has_patch {
+        Some("wayland")
+    } else if x_server {
+        Some("x11")
+    } else {
+        None
+    }
+}
 
-/// Whether Chromium runs as a Wayland client, so that the frame's child
-/// windows are subsurfaces of it (ADR-0012). Always false off Linux.
-pub(crate) fn wayland() -> bool {
+/// The text of `CEF_PATCHES_FILE`, if the CEF in use has one.
+#[cfg(target_os = "linux")]
+fn cef_patches() -> Option<String> {
+    let exe = std::env::current_exe().ok()?;
+    std::fs::read_to_string(exe.with_file_name(CEF_PATCHES_FILE)).ok()
+}
+
+/// Pick Chromium's platform (`default_platform`) unless an
+/// `--ozone-platform` on the command line did.
+#[cfg(target_os = "linux")]
+fn choose_platform(cmd: &mut CommandLine) {
+    let set = |var: &str| std::env::var_os(var).is_some_and(|v| !v.is_empty());
+    let name = CefString::from("ozone-platform");
+    if cmd.has_switch(Some(&name)) == 0 {
+        let cef_has_patch =
+            cef_patches().is_some_and(|patches| lists_patch(&patches, WAYLAND_PATCH));
+        if let Some(platform) =
+            default_platform(set("WAYLAND_DISPLAY"), set("DISPLAY"), cef_has_patch)
+        {
+            cmd.append_switch_with_value(Some(&name), Some(&CefString::from(platform)));
+        }
+    }
+}
+
+/// Whether a page window can get another window's frame as its parent
+/// (`Engine::can_move_pages`). macOS does it natively (`mac::attach_child`);
+/// Linux needs `REPARENT_PATCH` in the CEF in use; Windows is not built yet.
+pub(crate) fn can_reparent() -> bool {
+    // TODO(macos): untested, written without a Mac (not even compiled):
+    // check that a page moves between windows (`mac::attach_child`), and the
+    // New Window / Close Window menu items.
+    #[cfg(target_os = "macos")]
+    return true;
     #[cfg(target_os = "linux")]
-    return WAYLAND.load(std::sync::atomic::Ordering::Relaxed);
-    #[cfg(not(target_os = "linux"))]
+    return cef_patches().is_some_and(|patches| lists_patch(&patches, REPARENT_PATCH));
+    // TODO(windows): untested, no Windows machine yet. `window-reparent.patch`
+    // reparents on every platform; once Windows builds, check that a page
+    // moves between windows there and return true.
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     false
 }
 
@@ -114,7 +167,7 @@ wrap_app! {
             #[cfg(target_os = "macos")]
             enable_feature(cmd, PIP_WITHOUT_ADDRESS);
             #[cfg(target_os = "linux")]
-            through_xwayland(cmd);
+            choose_platform(cmd);
             // Our private DevTools session (`devpipe.rs`): fds 3 and 4.
             if crate::devpipe::is_open() {
                 cmd.append_switch(Some(&CefString::from("remote-debugging-pipe")));
@@ -135,6 +188,10 @@ wrap_app! {
         fn browser_process_handler(&self) -> Option<BrowserProcessHandler> {
             Some(MagnetiteBrowserProcessHandler::new())
         }
+
+        fn resource_bundle_handler(&self) -> Option<ResourceBundleHandler> {
+            Some(crate::strings::Strings::new())
+        }
     }
 }
 
@@ -148,34 +205,28 @@ wrap_browser_process_handler! {
         }
         fn on_context_initialized(&self) {
             let engine = Engine::global();
-            scheme::install_factory(engine.config().ui_dir.clone(), crate::favicon::cache_dir(&engine.config().data_dir));
+            scheme::install_factory(&engine.config().data_dir, engine.config().ui_dir.clone());
             engine.lock().router = Some(router::create_browser_router());
             engine.start_tick();
             #[cfg(target_os = "macos")]
-            crate::mac::install_pip_swipe();
+            crate::mac::install_swipe_monitor();
+            #[cfg(target_os = "macos")]
+            crate::mac::clear_tooltips_without_keyboard();
+            #[cfg(target_os = "macos")]
+            crate::mac::watch_covered_pages();
             #[cfg(target_os = "macos")]
             crate::mac::watch_memory_pressure();
             engine.emit(EngineEvent::Ready);
         }
-        // Magnetite was started while it runs already (Windows, Linux):
-        // by another program with a link for the default browser, which is
-        // the command line's one argument, or by the user, without one.
-        // That second process ends; the link opens here.
-        fn on_already_running_app_relaunch(
-            &self,
-            command_line: Option<&mut CommandLine>,
-            _current_directory: Option<&CefString>,
-        ) -> ::std::os::raw::c_int {
-            let engine = Engine::global();
-            let mut arguments = CefStringList::new();
-            if let Some(command_line) = command_line {
-                command_line.arguments(Some(&mut arguments));
+        // A second start hands its command line to the running Magnetite.
+        // Handled here, or Chromium would open a window of its own.
+        fn on_already_running_app_relaunch(&self, command_line: Option<&mut CommandLine>, current_directory: Option<&CefString>) -> ::std::os::raw::c_int {
+            let mut list = CefStringList::new();
+            if let Some(cmd) = command_line {
+                cmd.argv(Some(&mut list));
             }
-            match crate::client::first_string(&mut arguments).filter(|url| !url.is_empty()) {
-                // The app brings the window to the front, if the link opens in it.
-                Some(url) => engine.open_link_from_other_app(url),
-                None => engine.activate_frame(),
-            }
+            let cwd = current_directory.map(|d| std::path::PathBuf::from(d.to_string())).filter(|d| d.is_absolute());
+            Engine::global().emit(EngineEvent::Relaunched { argv: list.into_iter().collect(), cwd });
             1
         }
     }
@@ -215,6 +266,7 @@ wrap_render_process_handler! {
                 self.router.on_context_created(browser.cloned(), frame.cloned(), context.cloned());
             } else if let (Some(b), Some(f), Some(c)) = (browser.as_deref(), frame.as_deref(), context.as_deref()) {
                 crate::media::install(b, f, c);
+                crate::tabshare::install(f, c);
             }
         }
         fn on_context_released(&self, browser: Option<&mut Browser>, frame: Option<&mut Frame>, context: Option<&mut V8Context>) {
@@ -239,5 +291,54 @@ wrap_render_process_handler! {
                 .on_process_message_received(browser.cloned(), frame.cloned(), Some(source_process), message.cloned())
                 .into()
         }
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::{default_platform, lists_patch};
+
+    /// A name that is only part of a line must not count: Magnetite would
+    /// then run on Wayland with a CEF that stops at the first page.
+    #[test]
+    fn lists_patch_wants_a_whole_line() {
+        let patch = "wayland-child-windows.patch";
+
+        assert!(lists_patch("wayland-child-windows.patch\n", patch));
+        assert!(lists_patch(
+            "other.patch\nwayland-child-windows.patch",
+            patch
+        ));
+        assert!(lists_patch(
+            "other.patch\r\n  wayland-child-windows.patch\t\r\n",
+            patch
+        ));
+
+        assert!(!lists_patch("", patch));
+        assert!(!lists_patch("other.patch\n", patch));
+        assert!(!lists_patch("not-wayland-child-windows.patch.bak\n", patch));
+        assert!(!lists_patch("wayland-child-windows.patch.bak\n", patch));
+        assert!(!lists_patch("old-wayland-child-windows.patch\n", patch));
+        assert!(!lists_patch(
+            "wayland-child-windows.patch other.patch\n",
+            patch
+        ));
+    }
+
+    /// Wayland only with the patch, else X11 where an X server is: the
+    /// wrong choice stops the program at the first page or at the start.
+    #[test]
+    fn default_platform_is_wayland_only_with_the_patch() {
+        // (Wayland session, X server, CEF has the patch)
+        assert_eq!(default_platform(true, false, true), Some("wayland"));
+        assert_eq!(default_platform(true, true, true), Some("wayland"));
+
+        assert_eq!(default_platform(true, true, false), Some("x11"));
+        assert_eq!(default_platform(false, true, false), Some("x11"));
+        assert_eq!(default_platform(false, true, true), Some("x11"));
+
+        assert_eq!(default_platform(true, false, false), None);
+        assert_eq!(default_platform(false, false, false), None);
+        assert_eq!(default_platform(false, false, true), None);
     }
 }

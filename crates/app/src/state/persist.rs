@@ -1,7 +1,7 @@
 //! Loading the state at start and saving it: `state.json` in the data
 //! directory, and what a first start begins with.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError};
@@ -35,6 +35,9 @@ pub(super) struct Persisted {
     deleted_profiles: Vec<Id>,
     #[serde(default)]
     unsynced_spaces: BTreeSet<Id>,
+    /// The windows besides the one `active_space` and `active_tab` are of.
+    #[serde(default)]
+    windows: Vec<super::windows::SavedWindow>,
 }
 
 /// Reads saved splits in the current shape (a list) and the earlier one
@@ -87,6 +90,7 @@ pub(super) fn default_sidebar() -> SidebarSnapshot {
             blue: 1.0,
         }),
         profile_id: "default".into(),
+        shortcut: None,
         pinned: vec![],
         // No tab: a new installation contacts no site before the user
         // opens one.
@@ -110,6 +114,10 @@ impl AppState {
             .as_ref()
             .map(|p| p.unsynced_spaces.clone())
             .unwrap_or_default();
+        let windows = persisted
+            .as_ref()
+            .map(|p| p.windows.clone())
+            .unwrap_or_default();
         // `--import-arc`: Arc's sidebar takes the place of the saved one. The
         // archive, settings and downloads stay, and without a sidebar file
         // of Arc nothing changes.
@@ -118,6 +126,12 @@ impl AppState {
             .flatten()
             .filter(|sidebar| !sidebar.spaces.is_empty());
         let replaced = replacement.is_some() && persisted.is_some();
+        // An imported sidebar starts in one window.
+        let windows = if replacement.is_some() {
+            Vec::new()
+        } else {
+            windows
+        };
         let (sidebar, active_space, active_tab, archive, favicons, splits, settings, downloads) =
             match (persisted, replacement) {
                 (Some(p), Some(sidebar)) => {
@@ -181,16 +195,27 @@ impl AppState {
             history: super::History::load(data_dir),
             splits,
             peek: None,
+            web_panel: None,
             minis: Vec::new(),
+            phones: Vec::new(),
             settings,
             sidebar_visible: true,
+            window: 1,
+            views: HashMap::new(),
+            reopen: windows,
             accounts: crate::smart::Accounts::load(data_dir),
             smart_status: HashMap::new(),
             downloads: crate::downloads::Downloads::restore(downloads),
             deleted_profiles,
+            private_space: None,
+            private_hidden: false,
+            private_profiles: BTreeSet::new(),
             unsynced_spaces,
             first_start,
+            recent_tabs: Vec::new(),
+            switcher: None,
             synced_sidebar: None,
+            device_tabs: Vec::new(),
             saver: Saver::new(path.clone()),
             path,
         };
@@ -224,6 +249,7 @@ impl AppState {
             .cloned()
             .collect();
         state.active_tab.retain(|_, tab| !gone.contains(tab));
+        state.check_saved_windows();
         if replaced {
             // The smart folders of a sidebar imported here may fetch here.
             for (id, _) in state.smart_folders() {
@@ -279,15 +305,20 @@ impl AppState {
     }
 
     /// What `state.json` holds for the state as it is now.
-    fn saved_form(&self) -> Persisted {
+    pub(super) fn saved_form(&self) -> Persisted {
+        let sidebar = self.lasting_sidebar();
+        // Only of the tabs that are saved: a private tab's icon would tell
+        // which site it had open.
+        let saved: HashSet<&Id> = sidebar.all_tabs().map(|t| &t.id).collect();
         let favicons = self
             .runtime
             .iter()
+            .filter(|(id, _)| saved.contains(id))
             .filter_map(|(id, r)| r.favicon.clone().map(|f| (id.clone(), f)))
             .collect();
         Persisted {
-            sidebar: self.lasting_sidebar(),
-            active_space: self.active_space.clone(),
+            sidebar,
+            active_space: self.lasting_space(&self.active_space),
             active_tab: self.active_tab.clone(),
             archive: self.archive.clone(),
             favicons,
@@ -296,6 +327,7 @@ impl AppState {
             downloads: self.downloads.lasting(),
             deleted_profiles: self.deleted_profiles.clone(),
             unsynced_spaces: self.unsynced_spaces.clone(),
+            windows: self.saved_windows(),
         }
     }
 }
@@ -427,6 +459,7 @@ impl Drop for Saver {
 mod tests {
     use super::*;
     use crate::state::testing::state;
+    use crate::state::windows::SavedWindow;
 
     #[test]
     fn a_saved_sidebar_without_spaces_starts_fresh() {
@@ -557,6 +590,87 @@ mod tests {
         assert_eq!(loaded.settings.auto_archive_hours, 24);
         assert_eq!(loaded.sidebar, s.sidebar);
         assert_eq!(loaded.active_tab_id(), Some("b"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn other_windows_open_again_after_a_restart_showing_what_they_showed() {
+        let mut s = state();
+        let space = s.active_space.clone();
+        s.open_window(2);
+        s.active_tab.insert(space, "a".into());
+        // Back in the first window, which is the one the next start begins with.
+        s.enter(1);
+        s.persist();
+        let dir = s.data_dir().to_path_buf();
+        let mut loaded = AppState::load_or_default(&dir, ArcImport::Never);
+        assert_eq!(loaded.active_tab_id(), Some("b"));
+        let saved = std::mem::take(&mut loaded.reopen);
+        assert_eq!(saved.len(), 1);
+        loaded.reopen_window(2, saved[0].clone());
+        assert_eq!(loaded.window, 2);
+        assert_eq!(loaded.active_tab_id(), Some("a"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_saved_window_keeps_only_the_space_and_tabs_that_still_exist() {
+        let mut s = state();
+        let space = s.active_space.clone();
+        s.reopen.push(SavedWindow {
+            active_space: "gone".into(),
+            active_tab: HashMap::from([(space.clone(), "gone".into()), ("x".into(), "a".into())]),
+        });
+        s.persist();
+        let dir = s.data_dir().to_path_buf();
+        let loaded = AppState::load_or_default(&dir, ArcImport::Never);
+        assert_eq!(
+            loaded.reopen,
+            vec![SavedWindow {
+                active_space: space,
+                active_tab: HashMap::from([("x".into(), "a".into())]),
+            }]
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn saved_windows_not_opened_again_yet_stay_in_the_next_save() {
+        let mut s = state();
+        let space = s.active_space.clone();
+        let waiting = SavedWindow {
+            active_space: space.clone(),
+            active_tab: HashMap::from([(space.clone(), "c".into())]),
+        };
+        s.reopen.push(waiting.clone());
+        s.open_window(2);
+        s.persist();
+        let dir = s.data_dir().to_path_buf();
+        let loaded = AppState::load_or_default(&dir, ArcImport::Never);
+        let open = SavedWindow {
+            active_space: space.clone(),
+            active_tab: HashMap::from([(space, "b".into())]),
+        };
+        // The first window, open but not current, and the one still waiting.
+        assert_eq!(loaded.reopen, vec![open, waiting]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_state_file_from_before_windows_loads_with_one_window() {
+        let s = state();
+        let dir = s.data_dir().to_path_buf();
+        std::fs::create_dir_all(&dir).unwrap();
+        let saved = serde_json::json!({
+            "sidebar": s.sidebar,
+            "active_space": s.active_space,
+            "active_tab": s.active_tab,
+        });
+        std::fs::write(dir.join("state.json"), saved.to_string()).unwrap();
+        let loaded = AppState::load_or_default(&dir, ArcImport::Never);
+        assert_eq!(loaded.sidebar, s.sidebar, "not kept aside");
+        assert_eq!(loaded.active_tab_id(), Some("b"));
+        assert_eq!(loaded.reopen, vec![]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

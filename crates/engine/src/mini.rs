@@ -162,7 +162,7 @@ impl Engine {
     pub(crate) fn mini_chrome(&self, id: ContentId) -> Option<MiniChrome> {
         let (background, spaces) = {
             let inner = self.lock();
-            (inner.chrome_color, inner.mini_spaces.clone())
+            (inner.win.chrome_color, inner.mini_spaces.clone())
         };
         MiniChrome::new(id, background, &spaces)
     }

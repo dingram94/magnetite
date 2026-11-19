@@ -45,11 +45,11 @@ The command bar finds visits too, below tabs and bookmarks
 
 | Setting | Options | Default |
 |---|---|---|
-| Settings → Tabs & archive → "Keep history for" | 7, 30 or 90 days, or "Don't keep history" | 90 days |
+| Settings → Data & privacy → "Keep history for" | 7, 30 or 90 days, or "Don't keep history" | 90 days |
 
 The minute tick deletes older visits; a shorter period, or "Don't keep
 history", takes effect at once and deletes what is older for good. With
-"Don't keep history" nothing is recorded. Settings → Tabs & archive shows
+"Don't keep history" nothing is recorded. Settings → Data & privacy shows
 the number of visits and has "Clear history" (after a second click). The
 period is this device's and does not sync.
 

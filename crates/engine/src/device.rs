@@ -208,7 +208,7 @@ impl Engine {
             Some(&mut client),
             Some(&CefString::from(url.as_str())),
             Some(&BrowserSettings {
-                background_color: self.lock().chrome_color,
+                background_color: self.lock().win.chrome_color,
                 ..Default::default()
             }),
             None,
@@ -259,7 +259,56 @@ impl Engine {
             w.close();
         }
         self.emulate(id, None, Some(&mode.config));
+        // The device's identity went; a mobile view has its own back.
+        if self.lock().mobile.contains(&id) {
+            self.apply_mobile_view(id, true);
+        }
         self.show_dividers();
+    }
+
+    /// Show page `id` as on a phone from now on (`on`), or as itself
+    /// again: sites see a mobile browser's identity. The page loads again
+    /// to be served that way. Kept for a page that has no browser yet.
+    /// Device mode (above) has its own identity while it is on.
+    pub fn set_mobile_view(&self, id: ContentId, on: bool) {
+        let changed = {
+            let mut inner = self.lock();
+            if on {
+                inner.mobile.insert(id)
+            } else {
+                inner.mobile.remove(&id)
+            }
+        };
+        if changed {
+            self.apply_mobile_view(id, on);
+        }
+    }
+
+    /// The pages shown as on a phone (`set_mobile_view`).
+    pub fn mobile_views(&self) -> Vec<ContentId> {
+        self.lock().mobile.iter().copied().collect()
+    }
+
+    /// `set_mobile_view`'s work on a page with a browser. Left to
+    /// `end_device` while the page is in device mode, whose identity
+    /// counts until then.
+    pub(crate) fn apply_mobile_view(&self, id: ContentId, on: bool) {
+        let device = (self.lock().docked.get(&id)).is_some_and(|d| d.device.is_some());
+        if device {
+            return;
+        }
+        // An empty identity is none: the browser's own again.
+        let ua = if on { Ua::Android.string() } else { "" };
+        self.devtools(
+            id,
+            "Emulation.setUserAgentOverride",
+            &json!({ "userAgent": ua }),
+            Box::new(move |done| {
+                if done.is_ok() {
+                    Engine::global().content_reload(id);
+                }
+            }),
+        );
     }
 
     /// The bar's question: page `id`'s device, `null` when device mode is off.
@@ -382,6 +431,20 @@ impl Engine {
         };
         if mobile == Some(true) {
             self.touch(id, true);
+        }
+    }
+
+    /// Page `id`'s size was overridden by someone else (a capture set): in
+    /// device mode it is told its device's again.
+    pub fn restore_device(&self, id: ContentId) {
+        let device = self
+            .lock()
+            .docked
+            .get_mut(&id)
+            .and_then(|d| d.device.as_mut())
+            .map(|m| m.told = None);
+        if device.is_some() {
+            self.replace_page(id);
         }
     }
 
@@ -645,7 +708,8 @@ wrap_window_delegate! {
             _is_menu: Option<&mut ::std::os::raw::c_int>,
             _can_activate_menu: Option<&mut ::std::os::raw::c_int>,
         ) -> Option<Window> {
-            Engine::global().frame_window()
+            // It moves with its page (`ContentWindowDelegate::parent_window`).
+            Engine::global().home_frame(self.id)
         }
         fn is_frameless(&self, _window: Option<&mut Window>) -> ::std::os::raw::c_int { 1 }
         fn with_standard_window_buttons(&self, _window: Option<&mut Window>) -> ::std::os::raw::c_int { 0 }

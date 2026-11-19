@@ -39,6 +39,7 @@ publishes it by hand. Publishing is what makes installed apps update.
 | `MAGNETITE_REPO_KEY` | yes | GPG private key (armored) that signs the rpm packages and the Linux package repository |
 | `APPLE_CERTIFICATE_P12_BASE64` | macOS signing | base64 of the Developer ID Application certificate and key (`.p12`) |
 | `APPLE_CERTIFICATE_PASSWORD` | macOS signing | password of that `.p12` |
+| `APPLE_PROVISIONING_PROFILE_BASE64` | passkeys, optional | base64 of the Developer ID provisioning profile for the app ("Passkeys" below) |
 | `APPLE_NOTARY_KEY` | notarization | contents of the App Store Connect API key (`AuthKey_<id>.p8`) |
 | `APPLE_NOTARY_KEY_ID` | notarization | that key's id |
 | `APPLE_NOTARY_ISSUER_ID` | notarization | the issuer id shown above the key list |
@@ -47,9 +48,10 @@ publishes it by hand. Publishing is what makes installed apps update.
 |---|---|
 | `MAGNETITE_UPDATE_PUBLIC_KEY` | the public key the app embeds; the workflow refuses to sign with any other key |
 
-Without the Apple secrets the macOS apps are signed ad hoc and the workflow
-warns. Without `MAGNETITE_UPDATE_KEY` the last job fails: an unsigned manifest
-is never published.
+Without the Apple secrets the macOS jobs fail before they build: an app or
+disk image that is only signed ad hoc is never published. Without
+`MAGNETITE_UPDATE_KEY` the last job fails: an unsigned manifest is never
+published.
 
 ## The update key
 
@@ -135,19 +137,71 @@ app) with the hardened runtime and a timestamp
 
 | File | Signs | Allows |
 |---|---|---|
-| `app.entitlements` | `Magnetite.app` | camera, microphone, location (pages ask through Chromium) |
+| `app.entitlements` | `Magnetite.app` | camera, microphone, location (pages ask through Chromium); with a provisioning profile also what passkeys need ("Passkeys" below) |
 | `helper-renderer.entitlements` | `magnetite Helper (Renderer)` | JIT for V8 |
 | `helper-gpu.entitlements` | `magnetite Helper (GPU)` | JIT for SwiftShader (software WebGL) |
-| `helper-plugin.entitlements` | `magnetite Helper (Plugin)` | unsigned executable memory, other libraries (as Chromium) |
+| `helper.entitlements` | `magnetite Helper` | libraries signed by others: the Widevine module for protected video, which Chromium loads in this helper |
 
-`magnetite Helper` and `magnetite Helper (Alerts)` get the hardened runtime
-without exceptions. The bundle id is `org.magnetitebrowser.magnetite`
+`magnetite Helper (Plugin)` and `magnetite Helper (Alerts)` get the hardened
+runtime without exceptions (Chromium 156 no longer starts anything in the
+plugin helper; CEF's bundle layout still lists it). The bundle id is `org.magnetitebrowser.magnetite`
 (`BUNDLE_ID` in `scripts/lib.sh`); the helpers add `.helper`, `.helper.gpu`
 and so on. Never change it after a release: the keychain entry for cookie
 encryption, macOS preferences and Homebrew's zap list depend on it.
 
+### Passkeys
+
+A passkey kept on the Mac (Touch ID) or in iCloud Keychain needs three
+things; without them Magnetite offers passkeys from a password manager
+extension and from security keys only.
+
+| What | Why | Where |
+|---|---|---|
+| A CEF built with `webauthn-keychain-group.patch` | Chromium's Touch ID authenticator keeps its credentials in a keychain access group and runs only in an app entitled to it. Chromium names the group after its own team and bundle identifier; with the patch it is the running app's application identifier with `.webauthn` | `magnetite-cef`, listed in `magnetite-patches.txt` |
+| Entitlements on `Magnetite.app`: the application identifier, the team, the keychain access group `<team>.org.magnetitebrowser.magnetite.webauthn` | what the authenticator checks | added by `scripts/build.sh` (`profile_entitlements`) when a profile is given |
+| A Developer ID provisioning profile in the app (`Contents/embedded.provisionprofile`) | macOS does not start an app that claims these entitlements without a profile that allows them | `MACOS_PROVISIONING_PROFILE`, in CI from `APPLE_PROVISIONING_PROFILE_BASE64` |
+
+Passkeys in iCloud Keychain need one more entitlement,
+`com.apple.developer.web-browser.public-key-credential`, which Chromium
+looks for before it offers them. Apple grants it to browsers on request (the
+account holder asks, through Apple's request form for it); once granted it
+is a capability of the App ID and part of the profile. The build claims it
+only when the profile has it, so Touch ID can ship before Apple answers.
+
+To set it up, in the Apple developer account:
+
+1. Certificates, Identifiers & Profiles > Identifiers: register an App ID
+   for `org.magnetitebrowser.magnetite` (explicit, macOS), if there is none.
+2. Ask Apple for the web browser public key credential entitlement for that
+   App ID, and switch the capability on once it is granted.
+3. Profiles: create a "Developer ID" provisioning profile for the App ID
+   and the Developer ID Application certificate, download it, and store
+   `base64 -i Magnetite.provisionprofile | pbcopy` as
+   `APPLE_PROVISIONING_PROFILE_BASE64`. A profile expires (with its
+   certificate at the latest): the app keeps starting, a new release needs a
+   new profile. Make a new one after step 2 changed the App ID.
+
+A profile for another app, or one that does not allow the keychain group,
+stops the build. Locally: `MACOS_SIGN_IDENTITY=… MACOS_PROVISIONING_PROFILE=…
+scripts/build.sh --release`.
+
+None of this has run with a real profile yet: check with a release build that
+the app starts, that a site offers "Touch ID" when creating a passkey, and,
+with the entitlement, the passkeys in iCloud Keychain.
+
+macOS gets two files per CPU: a zip, which the updater and Homebrew take,
+and a disk image (`.dmg`) for people, with the app and a link to
+`/Applications` to drag it onto. `make_dmg` in `scripts/lib.sh` builds the
+image without Finder; how its window looks (size, icon size, where the two
+icons sit) is `packaging/macos/dmg.DS_Store`, written once by
+`tools/dmg-layout.py`.
+
 `scripts/release/notarize-macos.sh` submits the zip, waits, staples the
 ticket to the app, checks it with `spctl` and zips the stapled app again.
+It then builds the disk image again with the stapled app, signs it with the
+Developer ID, submits it too and staples its own ticket: Gatekeeper checks
+the image and the app in it apart, and with both stapled also without a
+network. Stapling asks Apple's servers and is tried up to three times.
 
 A build signed with the Developer ID on a developer's Mac starts, opens its
 window and keeps its GPU, network and renderer processes running. Not
@@ -259,9 +313,9 @@ tap stays for those who installed from it.
 
 ## Before publishing the draft
 
-- The draft has four packages (zip and tarball), an rpm and a deb with its
-  signature (`.deb.asc`) for each Linux CPU, `latest.json`, `latest.json.sig`, `magnetite.rb` and
-  `SHA256SUMS`.
+- The draft has four packages (zip and tarball), the two macOS disk images,
+  an rpm and a deb with its signature (`.deb.asc`) for each Linux CPU,
+  `latest.json`, `latest.json.sig`, `magnetite.rb` and `SHA256SUMS`.
 - The signature checks out with the app's key:
 
   ```sh
@@ -275,6 +329,10 @@ tap stays for those who installed from it.
   quarantined, unzip, open. `spctl -a -vv Magnetite.app` says "Notarized
   Developer ID". `Contents/Resources` holds `LICENSE`,
   `THIRD_PARTY_NOTICES.md` and `CREDITS.html`.
+- The disk image, downloaded the same way, opens with the app on the left
+  and Applications on the right; the app starts after dragging it over.
+  `spctl -a -vv -t open --context context:primary-signature <dmg>` says
+  "Notarized Developer ID".
 - Linux: unpack, set up the sandbox as its `README.md` says, start it, open a
   page. Install the rpm (Fedora) and the deb (Ubuntu) and start
   `magnetite`; `rpm -K` on the rpm says "signatures OK" once the key is
@@ -291,7 +349,12 @@ tap stays for those who installed from it.
   installed for all users). A copy unpacked from the zip opens the release
   page.
 - An installed older version offers the update once the release is public.
-- The release notes say what changed in words a user understands.
+- The release notes say what changed in words a user understands. The draft
+  starts with GitHub's list of the pull requests since the last release:
+  rewrite that part ("Fixed", "New", with links to the issues) and add what
+  users should know about this version. The "Install" section below it is
+  made from the release's packages (`scripts/release/release-notes.sh`);
+  leave it as it is.
 
 Then publish (not as a pre-release, unless it is one) and run "Update cask"
 in the tap (above).

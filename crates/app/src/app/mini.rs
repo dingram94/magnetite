@@ -86,14 +86,17 @@ impl MagnetiteApp {
             | Shortcut::Forward
             | Shortcut::ZoomIn
             | Shortcut::ZoomOut
-            | Shortcut::ZoomReset => Self::page_command_on(engine, id, shortcut),
+            | Shortcut::ZoomReset
+            | Shortcut::Find
+            | Shortcut::FindNext
+            | Shortcut::FindPrevious => Self::page_command_on(engine, id, shortcut),
             Shortcut::CopyLink => {
                 let result = self.copy_link(engine, Some(id), LinkVariant::Clean);
                 Self::ui_call(engine, "copied", &result);
             }
             Shortcut::Print => engine.content_print(id),
             Shortcut::ToggleDevTools => self.toggle_devtools(engine, Some(id)),
-            Shortcut::OpenDevTools => engine.content_show_devtools(id),
+            Shortcut::DevPanel(panel) => engine.content_show_panel(id, panel),
             // Nothing the peek's own keys or the quick search key mean here.
             Shortcut::ClosePeek | Shortcut::PeekToSplit => {}
             Shortcut::NewMini => self.handle_shortcut(engine, shortcut),
