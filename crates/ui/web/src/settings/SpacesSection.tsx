@@ -39,14 +39,23 @@ function ProfileChoice({ info, current, name, assign, label }: { info: Info; cur
   const taken = new Set(kept.map((p) => profileName(p)));
   let fresh = name;
   for (let n = 2; taken.has(fresh); n++) fresh = `${name} ${n}`;
+  // A new profile is being made and given: no other choice until then,
+  // which the new one would otherwise replace when it arrives.
+  const [creating, setCreating] = useState(false);
   const create = async (ephemeral: boolean) => {
-    const r = await send({ cmd: "new_profile", name: ephemeral ? `${name} (private)` : fresh, ephemeral });
-    if (r.id) await assign(r.id);
+    setCreating(true);
+    try {
+      const r = await send({ cmd: "new_profile", name: ephemeral ? `${name} (private)` : fresh, ephemeral });
+      if (r.id) await assign(r.id);
+    } finally {
+      setCreating(false);
+    }
   };
   return (
     <select
       className="field"
       aria-label={label}
+      disabled={creating}
       value={now?.ephemeral ? PRIVATE : current}
       onChange={(e) => {
         const to = e.target.value;
@@ -178,6 +187,13 @@ function SpaceList({ info, reload, open }: { info: Info; reload: () => Promise<u
   };
   const move = (id: string, index: number) => void send({ cmd: "move_space", id, index }).then(reload);
   const [profile, setProfile] = useState("");
+  // Why a profile could not be deleted (it is in use since the list was drawn).
+  const [undeleted, setUndeleted] = useState<string>();
+  const deleteProfile = (id: string) =>
+    send({ cmd: "delete_profile", id }).then(
+      () => setUndeleted(undefined),
+      (e: unknown) => setUndeleted(e instanceof Error ? e.message : String(e)),
+    ).then(reload);
   const addProfile = () => {
     const name = profile.trim();
     if (!name) return;
@@ -311,13 +327,14 @@ function SpaceList({ info, reload, open }: { info: Info; reload: () => Promise<u
                 {!p.synced && " · only on this device"}
               </span>
               {!p.is_default && used.length === 0 && (
-                <button className="btn" data-danger={armed === p.id || undefined} title="Its logins, cookies and site data leave this computer the next time Magnetite starts" onClick={() => arm(p.id, () => void send({ cmd: "delete_profile", id: p.id }).then(reload))}>
+                <button className="btn" data-danger={armed === p.id || undefined} title="Its logins, cookies and site data leave this computer the next time Magnetite starts" onClick={() => arm(p.id, () => void deleteProfile(p.id))}>
                   {armed === p.id ? "Click again to delete" : "Delete"}
                 </button>
               )}
             </div>
           );
         })}
+        {undeleted && <p className="set-row set-hint" role="alert" style={{ marginTop: 0, color: "var(--danger)" }}>That profile was not deleted: {undeleted}.</p>}
         <Field label="A new profile" hint="It starts empty: nothing is signed in. Give it to a space on that space's page, or to a favorite below.">
           <div className="flex gap-2">
             <input className="field" style={{ maxWidth: 280 }} placeholder="Name" aria-label="Name of the new profile" value={profile} onChange={(e) => setProfile(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addProfile()} />
@@ -351,6 +368,10 @@ function FavoriteList({ info, reload }: { info: Info; reload: () => Promise<unkn
   const { armed, arm } = useArmed(4000);
   const main = info.profiles.find((p) => p.is_default)?.id ?? "";
   const profileOf = (f: Favorite) => f.profile_id ?? main;
+  // Where a removed favorite goes on its way to the archive: the space in
+  // front, but never the private one (it is not among `info.spaces`),
+  // which takes no tab of another profile.
+  const leaveTo = (info.spaces.find((sp) => sp.id === info.active_space) ?? info.spaces[0])?.id ?? info.active_space;
   const listOf = (f: Favorite) => info.favorites.filter((x) => profileOf(x) === profileOf(f));
   const move = (id: string, index: number) => void send({ cmd: "move_favorite", id, index }).then(reload);
   // Dragging by the handle sorts: the line shows where the favorite would land.
@@ -482,7 +503,8 @@ function FavoriteList({ info, reload }: { info: Info; reload: () => Promise<unkn
             >
               <option value="">Every space</option>
               {info.spaces.map((sp) => <option key={sp.id} value={sp.id}>Only {sp.title}</option>)}
-              {info.spaces.length > 2 && <option value={SOME}>Several spaces…</option>}
+              {/* Also while it is the choice made: with a space deleted, two may be left. */}
+              {(info.spaces.length > 2 || some) && <option value={SOME}>Several spaces…</option>}
             </select>
             <span style={{ width: 170 }} className="flex-none">
               <ProfileChoice info={info} current={profileOf(f)} name={name} label={`Profile of ${name}`} assign={(to) => send({ cmd: "set_tab_profile", id: f.id, profile: to === main ? null : to }).then(reload)} />
@@ -491,7 +513,7 @@ function FavoriteList({ info, reload }: { info: Info; reload: () => Promise<unkn
               className="btn"
               data-danger={armed === f.id || undefined}
               title="Takes it out of the favorites; its page is in the archive afterwards"
-              onClick={() => arm(f.id, () => void send({ cmd: "move_tab", id: f.id, space: info.active_space, section: "today", index: 0 }).then(() => send({ cmd: "close_tab", id: f.id })).then(reload))}
+              onClick={() => arm(f.id, () => void send({ cmd: "move_tab", id: f.id, space: leaveTo, section: "today", index: 0 }).then(() => send({ cmd: "close_tab", id: f.id })).then(reload))}
             >
               {armed === f.id ? "Click again" : "Remove"}
             </button>
@@ -541,7 +563,7 @@ function SpaceBookmarks({ space, reload }: { space: Space; reload: () => Promise
   return (
     <Group title="Bookmarks" hint="Saved addresses of this space, apart from its tabs. Importing and exporting is in Data & privacy.">
       <Field side label={space.bookmarks === 0 ? "No bookmarks" : plural(space.bookmarks, "bookmark")} hint="Deleting removes all of them, folders included. It cannot be undone.">
-        <button className="btn" disabled={space.bookmarks === 0} data-danger={armed === "clear" || undefined} onClick={() => arm("clear", () => void send({ cmd: "clear_bookmarks", space: space.id }).then((r) => say(`${plural(r.bookmarks, "bookmark")} deleted.`)))}>
+        <button className="btn" disabled={!space.bookmark_tree} data-danger={armed === "clear" || undefined} onClick={() => arm("clear", () => void send({ cmd: "clear_bookmarks", space: space.id }).then((r) => say(`${plural(r.bookmarks, "bookmark")} deleted.`)))}>
           {armed === "clear" ? "Click again to delete" : "Delete bookmarks…"}
         </button>
       </Field>

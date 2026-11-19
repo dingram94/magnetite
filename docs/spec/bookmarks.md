@@ -73,7 +73,9 @@ The command bar finds bookmarks too (`command-bar.md`).
     spreadsheet would run as a formula (it starts with `=`, `+`, `-` or
     `@`) gets a `'` in front, as does one that starts with `'` itself:
     the import takes that `'` off again, so every name comes back as it
-    was.
+    was. A row names its folders, not which folder of that name: two
+    folders with one name side by side come back as one. HTML and JSON
+    keep them apart.
   The private space is never exported. Nothing is sent anywhere.
 - The page of a space in Settings → Spaces has, for that space's
   bookmarks:
