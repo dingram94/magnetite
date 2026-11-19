@@ -463,7 +463,11 @@ function FavoriteList({ info, reload }: { info: Info; reload: () => Promise<unkn
                 if (to === SOME) next.add(f.id);
                 else next.delete(f.id);
                 setChoosing(next);
-                if (to !== SOME) void send({ cmd: "set_favorite_spaces", id: f.id, spaces: to ? [to] : [] }).then(reload);
+                if (to === SOME) return;
+                // The same list here and in the command, as for the chips below.
+                const spaces = to ? [to] : [];
+                setPicked((p) => ({ ...p, [f.id]: spaces }));
+                void send({ cmd: "set_favorite_spaces", id: f.id, spaces }).then(reload);
               }}
             >
               <option value="">Every space</option>
