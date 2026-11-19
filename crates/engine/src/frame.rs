@@ -913,7 +913,7 @@ wrap_window_delegate! {
                 }))
                 .expect("box layout");
             let caption = if crate::caption::Caption::wanted() {
-                crate::caption::Caption::new()
+                crate::caption::Caption::new(self.win)
             } else {
                 None
             };

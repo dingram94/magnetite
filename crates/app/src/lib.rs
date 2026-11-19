@@ -154,9 +154,8 @@ pub fn run() -> i32 {
         state::ArcImport::Ask
     };
     let cwd = std::env::current_dir().unwrap_or_default();
-    let launch_urls = (cli.urls.iter())
+    let launch_urls = (cli.urls.iter().chain(&link))
         .map(|a| app::launch_url(a, &cwd))
-        .chain(link)
         .collect();
     let delegate = Arc::new(app::MagnetiteApp::new(
         data_dir,
@@ -180,8 +179,17 @@ const SINGLE_ARGUMENT: &str = "--single-argument";
 
 /// Split the command line at `--single-argument`: our own arguments before
 /// it, and the link after it (the arguments after it joined by spaces, as
-/// a link with spaces would have been split).
-pub(crate) fn split_link(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
+/// a link with spaces would have been split). Only Windows hands links
+/// over so: elsewhere the command line stays whole.
+pub(crate) fn split_link(args: Vec<String>) -> (Vec<String>, Option<String>) {
+    if cfg!(windows) {
+        split_at_marker(args)
+    } else {
+        (args, None)
+    }
+}
+
+fn split_at_marker(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
     let Some(at) = args.iter().position(|a| a == SINGLE_ARGUMENT) else {
         return (args, None);
     };
@@ -288,7 +296,7 @@ fn packaged_scriptlets() -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_helper, parse_cli, split_link};
+    use super::{is_helper, parse_cli, split_at_marker as split_link};
 
     #[test]
     fn a_link_never_makes_the_process_a_helper() {

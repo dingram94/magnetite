@@ -410,8 +410,8 @@ impl EngineDelegate for MagnetiteApp {
                 let given = crate::parse_cli(argv)
                     .map(|cli| cli.urls)
                     .unwrap_or_default();
-                let urls: Vec<String> = (given.iter().map(|a| launch_url(a, &cwd)))
-                    .chain(link)
+                let urls: Vec<String> = (given.iter().chain(&link))
+                    .map(|a| launch_url(a, &cwd))
                     .collect();
                 if urls.is_empty() {
                     engine.activate_frame();

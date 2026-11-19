@@ -11,7 +11,7 @@
 
 use cef::*;
 
-use crate::engine::Engine;
+use crate::engine::{Engine, WindowId};
 
 /// A button's size: Windows' own caption buttons.
 const BUTTON: Size = Size {
@@ -71,8 +71,8 @@ impl Caption {
         cfg!(target_os = "windows")
     }
 
-    /// The row with its buttons at the right end.
-    pub(crate) fn new() -> Option<Self> {
+    /// The row of frame window `win`, with its buttons at the right end.
+    pub(crate) fn new(win: WindowId) -> Option<Self> {
         let row = panel_create(None)?;
         row.set_to_box_layout(Some(&BoxLayoutSettings {
             horizontal: 1,
@@ -82,7 +82,7 @@ impl Caption {
         }))?;
         let button = |action: Action| {
             let button = label_button_create(
-                Some(&mut CaptionButton::new(action)),
+                Some(&mut CaptionButton::new(action, win)),
                 Some(&CefString::from(action.sign(false))),
             )?;
             button.set_font_list(Some(&CefString::from("Segoe UI Symbol, 13px")));
@@ -156,20 +156,23 @@ fn paint(button: &LabelButton, action: Action, hot: bool, chrome: u32) {
 wrap_button_delegate! {
     struct CaptionButton {
         action: Action,
+        // The window the button is in: the one it acts on.
+        win: WindowId,
     }
     impl ViewDelegate {}
     impl ButtonDelegate {
         fn on_button_pressed(&self, _button: Option<&mut Button>) {
-            let action = self.action;
+            let (action, win) = (self.action, self.win);
             // From a task: closing the window from inside its own button's
             // callback would tear the button down under it.
             Engine::post(Box::new(move || {
                 let engine = Engine::global();
-                match action {
+                // The button's own window, whichever is current by now.
+                engine.in_window(win, || match action {
                     Action::Minimize => engine.minimize_frame(),
                     Action::Maximize => engine.toggle_maximize_frame(),
                     Action::Close => engine.close_frame(),
-                }
+                });
             }));
         }
         fn on_button_state_changed(&self, button: Option<&mut Button>) {
