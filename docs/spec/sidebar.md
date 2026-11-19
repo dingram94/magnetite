@@ -184,9 +184,10 @@ Code: `crates/engine/src/tabshare.rs`, `tabshare_hook.js`;
 ## Hiding and resizing
 
 `Cmd+S` or the sidebar button hides the sidebar: the pages take the whole
-window and the keyboard. `Cmd+S` shows it again. (On Windows and Linux the
+window and the keyboard. `Cmd+S` shows it again. (On Windows the
 window's buttons are in a row above the pages at the top right, with or
-without the sidebar.) While it is hidden on macOS or Windows,
+without the sidebar, unless the top bar is on, which has them.) While it is
+hidden on macOS or Windows,
 moving the pointer to the window's left edge slides the sidebar out over the
 pages, along the window's whole height, without taking the keyboard from the
 page. It leaves when the pointer does, or on Esc; its sidebar button or

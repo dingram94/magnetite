@@ -141,7 +141,8 @@ It asks whether to install for all users (the default: administrator rights,
 
 Windows builds start, show pages and pass the tests. The window's buttons
 (minimise, maximise, close) are at the top right, in a row above the page
-area (`crates/engine/src/caption.rs`). Still missing there: a signature for
+area (`crates/engine/src/caption.rs`), or in the top bar when that is on.
+Still missing there: a signature for
 `magnetite.exe` and the installer, and what the specs list as macOS only.
 
 ## Testing
