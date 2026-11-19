@@ -92,6 +92,7 @@ Releases will appear on the GitHub releases page, one package per system:
 
 - **macOS 13 or newer** (Apple silicon, Intel): a disk image or a zip with `Magnetite.app`, also through Homebrew.
 - **Linux** (x86_64, aarch64): an rpm (Fedora, RHEL) and a deb (Debian, Ubuntu), which update with your system's updates, and a tarball for other systems; its `README.md` explains the sandbox setup.
+- **Windows 10 or newer** (x86_64): an installer, or a zip to unpack. Not signed yet, so Windows warns before the installer starts.
 
 Magnetite updates itself from these releases. The update list is signed, and `SHA256SUMS` lists the packages' checksums.
 
