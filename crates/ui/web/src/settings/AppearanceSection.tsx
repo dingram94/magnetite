@@ -2,7 +2,7 @@
 // width, the same in every space. How one space looks (colour, strength,
 // backgrounds) is drawn here too, for Settings → Spaces, which shows it with
 // the rest of the space: both change the same stored appearance.
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { storeImage, userImageUrl, type ImageSlot } from "../backgrounds";
 import { DEFAULT_ACCENT, accentCss, applyAppearance, keyLabel, lookOf, send, type Appearance, type Color, type SpaceLook } from "../bridge";
 import { Field, Group, Slider, Toggle } from "./fields";
@@ -76,15 +76,25 @@ function useAppearance(info: Info, update: (patch: SettingsPatch) => void) {
   const latest = useRef({ saved, update });
   latest.current = { saved, update };
   const timer = useRef<number | undefined>(undefined);
+  // The save that still waits. It runs when the fields go away (another
+  // space's page takes their place): later it would write this page's
+  // copy of the looks over what the next page saved meanwhile.
+  const waiting = useRef<(() => void) | undefined>(undefined);
+  useEffect(() => () => {
+    window.clearTimeout(timer.current);
+    waiting.current?.();
+  }, []);
   const set = (patch: Partial<Appearance>, now = false) => {
     const changed = { ...pending, ...patch };
     setPending(changed);
     applyAppearance({ ...saved, ...changed });
     const save = () => {
+      waiting.current = undefined;
       latest.current.update({ appearance: { ...latest.current.saved, ...changed } });
       setPending({});
     };
     window.clearTimeout(timer.current);
+    waiting.current = save;
     if (now) save();
     else timer.current = window.setTimeout(save, 250);
   };

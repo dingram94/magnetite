@@ -90,13 +90,17 @@ pub fn space_bookmarks_json(spaces: &[&Space]) -> String {
 }
 
 /// The bookmarks of `spaces` as CSV, a line each: `space,folder,title,url`,
-/// the folder as its path with " / " between. Every field is quoted. A
-/// title that a spreadsheet would take for a formula (it starts with `=`,
-/// `+`, `-` or `@`) gets a `'` in front: titles come from web pages.
+/// the folder as its path with " / " between (a `/` or `\` inside a name
+/// has a `\` before it). Every field is quoted. A field that a spreadsheet
+/// would take for a formula (it starts with `=`, `+`, `-` or `@`) gets a
+/// `'` in front, titles come from web pages; and so does one that starts
+/// with `'` itself, which keeps the guard reversible.
 pub fn space_bookmarks_csv(spaces: &[&Space]) -> String {
     fn field(text: &str) -> String {
         let text = plain(text);
-        let guard = if text.starts_with(['=', '+', '-', '@']) {
+        // Also before a `'` of its own, so the import can take the guard
+        // off again without taking a name's own apostrophe.
+        let guard = if text.starts_with(['=', '+', '-', '@', '\'']) {
             "'"
         } else {
             ""
@@ -119,7 +123,8 @@ pub fn space_bookmarks_csv(spaces: &[&Space]) -> String {
                 SidebarNode::Tab(_) => {}
                 SidebarNode::Folder(f) => {
                     let mut below = path.to_vec();
-                    below.push(plain(&f.title));
+                    // A `/` in a name is no step of the path.
+                    below.push(plain(&f.title).replace('\\', "\\\\").replace('/', "\\/"));
                     rows(out, space, &below, &f.children);
                 }
             }
@@ -264,6 +269,33 @@ mod tests {
             let back = bookmarks_any(&write(&[&work])).expect("our own file reads");
             assert_eq!(shape(&back), one);
         }
+        // Names that look like a path, a formula or a guard come back as they are.
+        let odd = space(
+            "=Work",
+            vec![SidebarNode::Folder(Folder {
+                id: "f".into(),
+                title: "CI / CD".into(),
+                icon: None,
+                children: vec![
+                    SidebarNode::Folder(Folder {
+                        id: "g".into(),
+                        title: "-a\\b".into(),
+                        icon: None,
+                        children: vec![tab("'=1", "https://one.example/")],
+                        smart: None,
+                    }),
+                    tab("'quoted'", "https://two.example/"),
+                ],
+                smart: None,
+            })],
+        );
+        let home = space("Home", vec![tab("News", "https://news.example/")]);
+        let back = bookmarks_any(&space_bookmarks_csv(&[&odd, &home])).expect("reads");
+        assert_eq!(
+            shape(&back),
+            "=Work[CI / CD[-a\\b['=1=https://one.example/] 'quoted'=https://two.example/]] \
+             Home[News=https://news.example/]"
+        );
         // Nothing in it, or not ours: an error, not an empty import.
         assert!(bookmarks_any("[]").is_err());
         assert!(bookmarks_any("space,folder,title,url\r\n").is_err());
