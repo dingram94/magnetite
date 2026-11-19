@@ -96,11 +96,14 @@ impl Engine {
         let start = start.map(|p| CefString::from(p.to_string_lossy().as_ref()));
         let mut callback =
             FolderChosen::new(std::sync::Arc::new(std::sync::Mutex::new(Some(done))));
+        // No filters is an empty list, not none: CEF reads the list's size
+        // without a look at whether there is one, and the app ends there.
+        let mut filters = CefStringList::new();
         host.run_file_dialog(
             FileDialogMode::OPEN_FOLDER,
             Some(&CefString::from(title)),
             start.as_ref(),
-            None,
+            Some(&mut filters),
             Some(&mut callback),
         );
     }
