@@ -20,7 +20,7 @@ export CEF_PATH="$HOME/.local/share/cef"
 ```
 
 The official CEF builds come without the H.264, AAC and HEVC decoders. On
-macOS with Apple silicon and on Linux x86_64, releases and CI use
+macOS with Apple silicon and on Linux and Windows x86_64, releases and CI use
 [Magnetite's own CEF build](https://github.com/magnetite-browser/magnetite-cef)
 instead, which has them and our patches. `scripts/cef.sh` fetches it,
 checks its hash and unpacks it:

@@ -84,7 +84,7 @@ Magnetite is developed and used daily on macOS (Apple silicon). Linux and Window
 
 There are no releases yet, so for now you [build it yourself](#build-it-yourself). Expect breaking changes, including to the data format on disk.
 
-Not there yet: moving a page between windows on macOS and Windows (to do: written for both, tested on neither), and H.264 or AAC playback on Linux aarch64, Windows and Intel Macs (the standard build of the engine comes without these codecs, so some video and music sites do not play; on Macs with Apple silicon and Linux x86_64, Magnetite uses [its own build](https://github.com/magnetite-browser/magnetite-cef) with them). Every spec in [`docs/spec/`](docs/spec/README.md) ends with what its feature still lacks.
+Not there yet: moving a page between windows on macOS and Windows (to do: written for both, tested on neither), and H.264 or AAC playback on Linux aarch64 and Intel Macs (the standard build of the engine comes without these codecs, so some video and music sites do not play; on Macs with Apple silicon, Linux x86_64 and Windows x86_64, Magnetite uses [its own build](https://github.com/magnetite-browser/magnetite-cef) with them). Every spec in [`docs/spec/`](docs/spec/README.md) ends with what its feature still lacks.
 
 ## Install
 

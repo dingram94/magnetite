@@ -3,8 +3,9 @@
 # the H.264, AAC and HEVC decoders and the H.264 encoder for calls those
 # leave out, and our patches
 # (https://github.com/magnetite-browser/magnetite-cef). There is one for
-# macOS on Apple silicon and one for Linux on x86_64; every other system
-# builds with the official CEF, which the build downloads by itself.
+# macOS on Apple silicon, one for Linux on x86_64 and one for Windows on
+# x86_64; every other system builds with the official CEF, which the build
+# downloads by itself.
 #
 #   scripts/cef.sh DIR
 #
@@ -36,7 +37,11 @@ case "$(host_os)-$(host_arch)" in
     ARCHIVE="${NAME}_linux64_minimal.tar.bz2"
     SHA256=b1c59b058e1e780060b5033333052bd25fa2a9f4b5a88d87b8a53621a78cdff4
     ;;
-  *) die "Magnetite's own CEF build is for macOS on Apple silicon and Linux on x86_64 only" ;;
+  windows-x86_64)
+    ARCHIVE="${NAME}_windows64_minimal.tar.bz2"
+    SHA256=a9e74c28047b87a9fdcae208a56258d941845fe6af1d4207f918a756c68b3a9f
+    ;;
+  *) die "Magnetite's own CEF build is for macOS on Apple silicon, Linux on x86_64 and Windows on x86_64 only" ;;
 esac
 
 # The CEF version the Rust bindings are made for: "156.5.0+156.0.30" -> 156.0.30.
@@ -68,8 +73,9 @@ rm -rf "$unpacked"
 tar -xjf "$archive" -C "$dir/archive"
 # The layout cef-dll-sys makes of a download: the runtime next to the files
 # the C++ wrapper library is built from. On macOS the runtime is the
-# framework (the archive's Release folder); on Linux it is everything in
-# Release (libcef.so, magnetite-patches.txt, ...) and Resources.
+# framework (the archive's Release folder); on Linux and Windows it is
+# everything in Release (libcef.so or libcef.dll, magnetite-patches.txt, ...)
+# and Resources.
 if [[ $(host_os) == macos ]]; then
   runtime=("$unpacked/Release/Chromium Embedded Framework.framework")
 else
