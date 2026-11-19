@@ -1,4 +1,7 @@
-// Settings → Appearance: space colours and their strength, backgrounds, layout, text size, density, sidebar width.
+// Settings → Appearance: layout, text size, page zoom, density and sidebar
+// width, the same in every space. How one space looks (colour, strength,
+// backgrounds) is drawn here too, for Settings → Spaces, which shows it with
+// the rest of the space: both change the same stored appearance.
 import { useRef, useState } from "react";
 import { storeImage, userImageUrl, type ImageSlot } from "../backgrounds";
 import { DEFAULT_ACCENT, accentCss, applyAppearance, keyLabel, lookOf, send, type Appearance, type Color, type SpaceLook } from "../bridge";
@@ -59,14 +62,14 @@ function OwnImage({ slot, space, stamp, maxSide, reload }: { slot: ImageSlot; sp
 }
 
 /**
- * Space colours and their strength, backgrounds, text size, density and
- * sidebar width. Sliders apply shortly
- * after they stop moving: each change re-lays out the pages.
+ * The appearance as the controls have it: what is saved, with what they
+ * changed and is not saved yet laid over it. Sliders apply shortly after
+ * they stop moving, since each change lays the pages out again; `set` with
+ * `now` saves at once.
  */
-export function AppearanceSection({ info, update, reload }: { info: Info; update: (patch: SettingsPatch) => void; reload: () => void }) {
+function useAppearance(info: Info, update: (patch: SettingsPatch) => void) {
   const saved = info.settings.appearance;
-  // What the controls changed and is not saved yet. The rest follows the
-  // saved values: the sidebar's edge changes its width too.
+  // The rest follows the saved values: the sidebar's edge changes its width too.
   const [pending, setPending] = useState<Partial<Appearance>>({});
   const draft = { ...saved, ...pending };
   // The saved values and `update` as they are when the delayed save runs.
@@ -85,29 +88,29 @@ export function AppearanceSection({ info, update, reload }: { info: Info; update
     if (now) save();
     else timer.current = window.setTimeout(save, 250);
   };
-  const colour = (id: string, c: Color | null) => send({ cmd: "set_space_color", id, color: c }).then(reload);
-  // The space whose look the controls below change: the current one at first.
-  const [chosen, setChosen] = useState(info.active_space);
-  const sp = info.spaces.find((s) => s.id === chosen) ?? info.spaces[0];
-  if (!sp) return null;
-  const look = lookOf(draft, sp.id);
-  const setLook = (patch: Partial<SpaceLook>, now = false) => set({ looks: { ...draft.looks, [sp.id]: { ...look, ...patch } } }, now);
-  const stored = lookOf(saved, sp.id);
+  return { saved, draft, set };
+}
+
+/**
+ * How space `space` looks: its colour and how much of it the window takes,
+ * the background of the sidebar and the picture of the empty window. Rows
+ * of a `Group` (Settings → Spaces).
+ */
+export function SpaceLookFields({ info, space, update, reload }: { info: Info; space: Info["spaces"][number]; update: (patch: SettingsPatch) => void; reload: () => void }) {
+  const { saved, draft, set } = useAppearance(info, update);
+  const colour = (c: Color | null) => send({ cmd: "set_space_color", id: space.id, color: c }).then(reload);
+  const look = lookOf(draft, space.id);
+  const setLook = (patch: Partial<SpaceLook>, now = false) => set({ looks: { ...draft.looks, [space.id]: { ...look, ...patch } } }, now);
+  const stored = lookOf(saved, space.id);
   return (
     <>
-      <Group title="Spaces" hint="Colour, strength and backgrounds belong to a space: each one can look different.">
-      <Field side label="Space" hint="The space the settings below are for.">
-        <select className="field" value={sp.id} onChange={(e) => setChosen(e.target.value)} aria-label="Space">
-          {info.spaces.map((s) => <option key={s.id} value={s.id}>{s.title}{s.id === info.active_space ? " (current)" : ""}</option>)}
-        </select>
-      </Field>
       <Field side label="Colour" hint="Tints the sidebar and outlines the focused page in split view. It syncs with the space.">
         <div className="swatches">
           {SPACE_COLOURS.map(([name, c]) => (
-            <button key={name} className="swatch" title={name} aria-label={name} data-on={sameColour(sp.accent, c) || undefined} style={{ background: accentCss(c) }} onClick={() => colour(sp.id, c)} />
+            <button key={name} className="swatch" title={name} aria-label={name} aria-pressed={sameColour(space.accent, c)} data-on={sameColour(space.accent, c) || undefined} style={{ background: accentCss(c) }} onClick={() => colour(c)} />
           ))}
           <label className="swatch custom" title="Any colour">
-            <input type="color" value={toHex(sp.accent)} onChange={(e) => colour(sp.id, fromHex(e.target.value))} />
+            <input type="color" value={toHex(space.accent)} onChange={(e) => colour(fromHex(e.target.value))} />
           </label>
         </div>
       </Field>
@@ -120,18 +123,26 @@ export function AppearanceSection({ info, update, reload }: { info: Info; update
             {EFFECTS.map(([label, effect]) => <option key={effect} value={effect}>{label}</option>)}
             {stored.sidebar_image != null && <option value="image">Your picture</option>}
           </select>
-          <OwnImage slot="sidebar" space={sp.id} stamp={stored.sidebar_image} maxSide={1600} reload={reload} />
+          <OwnImage slot="sidebar" space={space.id} stamp={stored.sidebar_image} maxSide={1600} reload={reload} />
         </div>
       </Field>
       <Field side label="Empty window" hint="A picture behind the window while no tab is open in this space. Without one, the logo shows there.">
-        <OwnImage slot="empty" space={sp.id} stamp={stored.empty_image} maxSide={2880} reload={reload} />
+        <OwnImage slot="empty" space={space.id} stamp={stored.empty_image} maxSide={2880} reload={reload} />
       </Field>
-      </Group>
+    </>
+  );
+}
+
+/** Layout, text size, page zoom, density and sidebar width. */
+export function AppearanceSection({ info, update, open }: { info: Info; update: (patch: SettingsPatch) => void; open: (section: string) => void }) {
+  const { draft, set } = useAppearance(info, update);
+  return (
+    <>
       <Group title="Window" hint="The same in every space.">
       <Field side label="Layout" hint="Where back, forward, the address and the extensions sit: at the top of the sidebar, or in a bar across the window.">
         <div className="seg">
           {([["Sidebar", false], ["Top bar", true]] as const).map(([label, on]) => (
-            <button key={label} data-on={draft.top_bar === on || undefined} onClick={() => set({ top_bar: on }, true)}>{label}</button>
+            <button key={label} data-on={draft.top_bar === on || undefined} aria-pressed={draft.top_bar === on} onClick={() => set({ top_bar: on }, true)}>{label}</button>
           ))}
         </div>
       </Field>
@@ -149,13 +160,18 @@ export function AppearanceSection({ info, update, reload }: { info: Info; update
       <Field side label="Density" hint="Height and spacing of the sidebar rows.">
         <div className="seg">
           {(["compact", "comfortable", "spacious"] as const).map((d) => (
-            <button key={d} data-on={draft.density === d || undefined} onClick={() => set({ density: d }, true)}>{d[0]!.toUpperCase() + d.slice(1)}</button>
+            <button key={d} data-on={draft.density === d || undefined} aria-pressed={draft.density === d} onClick={() => set({ density: d }, true)}>{d[0]!.toUpperCase() + d.slice(1)}</button>
           ))}
         </div>
       </Field>
       <Field side label="Sidebar width" hint="The pages take the rest of the window.">
         <Slider value={draft.sidebar_width} min={220} max={360} step={4} unit=" pt" reset={264} onChange={(v, now) => set({ sidebar_width: v }, now)} />
       </Field>
+      </Group>
+      <Group>
+        <Field side label="Colours and backgrounds" hint="Each space has a colour and a background of its own. They are with the space, in Settings → Spaces.">
+          <button className="btn" onClick={() => open("spaces")}>Open Spaces</button>
+        </Field>
       </Group>
     </>
   );

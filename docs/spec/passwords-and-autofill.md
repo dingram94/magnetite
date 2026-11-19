@@ -50,7 +50,7 @@ Below each of the first three is a button to what is saved:
 | Saved cards… | `chrome://settings/payments` |
 
 These are Chromium's own pages. They open as a peek over Settings
-(`peek.md`), in the profile chosen under **Logins**. That choice shows when
+(`peek.md`), in the profile chosen under **Profile**. That choice shows when
 there is more than one lasting profile and starts with the profile of the
 current space; private profiles are not listed.
 

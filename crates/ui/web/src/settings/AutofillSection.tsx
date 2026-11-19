@@ -1,6 +1,7 @@
 // Settings → Passwords & autofill: the switches of Chromium's password
 // manager and autofill, and the way to what they hold. The lists themselves
 // are Chromium's own pages, which the app shows over this one.
+import { profileLabel } from "./SpacesSection";
 import { useState } from "react";
 import { send, type Settings } from "../bridge";
 import { Field, Group, Switch, Toggle } from "./fields";
@@ -39,9 +40,9 @@ export function AutofillSection({ info, update }: { info: Info; update: (patch: 
     <>
       {logins.length > 1 && (
         <Group>
-        <Field side label="Logins" hint="Each set of logins keeps its own passwords, addresses and cards. The buttons below open those of the logins chosen here; the switches count for all of them.">
-          <select className="field" value={profile} onChange={(e) => setProfile(e.target.value)} aria-label="Logins">
-            {logins.map((p) => <option key={p.id} value={p.id}>{p.is_default ? "Shared (your main logins)" : p.name}</option>)}
+        <Field side label="Profile" hint="Each profile keeps its own passwords, addresses and cards. The buttons below open those of the profile chosen here; the switches count for all of them.">
+          <select className="field" value={profile} onChange={(e) => setProfile(e.target.value)} aria-label="Profile">
+            {logins.map((p) => <option key={p.id} value={p.id}>{profileLabel(info, p)}</option>)}
           </select>
         </Field>
         </Group>

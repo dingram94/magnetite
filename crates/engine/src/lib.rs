@@ -87,7 +87,7 @@ pub use events::{
     ContentId, DevPanel, DevToolsAction, DividerAction, DownloadReport, DownloadState, EngineEvent,
     ExtensionMenuAction, MemoryPressure, Shortcut, UrlSource,
 };
-pub use extensions::ExtensionInfo;
+pub use extensions::{ExtensionInfo, is_extension_id};
 pub use keymap::{Action, Combo, KeysError, Overrides};
 pub use languages::LanguagePrefs;
 pub use media::{MediaAction, MediaState};

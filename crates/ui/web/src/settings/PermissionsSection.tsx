@@ -2,6 +2,7 @@
 // the microphone, the location, notifications, pop-ups or the clipboard,
 // with each choice to change or take back. The site panel decides for the
 // site in front; this is the list of all of them.
+import { profileLabel } from "./SpacesSection";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { send, type PermissionEntry, type PermissionKind } from "../bridge";
 import { Field, Group } from "./fields";
@@ -83,9 +84,9 @@ export function PermissionsSection({ info }: { info: Info }) {
     <>
       {logins.length > 1 && (
         <Group>
-          <Field side label="Logins" hint="Each set of logins keeps its own choices.">
-            <select className="field" value={profile} onChange={(e) => setChosen(e.target.value)} aria-label="Logins">
-              {logins.map((p) => <option key={p.id} value={p.id}>{p.is_default ? "Shared (your main logins)" : p.name}</option>)}
+          <Field side label="Profile" hint="Each profile keeps its own choices.">
+            <select className="field" value={profile} onChange={(e) => setChosen(e.target.value)} aria-label="Profile">
+              {logins.map((p) => <option key={p.id} value={p.id}>{profileLabel(info, p)}</option>)}
             </select>
           </Field>
         </Group>

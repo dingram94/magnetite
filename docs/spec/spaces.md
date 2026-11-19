@@ -1,8 +1,8 @@
 # Spaces
 
 A space is a named set of pinned and Today tabs with its own icon, colour
-and profile. The sidebar shows one space at a time; the favorites are shared
-by all spaces. The profile decides which logins the pages of a space use.
+and profile. The sidebar shows one space at a time; a favorite is shared
+by all spaces unless it is for some only (`sidebar.md`). The profile decides which logins the pages of a space use.
 
 ## Properties
 
@@ -27,8 +27,10 @@ by all spaces. The profile decides which logins the pages of a space use.
   It has Rename space, Change icon, New folder, the profile choice and
   Delete space….
 - **Rename**: the space menu, or double-click the title. **Icon**: the space
-  menu, or click the icon. **Colour**: Settings → Appearance →
-  Colour, with eleven presets and a colour picker ("Look" below).
+  menu, or click the icon. **Colour**: Settings → Spaces, the space's
+  page, with eleven presets and a colour picker ("Look" below).
+- Settings → Spaces does the same without the sidebar: add, name, sort and
+  delete spaces, and all of one space on its page (`settings.md`).
 - **Reorder**: drag a space icon in the footer onto another one. A line
   shows where it goes: before the icon under the pointer on its left half,
   after it on its right half; where it already is, no line shows. The
@@ -41,8 +43,7 @@ by all spaces. The profile decides which logins the pages of a space use.
 
 ## Look
 
-Settings → Appearance starts with the spaces: choose one (the current space
-is chosen at first), and the settings below it change that space.
+The page of a space in Settings → Spaces has its look:
 
 - **Colour**: the space colour (`accent`). It syncs with the space.
 - **Colour strength**: how much of the space colour the window takes, 0 to
@@ -116,7 +117,7 @@ A profile is an isolated browsing context: cookies, logins, site storage and
 extensions. Every space uses exactly one profile, and several spaces may
 share one. The default profile always exists.
 
-- Changing a space's profile (space menu, or Settings → Isolation) closes
+- Changing a space's profile (space menu, or Settings → Spaces) closes
   the pages of that space; they load again in the new profile when shown.
 - A favorite runs in the profile of the favorites list it is in
   (`sidebar.md`). Its context menu moves it to another profile's list
@@ -128,23 +129,26 @@ share one. The default profile always exists.
   itself starts with the profile used last, which would run every space
   of the default profile in another profile's cookies and extensions.)
 
-### Isolation levels
+### Choosing a profile
 
-Settings → Isolation presents profiles as three levels, set per space and
-per favorite:
+Settings → Spaces names profiles as such. A space (on its page) and a
+favorite (in the list of favorites) choose one of:
 
-| Level | Profile | Logins |
+| Choice | Profile | Logins |
 |---|---|---|
-| Shared | the default profile | The main logins, shared by everything that is Shared. |
-| Separate | a persistent profile | Its own logins, kept between restarts. Choosing it creates a profile named after the item; the picker can switch to another separate profile to share logins. |
+| Main profile | the default profile | The main logins, shared by everything in the main profile. |
+| A profile by its name | a persistent profile | Its own logins, kept between restarts, shared by all that choose it. "A new profile" makes one named after the item. |
 | Private | a profile in memory | Its own logins, gone when Magnetite quits. Created per item and removed once nothing uses it. |
+
+The group "Profiles" lists every lasting profile with the spaces and
+favorites that use it, so what shares logins shows in one place.
 
 A private profile keeps its browsing off the disk: its Today tabs are not
 saved, synced or archived, its pinned tabs and favorites are saved with
 their home page only, its pages leave no history (`history.md`), and its
 icons are not cached (`docs/design/security.md`).
 
-Separate profiles can be renamed in Settings → Isolation, and deleted there
+Persistent profiles can be renamed in Settings → Spaces, and deleted there
 once nothing uses them: no space, no favorite, no mini window, and no tab
 or peek that was opened from a page of that profile and still runs in it. The same holds
 for the clean-up of private profiles. The data folder of a profile deleted
@@ -265,7 +269,8 @@ in front, the space beside it comes to the front for the link.
 Code: `crates/core/src/model.rs`, `crates/app/src/app/commands.rs`,
 `crates/app/src/state/profiles.rs`, `crates/app/src/state/private.rs`,
 `crates/app/src/state/tabs.rs` (`move_space`),
-`crates/ui/web/src/{App,SpaceSwitcher,IsolationSection,Glyphs}.tsx`,
+`crates/ui/web/src/{App,SpaceSwitcher,Glyphs}.tsx`,
+`crates/ui/web/src/settings/SpacesSection.tsx`,
 `crates/ui/web/src/useSpaceSwipe.ts`,
 `crates/ui/web/src/settings/AppearanceSection.tsx`,
 `crates/ui/web/src/{backgrounds.ts,Empty.tsx}`, `crates/engine/src/empty.rs`.

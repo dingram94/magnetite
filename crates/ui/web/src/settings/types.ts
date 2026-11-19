@@ -10,9 +10,9 @@ export interface Info {
   profiles: { id: string; name: string; is_default: boolean; ephemeral?: boolean; synced: boolean }[];
   /** `synced` false: kept on this device alone ("Only on this device"). */
   /** `keys`: the keys that go to the space (Settings → Shortcuts), null without. `shortcut`: the keys saved for it, which may not count here (fixed on this system, or something else has them). */
-  spaces: { id: string; title: string; icon?: string; accent?: Color | null; profile_id: string; synced: boolean; keys: string | null; shortcut: string | null }[];
+  spaces: { id: string; title: string; icon?: string; accent?: Color | null; profile_id: string; bookmarks: number; pinned: number; synced: boolean; keys: string | null; shortcut: string | null }[];
   active_space: string;
-  favorites: { id: string; title: string; url: string; profile_id?: string | null }[];
+  favorites: { id: string; title: string; url: string; profile_id?: string | null; only_in: string[] }[];
   archive_count: number;
   history_count: number;
   /** Whether Magnetite opens links from other apps ("unknown": not on this system). */
@@ -28,6 +28,8 @@ export interface Info {
   download_folder_missing: boolean;
   /** Installed extensions of the page in front's profile. */
   extensions: ExtensionInfo[];
+  /** The extensions of every lasting profile. */
+  profile_extensions: { profile: string; extensions: ExtensionInfo[]; pinned: string[] }[];
   /** The filter lists one can subscribe to, and whether downloads are under way. */
   adblock: {
     lists: { id: string; name: string; about: string; host: string; fetched_at: number | null; error: string | null }[];

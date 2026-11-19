@@ -290,6 +290,16 @@ impl MagnetiteApp {
         self.show_state_paced(engine);
     }
 
+    /// Something an open Settings page shows changed outside of it (a
+    /// switch on one of Chromium's pages, the spaces in the sidebar): the
+    /// page asks for its data again (`SettingsPage.tsx`).
+    fn tell_settings_pages(&self, engine: &Engine) {
+        let js = r#"window.dispatchEvent(new Event("magnetite-settings-changed"))"#;
+        for page in self.own_page_tabs("magnetite://ui/settings") {
+            engine.content_ui_eval(page, js);
+        }
+    }
+
     /// Save the state within `SAVE_EVERY`, on the saver's thread. Quitting
     /// saves at once (`EngineEvent::QuitRequested`).
     fn save_soon(&self) {
@@ -394,7 +404,7 @@ impl MagnetiteApp {
                 ui_json(s, &extensions, recording).to_string(),
                 s.chrome_rgb(),
                 s.accent_rgb(),
-                s.settings.pinned_extensions.clone(),
+                s.pins(&profile).to_vec(),
             )
         });
         engine.set_extension_menu(context, pinned);

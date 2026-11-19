@@ -27,10 +27,14 @@ along.
   already a favorite there is skipped. Imported Today tabs count as used at
   the time of the import, so auto-archive does not remove them at once.
 - **Settings → Data & privacy → Import a bookmarks file** takes the HTML
-  file a browser writes with "Export Bookmarks". This is the way for
+  file a browser writes with "Export Bookmarks", and the JSON and CSV
+  files Magnetite exports (`bookmarks.md`; told apart by how the file
+  starts). A JSON or CSV file of several spaces comes in as a folder per
+  space, as the HTML file of several spaces does. This is the way for
   Safari (File → Export → Bookmarks…), whose data macOS keeps from other
-  apps. The file's bookmarks and folders go to the top of the current
-  space's bookmarks, the Reading List as a folder. An address the space has
+  apps. The file's bookmarks and folders go to the top of the bookmarks
+  of the space chosen next to the button (the current space at first),
+  the Reading List as a folder. An address the space has
   already is skipped, so the same file adds nothing a second time; folders
   left empty and addresses that are no web pages are left out. A file of
   more than 16 MiB, one without bookmarks or one nested more than 32

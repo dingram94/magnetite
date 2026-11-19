@@ -6,14 +6,15 @@ the right. What each setting does is in the spec of its feature.
 
 ## Sections
 
-The list has four groups:
+The list has five groups:
 
 | Group | Sections |
 |---|---|
 | Basics | General, Appearance, Shortcuts |
 | Browsing | Tabs & archive, Links, Search, Ad blocking, Permissions, Passwords & autofill |
-| Spaces | Isolation, Sync, Smart folders |
-| Advanced | Extensions, Custom CSS & JS, Developer, Data & privacy, About |
+| Spaces | Spaces, Smart folders |
+| Services | Sync, Extensions |
+| Advanced | Custom CSS & JS, Developer, Data & privacy, About |
 
 - **General** has what belongs to no feature of its own: windows (several
   windows, web panels, playing videos), where downloads are saved, spell
@@ -25,17 +26,57 @@ The list has four groups:
 - **Tabs & archive** has when tabs are archived and suspended, how long the
   archive keeps them, the order of Ctrl+Tab and what the archive button
   opens.
+- **Spaces** lists the spaces, the profiles and the favorites, and has a
+  page for each space (below).
 - **Permissions** lists every site with a choice of its own for the
   camera, microphone, location, notifications, pop-ups or the clipboard
   (`site-controls.md`).
 - **Data & privacy** has the history (how long it is kept, clearing it),
   deleting the cookies, site data and cache of all websites
   (`site-controls.md`),
-  the import from another browser or a bookmarks file, the servers
+  the import from another browser or a bookmarks file, the export of the
+  bookmarks (`bookmarks.md`), the servers
   Magnetite talks to, each with what for, what websites are told
   (`global-privacy-control.md`), and where the data lives.
 
 The address names the section: `magnetite://ui/settings#links`.
+
+## Spaces
+
+The section starts with three groups:
+
+- **Spaces**: every space in the order of the sidebar, each with its icon,
+  its profile, "only on this device" and its keys where it has them. A
+  click on a space opens its page. A space is moved by dragging it (its
+  handle on the left, or the row): a line shows where it lands. With the
+  handle focused, the up and down arrow keys move it. "A new space" adds
+  one by name, after the others, without leaving Settings.
+- **Profiles**: every lasting profile with what uses it (spaces and
+  favorites), to rename, and to delete once nothing uses it
+  (`spaces.md`). "A new profile" adds an empty one by name, to give to
+  a space or a favorite afterwards.
+- **Favorites**: every favorite, to name, to sort inside the list of its
+  profile (drag its handle, or the arrow keys on it), to show in every
+  space, in one or in several, to give a profile, and to remove (its page
+  is in the archive afterwards). "A new favorite" adds one by its
+  address (`sidebar.md`).
+
+The page of a space (`magnetite://ui/settings#spaces=<id>`, headed by the
+space's name, "All spaces" and the browser's Back lead to the list) has
+all that is the space's own: its name and icon, its look (`spaces.md`),
+its profile, its bookmarks (how many, deleting them all, and its pinned
+tabs copied or moved to them, `bookmarks.md`), whether it stays on this
+device (`sync.md`), where its keys and its links from other apps are set,
+and "Delete space…".
+
+What changes the spaces elsewhere (the sidebar, another window) shows on
+an open Settings page at once.
+
+Where a section is about one profile (Permissions, Passwords & autofill,
+Extensions, deleting browsing data) and there is more than one lasting
+profile, a list chooses which, starting with the profile of the space in
+front. Each choice names the profile and the spaces that use it: "Main
+profile (Personal, Reading)".
 
 ## How a section looks
 
@@ -88,7 +129,9 @@ leaves the page.
 
 `crates/ui/web/src/SettingsPage.tsx` (sections, the field),
 `crates/ui/web/src/settings/SearchResults.tsx` (matching),
-`crates/ui/web/src/settings/fields.tsx` (groups, rows and their controls).
+`crates/ui/web/src/settings/fields.tsx` (groups, rows and their controls),
+`crates/ui/web/src/settings/SpacesSection.tsx` (the spaces, their pages,
+profiles and favorites).
 
 ## Not built yet
 

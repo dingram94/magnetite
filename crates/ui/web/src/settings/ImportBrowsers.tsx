@@ -1,6 +1,6 @@
 // The browsers on this computer to import from, each at a click, and the import of a bookmarks file (Settings → Data & privacy).
 import { useEffect, useRef, useState } from "react";
-import { send, type ImportSource } from "../bridge";
+import { type BookmarkFormat, type ImportSource, send } from "../bridge";
 import { Field } from "./fields";
 
 /** Browsers on this computer to import from; every import adds spaces. */
@@ -40,16 +40,22 @@ export function ImportBrowsers() {
 }
 
 /** A bookmarks file, as Safari and other browsers export it: its bookmarks join the current space's. */
-export function ImportBookmarksFile() {
+type Space = { id: string; title: string };
+
+export function ImportBookmarksFile({ spaces, current }: { spaces: Space[]; current: string }) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ text: string; failed: boolean } | null>(null);
+  // The space the bookmarks go to: the one in front, until another is chosen.
+  const [chosen, setChosen] = useState<string | null>(null);
+  const space = spaces.find((s) => s.id === chosen) ?? spaces.find((s) => s.id === current) ?? spaces[0];
   const read = async (file: File) => {
     setBusy(true);
     setResult(null);
     try {
-      const r = await send({ cmd: "import_bookmarks", html: await file.text() });
-      setResult({ text: r.bookmarks ? `Added ${count(r.bookmarks, "bookmark")} to the current space.` : "Every bookmark of that file is in the current space already.", failed: false });
+      const r = await send({ cmd: "import_bookmarks", html: await file.text(), space: space?.id });
+      const where = space ? space.title : "the current space";
+      setResult({ text: r.bookmarks ? `Added ${count(r.bookmarks, "bookmark")} to ${where}.` : `Every bookmark of that file is in ${where} already.`, failed: false });
     } catch (e: unknown) {
       setResult({ text: e instanceof Error ? e.message : String(e), failed: true });
     } finally {
@@ -59,12 +65,12 @@ export function ImportBookmarksFile() {
   return (
     <Field
       label="Import a bookmarks file"
-      hint="The file a browser writes with “Export Bookmarks” (Safari: File → Export → Bookmarks…). Its bookmarks join those of the current space; addresses already there are skipped."
+      hint="The file a browser writes with “Export Bookmarks” (Safari: File → Export → Bookmarks…), or a JSON or CSV file exported below. Its bookmarks join those of the space chosen; addresses already there are skipped."
     >
       <input
         ref={input}
         type="file"
-        accept=".html,.htm,text/html"
+        accept=".html,.htm,.json,.csv,text/html,application/json,text/csv"
         hidden
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -73,8 +79,64 @@ export function ImportBookmarksFile() {
           if (file) void read(file);
         }}
       />
-      <button className="btn" disabled={busy} onClick={() => input.current?.click()}>{busy ? "Importing…" : "Choose file…"}</button>
-      {result && <p className="set-hint" style={result.failed ? { color: "var(--danger)" } : undefined}>{result.text}</p>}
+      <div className="flex flex-wrap items-center gap-2">
+        {spaces.length > 1 && (
+          <select className="field" style={{ width: 200 }} value={space?.id} aria-label="Space the bookmarks go to" onChange={(e) => setChosen(e.target.value)}>
+            {spaces.map((s) => <option key={s.id} value={s.id}>Into {s.title}</option>)}
+          </select>
+        )}
+        <button className="btn" disabled={busy} onClick={() => input.current?.click()}>{busy ? "Importing…" : "Choose file…"}</button>
+      </div>
+      {result && <p className="set-hint" role="status" style={result.failed ? { color: "var(--danger)" } : undefined}>{result.text}</p>}
+    </Field>
+  );
+}
+
+const FORMATS: readonly { format: BookmarkFormat; label: string; type: string }[] = [
+  { format: "html", label: "HTML, for another browser", type: "text/html" },
+  { format: "json", label: "JSON", type: "application/json" },
+  { format: "csv", label: "CSV, for a spreadsheet", type: "text/csv" },
+];
+
+/**
+ * The bookmarks of one space or of all, written to a file the browser
+ * downloads like any other: it lands where downloads go.
+ */
+export function ExportBookmarks({ spaces }: { spaces: Space[] }) {
+  const [from, setFrom] = useState("");
+  const [format, setFormat] = useState<BookmarkFormat>("html");
+  const [result, setResult] = useState<{ text: string; failed: boolean } | null>(null);
+  const run = async () => {
+    setResult(null);
+    try {
+      const r = await send({ cmd: "export_bookmarks", format, space: spaces.some((s) => s.id === from) ? from : undefined });
+      const kind = FORMATS.find((f) => f.format === format)!;
+      const url = URL.createObjectURL(new Blob([r.text], { type: `${kind.type};charset=utf-8` }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = r.name;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      setResult({ text: `${count(r.bookmarks, "bookmark")} written to ${r.name}, where your downloads go.`, failed: false });
+    } catch (e: unknown) {
+      setResult({ text: e instanceof Error ? e.message : String(e), failed: true });
+    }
+  };
+  return (
+    <Field label="Export bookmarks" hint="The bookmarks of your spaces as a file: HTML is what every browser imports, JSON and CSV are for your own use. Tabs and favorites are not bookmarks and are not in it.">
+      <div className="flex flex-wrap items-center gap-2">
+        {spaces.length > 1 && (
+          <select className="field" style={{ width: 200 }} value={from} aria-label="Space to export" onChange={(e) => setFrom(e.target.value)}>
+            <option value="">All spaces</option>
+            {spaces.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
+          </select>
+        )}
+        <select className="field" style={{ width: 220 }} value={format} aria-label="Format" onChange={(e) => setFormat(e.target.value as BookmarkFormat)}>
+          {FORMATS.map((f) => <option key={f.format} value={f.format}>{f.label}</option>)}
+        </select>
+        <button className="btn" onClick={() => void run()}>Export…</button>
+      </div>
+      {result && <p className="set-hint" role="status" style={result.failed ? { color: "var(--danger)" } : undefined}>{result.text}</p>}
     </Field>
   );
 }

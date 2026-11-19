@@ -58,7 +58,30 @@ The command bar finds bookmarks too (`command-bar.md`).
 - Bookmarks of other browsers come in as bookmarks of the imported space,
   in their folders ("Bookmarks bar", "Other bookmarks" and so on,
   `import.md`).
-- A bookmarks file adds its bookmarks to the current space (`import.md`).
+- A bookmarks file adds its bookmarks to the space chosen for it, the
+  current one unless another is chosen (`import.md`).
+- **Settings → Data & privacy → Export bookmarks** writes the bookmarks of
+  all spaces, or of one, to a file where downloads go
+  (`magnetite-bookmarks.html`, `.json` or `.csv`):
+  - **HTML**: the bookmarks file browsers read and write, a folder per
+    space when all are exported. Magnetite reads it back.
+  - **JSON**: a list of spaces, each with its bookmarks and folders
+    (`title` and `url`, or `folder` and `children`).
+  - **CSV**: a row per bookmark (`space`, `folder`, `title`, `url`), the
+    folders of a nested bookmark joined with " / ". Every field is quoted,
+    and a title a spreadsheet would run as a formula (it starts with `=`,
+    `+`, `-` or `@`) gets a `'` in front.
+  The private space is never exported. Nothing is sent anywhere.
+- The page of a space in Settings → Spaces has, for that space's
+  bookmarks:
+  - **Delete bookmarks…** (click again to confirm): all of them, folders
+    included.
+  - **Pinned tabs as bookmarks → Copy**: every pinned tab becomes a
+    bookmark of its pinned page, in the folders it is pinned in; an
+    address that is a bookmark already is left out, and so is a smart
+    folder. The tabs stay pinned.
+  - **Move…** (click again to confirm) does the same and then closes the
+    pinned tabs: they are bookmarks, and in the archive (`archive.md`).
 - Bookmarks are part of their space, so they sync with it and stay on the
   device with a space that is only on this device (`sync.md`). What arrives
   is checked like tabs: addresses Magnetite does not open from stored data

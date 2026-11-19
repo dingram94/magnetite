@@ -281,7 +281,9 @@ impl AppState {
     pub fn tabs_by_last_use(&self) -> Vec<Id> {
         let space = self.active_space();
         // A web panel is no tab to switch to: it opens over one.
-        let favorites = self.sidebar.favorites.iter().flat_map(|f| f.items.iter());
+        let favorites = (self.sidebar.favorites.iter())
+            .flat_map(|f| f.items.iter())
+            .filter(|t| self.sidebar.favorite_shows(t, &space.id));
         let pinned = space.pinned.iter().flat_map(SidebarNode::tabs);
         let kept = favorites.chain(pinned).filter(|t| !t.panel);
         let mut tabs: Vec<&TabItem> = kept.chain(&space.today).collect();

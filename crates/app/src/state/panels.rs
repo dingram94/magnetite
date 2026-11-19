@@ -23,11 +23,13 @@ impl AppState {
         self.find_tab(id).is_some_and(|(_, t)| t.panel) && self.keeps_its_place(id)
     }
 
-    /// The web panel its key opens: of the favorites and the active space's
-    /// pinned tabs that are panels, the one used last; if none was opened
+    /// The web panel its key opens: of the favorites the active space shows
+    /// and its pinned tabs that are panels, the one used last; if none was opened
     /// yet, the first in the sidebar.
     pub fn latest_web_panel(&self) -> Option<Id> {
-        let favorites = self.sidebar.favorites.iter().flat_map(|f| f.items.iter());
+        let favorites = (self.sidebar.favorites.iter())
+            .flat_map(|f| f.items.iter())
+            .filter(|t| self.sidebar.favorite_shows(t, &self.active_space));
         let pinned = (self.active_space().pinned.iter()).flat_map(SidebarNode::tabs);
         let mut panels: Vec<&TabItem> = favorites.chain(pinned).filter(|t| t.panel).collect();
         panels.sort_by_key(|t| std::cmp::Reverse(t.last_active_at));
@@ -83,6 +85,33 @@ mod tests {
     use magnetite_core::split::Side;
 
     use crate::state::testing::{state, tab};
+
+    #[test]
+    fn a_favorite_for_other_spaces_is_not_this_spaces() {
+        let mut s = state();
+        s.sidebar.favorites[0].items = vec![tab("f")];
+        let here = s.active_space.clone();
+        let shows = |s: &crate::state::AppState| s.tabs_by_last_use().contains(&"f".to_string());
+        assert!(shows(&s), "for every space");
+
+        // A space that is gone does not count: better everywhere than nowhere.
+        s.sidebar.favorites[0].items[0].only_in = vec!["gone".into()];
+        assert!(shows(&s));
+
+        let mut other = s.active_space().clone();
+        other.id = "other".into();
+        other.pinned.clear();
+        other.today.clear();
+        s.sidebar.spaces.push(other);
+        s.sidebar.favorites[0].items[0].only_in = vec!["other".into()];
+        assert!(!shows(&s), "for the other space alone");
+        s.sidebar.favorites[0].items[0].panel = true;
+        assert_eq!(s.latest_web_panel(), None);
+        s.sidebar.favorites[0].items[0].panel = false;
+
+        s.sidebar.favorites[0].items[0].only_in = vec!["other".into(), here];
+        assert!(shows(&s), "for both");
+    }
 
     #[test]
     fn a_favorite_that_becomes_a_panel_leaves_the_page_area() {

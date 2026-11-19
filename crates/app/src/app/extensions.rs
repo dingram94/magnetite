@@ -26,9 +26,18 @@ impl MagnetiteApp {
         }
     }
 
-    pub(super) fn pin_extension(&self, engine: &Engine, id: &str, pinned: bool) {
+    /// Show extension `id` in the sidebar of profile `profile` or stop
+    /// showing it there; without a profile, in that of the page in front.
+    pub(super) fn pin_extension(
+        &self,
+        engine: &Engine,
+        id: &str,
+        pinned: bool,
+        profile: Option<&str>,
+    ) {
         self.with_state(|s| {
-            let list = &mut s.settings.pinned_extensions;
+            let front = s.front_context().map(|c| c.id).unwrap_or_default();
+            let list = s.pins_mut(profile.unwrap_or(&front));
             list.retain(|x| x != id);
             if pinned {
                 list.push(id.to_string());
