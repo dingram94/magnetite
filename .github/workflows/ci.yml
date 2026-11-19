@@ -53,6 +53,21 @@ jobs:
           done
           DATABASE_URL=postgres://postgres@127.0.0.1:5432/postgres \
             cargo test --locked -p magnetite --lib two_devices -- --ignored
+      # TEMPORARY, to try the Windows package of this pull request; goes
+      # before the merge.
+      - if: runner.os == 'Windows'
+        name: Package (try)
+        run: |
+          [[ -f "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" ]] || choco install innosetup --yes --no-progress
+          scripts/build.sh --release
+      - if: runner.os == 'Windows'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-try
+          path: dist/*-windows-*.*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
       # One platform is enough: the notices list no per-platform build
       # packages.
       - if: runner.os == 'macOS'
