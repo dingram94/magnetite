@@ -755,7 +755,13 @@ mod tests {
     fn a_patch_can_take_the_download_folder_away_but_not_name_one() {
         let mut start = Settings::default();
         assert_eq!(start.downloads, magnetite_engine::DownloadPrefs::default());
-        start.downloads.folder = "/tmp/chosen".into();
+        // A whole path, as each system writes one.
+        let chosen = if cfg!(windows) {
+            r"C:\chosen"
+        } else {
+            "/tmp/chosen"
+        };
+        start.downloads.folder = chosen.into();
         let patch = |value: serde_json::Value| {
             let serde_json::Value::Object(patch) = value else {
                 panic!("an object");
@@ -763,12 +769,9 @@ mod tests {
             start.patched(patch).unwrap().downloads
         };
         let asked = patch(serde_json::json!({ "downloads": { "ask": true } }));
-        assert_eq!((asked.folder.as_str(), asked.ask), ("/tmp/chosen", true));
+        assert_eq!((asked.folder.as_str(), asked.ask), (chosen, true));
         let named = patch(serde_json::json!({ "downloads": { "folder": "/etc" } }));
-        assert_eq!(
-            named.folder, "/tmp/chosen",
-            "only the dialog names a folder"
-        );
+        assert_eq!(named.folder, chosen, "only the dialog names a folder");
         let reset = patch(serde_json::json!({ "downloads": { "folder": "" } }));
         assert_eq!(reset.folder, "");
         // A path that is not whole is none.
