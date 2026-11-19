@@ -212,6 +212,7 @@ mod tests {
             id: title.into(),
             title: title.into(),
             icon: None,
+            icon_image: None,
             accent: None,
             profile_id: "p".into(),
             shortcut: None,

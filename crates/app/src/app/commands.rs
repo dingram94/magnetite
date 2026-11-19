@@ -2454,12 +2454,17 @@ impl MagnetiteApp {
                 let found = magnetite_importer::bookmarks_file::bookmarks_any(&html)
                     .map_err(|e| e.to_string())?;
                 let added = self.with_state(|s| {
-                    // A space that is gone, or the private one, is not asked for.
-                    let space = space
-                        .filter(|id| s.space(id).is_some() && !s.is_private_space(id))
-                        .unwrap_or_else(|| s.active_space.clone());
-                    s.add_bookmarks(&space, found)
-                });
+                    let space = match space {
+                        // A space named and gone meanwhile, or the private
+                        // one: not the space in front in its place.
+                        Some(id) if s.space(&id).is_none() || s.is_private_space(&id) => {
+                            return Err("That space is gone.".to_string());
+                        }
+                        Some(id) => id,
+                        None => s.active_space.clone(),
+                    };
+                    Ok(s.add_bookmarks(&space, found))
+                })?;
                 self.push_state(engine);
                 return Ok(json!({ "bookmarks": added }));
             }
