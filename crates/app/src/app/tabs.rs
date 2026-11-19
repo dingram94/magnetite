@@ -91,6 +91,10 @@ pub(super) fn move_tab(s: &mut AppState, id: &str, to: &Destination) {
     let Some((mut tab, _)) = s.take_tab(id) else {
         return;
     };
+    // Only a favorite is for some spaces and not others.
+    if section != Section::Favorites {
+        tab.only_in.clear();
+    }
     match section {
         Section::Favorites => {
             tab.home_url.get_or_insert_with(|| tab.url.clone());
@@ -108,8 +112,18 @@ pub(super) fn move_tab(s: &mut AppState, id: &str, to: &Destination) {
                     });
                     lists.len() - 1
                 });
-            let i = index.min(lists[at].items.len());
-            lists[at].items.insert(i, tab);
+            // `index` counts the favorites this space shows: those of other
+            // spaces only are not in the list the tab was dropped on.
+            let shown: Vec<usize> = (s.sidebar.favorites[at].items.iter().enumerate())
+                .filter(|(_, t)| s.sidebar.favorite_shows(t, space_id))
+                .map(|(i, _)| i)
+                .collect();
+            let items = &mut s.sidebar.favorites[at].items;
+            let i = match shown.get(index) {
+                Some(i) => *i,
+                None => shown.last().map_or(items.len(), |last| last + 1),
+            };
+            items.insert(i, tab);
         }
         Section::Pinned => {
             tab.home_url.get_or_insert_with(|| tab.url.clone());

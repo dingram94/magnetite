@@ -113,6 +113,44 @@ impl AppState {
         count
     }
 
+    /// The pinned tabs and folders of space `space` as bookmarks of that
+    /// space, each at its pinned page; a smart folder, which fills itself,
+    /// is left out. Returns how many bookmarks came in (`add_bookmarks`:
+    /// none for an address that is a bookmark already).
+    pub fn pinned_to_bookmarks(&mut self, space: &str) -> usize {
+        fn copy(nodes: &[SidebarNode]) -> Vec<SidebarNode> {
+            let one = |node: &SidebarNode| match node {
+                SidebarNode::Tab(t) => Some(SidebarNode::Tab(TabItem {
+                    custom_title: t.custom_title,
+                    ..TabItem::new("", t.home_url.as_deref().unwrap_or(&t.url), &t.title)
+                })),
+                SidebarNode::Folder(f) if f.smart.is_none() => Some(SidebarNode::Folder(Folder {
+                    id: String::new(),
+                    title: f.title.clone(),
+                    icon: None,
+                    children: copy(&f.children),
+                    smart: None,
+                })),
+                SidebarNode::Folder(_) => None,
+            };
+            nodes.iter().filter_map(one).collect()
+        }
+        let Some(pinned) = self.space(space).map(|sp| copy(&sp.pinned)) else {
+            return 0;
+        };
+        self.add_bookmarks(space, pinned)
+    }
+
+    /// Remove every bookmark of space `space`; returns how many there were.
+    pub fn clear_bookmarks(&mut self, space: &str) -> usize {
+        let Some(space) = self.space_mut(space) else {
+            return 0;
+        };
+        let count = space.bookmarks.iter().flat_map(SidebarNode::tabs).count();
+        space.bookmarks.clear();
+        count
+    }
+
     /// Remove bookmark or bookmark folder `id`, a folder with all it holds.
     pub fn remove_bookmark(&mut self, id: &str) -> bool {
         (self.sidebar.spaces.iter_mut())

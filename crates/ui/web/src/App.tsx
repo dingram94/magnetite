@@ -15,7 +15,7 @@ import { NewMenu } from "./NewMenu";
 import { ExtensionBar, PinnedExtensions } from "./PinnedExtensions";
 import { DeviceTabRow, FavoriteLists, NodeList, RenameInput, SplitRow, TabRow, type RowContext } from "./Rows";
 import { windowBackground } from "./backgrounds";
-import { IS_MAC, accentCss, applyAppearance, keyLabel, lookOf, findTab, findTabInSpace, hostOf, onNotice, onOpenArchive, onOpenBookmarks, onOpenDownloads, onOpenHistory, onRecord, send, splitIds, subscribe, type LibraryView, type Space, type SplitNode, type UiState } from "./bridge";
+import { IS_MAC, accentCss, applyAppearance, favoriteShows, keyLabel, lookOf, findTab, findTabInSpace, hostOf, onNotice, onOpenArchive, onOpenBookmarks, onOpenDownloads, onOpenHistory, onRecord, send, splitIds, subscribe, type LibraryView, type Space, type SplitNode, type UiState } from "./bridge";
 import { IconPicker, SpaceIcon } from "./Glyphs";
 import { SpaceSwitcher } from "./SpaceSwitcher";
 import { dragging, endDrag, indexAfterTaking, movedIds } from "./dnd";
@@ -88,9 +88,12 @@ export function App() {
   // space this device does not have shows in whichever space is in front.
   const deviceTabs = isPrivate ? [] : state.device_tabs.filter((t) =>
     t.space === space.id || !state.sidebar.spaces.some((s) => s.id === t.space));
-  // The same in every space but the private one (a favorite runs in its own
-  // profile, which is kept): one list of favorites per profile that has some.
-  const favoriteLists = isPrivate ? [] : state.sidebar.favorites.filter((f) => f.items.length > 0);
+  // In every space but the private one (a favorite runs in its own profile,
+  // which is kept): one list of favorites per profile that has some for this
+  // space. A favorite is for every space unless it names its spaces.
+  const favoriteLists = isPrivate ? [] : state.sidebar.favorites
+    .map((f) => ({ ...f, items: f.items.filter((t) => favoriteShows(state.sidebar, t, space.id)) }))
+    .filter((f) => f.items.length > 0);
   const spaceIndex = state.sidebar.spaces.indexOf(space);
   if (enter.current.id !== space.id) {
     enter.current = { id: space.id, index: spaceIndex, x: enter.current.id ? Math.sign(spaceIndex - enter.current.index) * 24 : 0 };

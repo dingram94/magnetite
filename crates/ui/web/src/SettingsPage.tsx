@@ -1,8 +1,7 @@
 // Full-page settings, opened as its own tab (magnetite://ui/settings).
 import { DeveloperSection } from "./settings/DeveloperSection";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AdblockIcon, Archive, Back, BracesIcon, CameraIcon, Close, CodeIcon, CookieIcon, DevicesIcon, InfoIcon, PaletteIcon, PrivacyIcon, PuzzleIcon, Search, SettingsIcon, SmartFolderIcon, type IconComponent, KeyIcon, KeyboardIcon, LinkIcon } from "./Icons";
-import { IsolationSection } from "./IsolationSection";
+import { AdblockIcon, Archive, Back, BracesIcon, CameraIcon, Close, CodeIcon, DevicesIcon, InfoIcon, PaletteIcon, PrivacyIcon, PuzzleIcon, Search, SettingsIcon, SharedIcon, SmartFolderIcon, type IconComponent, KeyIcon, KeyboardIcon, LinkIcon } from "./Icons";
 import { SEARCH_ENGINES } from "./settings/searchEngines";
 import { EXTERNAL_LINKS } from "./settings/externalLinks";
 import { ARCHIVE_AFTER, UNLOAD_AFTER } from "./settings/tabTimes";
@@ -11,18 +10,19 @@ import { About } from "./settings/AboutSection";
 import { AdblockSection } from "./settings/AdblockSection";
 import { AutofillSection } from "./settings/AutofillSection";
 import { AppearanceSection } from "./settings/AppearanceSection";
-import { Field, Group, Switch, Toggle } from "./settings/fields";
-import { ImportBookmarksFile, ImportBrowsers } from "./settings/ImportBrowsers";
+import { ExtensionsSection } from "./settings/ExtensionsSection";
+import { Field, Group, Toggle } from "./settings/fields";
+import { ExportBookmarks, ImportBookmarksFile, ImportBrowsers } from "./settings/ImportBrowsers";
 import { PermissionsSection } from "./settings/PermissionsSection";
 import { SearchedSection, SearchResults } from "./settings/SearchResults";
 import { ShortcutsSection } from "./settings/ShortcutsSection";
 import { SiteCodeSection } from "./settings/SiteCodeSection";
+import { profileLabel, SpacesSection } from "./settings/SpacesSection";
 import { SmartFoldersSection } from "./settings/SmartFoldersSection";
 import { SyncSection, type SyncJob } from "./settings/SyncSection";
 import type { Info, SettingsPatch } from "./settings/types";
 
 /** The Chrome Web Store's extensions section. */
-const EXTENSION_STORE = "https://chromewebstore.google.com/category/extensions";
 
 type Section = { id: string; label: string; Icon: IconComponent; title: string; intro: string };
 
@@ -49,15 +49,20 @@ const GROUPS: { label: string; sections: Section[] }[] = [
   {
     label: "Spaces",
     sections: [
-      { id: "spaces", label: "Isolation", Icon: CookieIcon, title: "Isolation", intro: "Websites remember you with cookies. Isolation decides which spaces and favorites share them, so you can be signed in to two accounts of the same site at once." },
-      { id: "sync", label: "Sync", Icon: DevicesIcon, title: "Sync", intro: "Optional, zero-knowledge sync between your devices, through Magnetite's free server or one you host yourself. No account: a 24-word sync code is the only key." },
+      { id: "spaces", label: "Spaces", Icon: SharedIcon, title: "Spaces", intro: "Your spaces: their names, order and look, and the profile each one signs in with." },
       { id: "smart", label: "Smart folders", Icon: SmartFolderIcon, title: "Smart folders", intro: "Folders that fill themselves with your pull requests, issues or tickets. Magnetite asks the service from this computer; tokens stay here and are never synced." },
+    ],
+  },
+  {
+    label: "Services",
+    sections: [
+      { id: "sync", label: "Sync", Icon: DevicesIcon, title: "Sync", intro: "Optional, zero-knowledge sync between your devices, through Magnetite's free server or one you host yourself. No account: a 24-word sync code is the only key." },
+      { id: "extensions", label: "Extensions", Icon: PuzzleIcon, title: "Extensions", intro: "Chrome extensions install from the Chrome Web Store, right here in Magnetite. Choose which ones sit in the sidebar; all of them are in the menu bar under Extensions." },
     ],
   },
   {
     label: "Advanced",
     sections: [
-      { id: "extensions", label: "Extensions", Icon: PuzzleIcon, title: "Extensions", intro: "Chrome extensions install from the Chrome Web Store, right here in Magnetite. Choose which ones sit in the sidebar; all of them are in the menu bar under Extensions." },
       { id: "code", label: "Custom CSS & JS", Icon: BracesIcon, title: "Custom CSS & JS", intro: "Change how a site looks or behaves with CSS and JavaScript of your own: hide a part of a page, change its fonts or colours, or run a small script on it." },
       { id: "developer", label: "Developer", Icon: CodeIcon, title: "Developer", intro: "Tools for building and debugging websites." },
       { id: "data", label: "Data & privacy", Icon: PrivacyIcon, title: "Data & privacy", intro: "No telemetry, no Magnetite account. What Magnetite keeps on this computer, and the few servers it talks to." },
@@ -123,13 +128,17 @@ export function SettingsPage() {
     if (toHeading.current && picked) heading.current?.focus();
     toHeading.current = false;
   }, [picked, sectionId]);
-  const openSection = (id: string) => {
+  // `item`: what in the section to show (a space's own page).
+  const openSection = (id: string, item?: string) => {
     toHeading.current = searching && !picked;
     setPicked(true);
-    setPlace({ id });
+    setPlace({ id, item });
     // The address follows without a `hashchange`: that event is the app,
     // or Back, sending the page elsewhere.
-    if (location.hash !== `#${id}`) history.pushState(null, "", `#${id}`);
+    const hash = item ? `#${id}=${encodeURIComponent(item)}` : `#${id}`;
+    if (location.hash !== hash) history.pushState(null, "", hash);
+    // A page of its own starts at its top.
+    document.querySelector("main")?.scrollTo(0, 0);
   };
   // Changes made on this page. What the app answered to a question from
   // before the last one is older than what the page shows: asked again.
@@ -195,6 +204,8 @@ export function SettingsPage() {
     send({ cmd: "set_settings", settings: patch });
   };
   const section = SECTIONS.find((s) => s.id === sectionId) ?? SECTIONS[0]!;
+  // A space's own page is headed by the space.
+  const ownSpace = sectionId === "spaces" && place.item ? info.spaces.find((sp) => sp.id === place.item) : undefined;
   // One section is on the page: always, but for the list of what a search found.
   const shown = !searching || picked;
   /** The settings of one section. */
@@ -279,7 +290,7 @@ export function SettingsPage() {
           </Group>
         </>
       )}
-      {sectionId === "appearance" && <AppearanceSection info={info} update={update} reload={reload} />}
+      {sectionId === "appearance" && <AppearanceSection info={info} update={update} open={openSection} />}
       {sectionId === "smart" && <SmartFoldersSection />}
       {sectionId === "autofill" && <AutofillSection info={info} update={update} />}
       {sectionId === "adblock" && <AdblockSection info={info} update={update} reload={reload} />}
@@ -302,7 +313,7 @@ export function SettingsPage() {
         </>
       )}
       {sectionId === "permissions" && <PermissionsSection info={info} />}
-      {sectionId === "spaces" && <IsolationSection info={info} reload={reload} />}
+      {sectionId === "spaces" && <SpacesSection info={info} update={update} reload={reload} item={place.item} open={openSection} />}
       {sectionId === "developer" && (
         <>
           <Group>
@@ -319,40 +330,7 @@ export function SettingsPage() {
       )}
       {sectionId === "extensions" && (
         <>
-          <Group>
-          <Field label="In the sidebar" hint="Pinned extensions sit above your tabs. Chromium's own “Pin” on its extensions page works too.">
-            {info.extensions.length === 0 ? (
-              <p className="text-[13px] text-[var(--muted)]">No extensions installed yet.</p>
-            ) : (
-              <div className="list">
-                {info.extensions.map((e) => {
-                  const pinned = settings.pinned_extensions.includes(e.id);
-                  return (
-                    <label key={e.id} className="list-row" data-search-row>
-                      <span className="min-w-0 flex-1 truncate" data-search-name>{e.name}</span>
-                      <Switch
-                        label={`${e.name} in the sidebar`}
-                        checked={pinned}
-                        onChange={(v) => {
-                          const list = settings.pinned_extensions.filter((x) => x !== e.id).concat(v ? [e.id] : []);
-                          edits.current++;
-                          setInfo({ ...info, settings: { ...settings, pinned_extensions: list } });
-                          send({ cmd: "pin_extension", id: e.id, pinned: v });
-                        }}
-                      />
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-          </Field>
-          <Field side label="Install and manage" hint="Removing, turning off and site access live on Chromium's extensions page.">
-            <div className="flex gap-2">
-              <button className="btn" onClick={() => send({ cmd: "new_tab", url: EXTENSION_STORE })}>Chrome Web Store</button>
-              <button className="btn" onClick={() => send({ cmd: "new_tab", url: "chrome://extensions" })}>Manage extensions</button>
-            </div>
-          </Field>
-          </Group>
+          <ExtensionsSection info={info} reload={reload} />
           <Group title="Inside pages">
           <Toggle label="Show the Chrome toolbar inside pages" hint="Chromium's own toolbar row above every page, with its extension buttons. Applies to tabs loaded from now on." checked={settings.chrome_toolbar} onChange={(v) => update({ chrome_toolbar: v })} />
           </Group>
@@ -375,7 +353,8 @@ export function SettingsPage() {
           </Group>
           <Group title="Import">
           <ImportBrowsers />
-          <ImportBookmarksFile />
+          <ImportBookmarksFile spaces={info.spaces} current={info.active_space} />
+          <ExportBookmarks spaces={info.spaces} />
           </Group>
           <Group title="What websites are told">
             <Toggle label="Tell websites not to sell or share my data" hint="Global Privacy Control: every request to a website carries the signal, and a page can read it in its scripts. Some laws oblige a website to honour it; whether one does is up to the website." checked={settings.global_privacy_control} onChange={(v) => update({ global_privacy_control: v })} />
@@ -438,7 +417,7 @@ export function SettingsPage() {
               <header className="mb-6 flex items-start gap-4">
                 <span className="set-icon"><section.Icon width={22} height={22} /></span>
                 <div>
-                  <h1 ref={heading} tabIndex={-1} className="text-[22px] font-semibold tracking-[-0.01em] outline-none">{section.title}</h1>
+                  <h1 ref={heading} tabIndex={-1} className="text-[22px] font-semibold tracking-[-0.01em] outline-none">{ownSpace?.title ?? section.title}</h1>
                   <p className="mt-1 max-w-[560px] text-[14px] leading-5 text-[var(--muted)]">{section.intro}</p>
                 </div>
               </header>
@@ -626,13 +605,13 @@ function ClearBrowsingData({ info, reload }: { info: Info; reload: () => Promise
     <Field side label="Cookies, site data and cache" hint="Delete what websites have stored on this computer, for the last hour or for all time. Deleting cookies signs you out of websites. The dialog is Chromium's own; the history it names is not the one above.">
       <div className="flex flex-wrap gap-2">
         {logins.length > 1 && (
-          <select className="field" value={profile} onChange={(e) => setChosen(e.target.value)} aria-label="Logins">
-            {logins.map((p) => <option key={p.id} value={p.id}>{p.is_default ? "Shared (your main logins)" : p.name}</option>)}
+          <select className="field" value={profile} onChange={(e) => setChosen(e.target.value)} aria-label="Profile">
+            {logins.map((p) => <option key={p.id} value={p.id}>{profileLabel(info, p)}</option>)}
           </select>
         )}
         <button className="btn" disabled={!profile} onClick={open}>Delete…</button>
       </div>
-      {failed && <p className="set-hint" role="alert" style={{ color: "var(--danger)" }}>The dialog could not be opened for those logins. Choose again.</p>}
+      {failed && <p className="set-hint" role="alert" style={{ color: "var(--danger)" }}>The dialog could not be opened for that profile. Choose again.</p>}
     </Field>
   );
 }
@@ -737,7 +716,7 @@ function LinkRules({ saved, spaces, save }: { saved: LinkRule[]; spaces: Info["s
     return next;
   };
   return (
-    <Field label="Links to these sites open in a space of their own" hint="A link from another app to a site listed here opens in its space, with that space's logins. A site stands for its subdomains; github.com/acme is only that part of GitHub. The most exact rule counts.">
+    <Field label="Links to these sites open in a space of their own" hint="A link from another app to a site listed here opens in its space, in that space's profile. A site stands for its subdomains; github.com/acme is only that part of GitHub. The most exact rule counts.">
       <div className="space-y-2">
         {rows.map((r, i) => {
           // A row just added says nothing until something is typed.

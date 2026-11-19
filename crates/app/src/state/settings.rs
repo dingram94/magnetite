@@ -75,9 +75,15 @@ pub struct Settings {
     pub devtools_size: magnetite_engine::DevToolsSize,
     #[serde(default)]
     pub sync: SyncSettings,
-    /// Extensions (ids) shown in the sidebar; all of them are in the menu
-    /// bar's Extensions menu.
+    /// Extensions (ids) shown in the sidebar in the default profile; all of
+    /// them are in the menu bar's Extensions menu. Also what another
+    /// profile shows until it has a list of its own (`profile_pins`).
     pub pinned_extensions: Vec<String>,
+    /// The same for the other profiles, by profile id: an extension is
+    /// installed profile by profile, and so is its place in the sidebar
+    /// (`AppState::pins`).
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub profile_pins: HashMap<String, Vec<String>>,
     /// Chromium's own pins as last seen, per profile id (`""`: default), so
     /// only changes made there carry over (`follow_chromium_pins`).
     pub chromium_pins_seen: HashMap<String, Vec<String>>,
@@ -618,6 +624,7 @@ impl Settings {
         Ok(Self {
             sync: self.sync.clone(),
             pinned_extensions: self.pinned_extensions.clone(),
+            profile_pins: self.profile_pins.clone(),
             chromium_pins_seen: self.chromium_pins_seen.clone(),
             smart_allowed: self.smart_allowed.clone(),
             shortcuts: self.shortcuts.clone(),
@@ -651,6 +658,7 @@ impl Default for Settings {
             devtools_size: magnetite_engine::DevToolsSize::default(),
             sync: SyncSettings::default(),
             pinned_extensions: Vec::new(),
+            profile_pins: HashMap::new(),
             chromium_pins_seen: HashMap::new(),
             check_updates: true,
             library_opens: LibraryView::Archive,

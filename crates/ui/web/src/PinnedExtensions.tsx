@@ -22,7 +22,7 @@ type OpenMenu = (x: number, y: number, items: MenuItem[]) => void;
 /** The installed extensions that are pinned, in the order they were pinned. */
 function pinnedOf(state: UiState): ExtensionInfo[] {
   const installed = new Map(state.extensions.map((e) => [e.id, e]));
-  return state.settings.pinned_extensions.flatMap((id) => installed.get(id) ?? []);
+  return state.pinned_extensions.flatMap((id) => installed.get(id) ?? []);
 }
 
 /**

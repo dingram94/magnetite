@@ -236,15 +236,15 @@ question a page asked.
   again (pop-ups: blocked, as for every site), and the row is gone.
 - A change counts at once, wherever the site is open, and the site panel
   shows it.
-- Each set of logins has its own choices. With more than one, a list on
-  top chooses which, starting with those of the space in front; a private
+- Each profile has its own choices. With more than one, a list on
+  top chooses which (`settings.md`), starting with that of the space in front; a private
   profile is not offered, it keeps nothing.
 - A site that was never asked and never set is not listed: the section
   says so while there is none.
 - The list is read again when the page comes back to the front. If it
   cannot be read, or a change is refused, the section says so and offers
-  to try again; logins deleted meanwhile are an error, not the main
-  logins in their place.
+  to try again; a profile deleted meanwhile is an error, not the main
+  profile in its place.
 - Only the Settings page may read or change the list.
 - A choice made for every site below a name (a pattern with a wildcard) is
   not one site's and is not listed.
@@ -261,12 +261,12 @@ lists of saved passwords open (`passwords-and-autofill.md`).
 - The dialog deletes what websites stored on this computer: cookies and
   other site data, and the cache, of the last 15 minutes up to all time.
   Deleting cookies signs the user out of websites.
-- It works on one set of logins. With more than one, a list next to
-  "Delete…" chooses which, starting with those of the space in front; a
+- It works on one profile. With more than one, a list next to
+  "Delete…" chooses which, starting with that of the space in front; a
   private profile is not offered: its data is in memory only and goes
   when Magnetite quits.
-- Logins deleted meanwhile are an error the row names, not other logins
-  in their place.
+- A profile deleted meanwhile is an error the row names, not another
+  profile in its place.
 - The "Browsing history" and "Download history" the dialog names are
   Chromium's own records, not Magnetite's history (`history.md`) or its
   list of downloads, which have "Clear" of their own.

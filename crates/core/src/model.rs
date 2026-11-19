@@ -89,6 +89,10 @@ pub struct TabItem {
     /// identity).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub panel_mobile: bool,
+    /// A favorite that shows in these spaces only; empty: in every space.
+    /// Counts for favorites only (`SidebarSnapshot::favorite_shows`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub only_in: Vec<Id>,
 }
 
 impl TabItem {
@@ -200,6 +204,17 @@ impl SidebarSnapshot {
             favorites: Vec::new(),
             spaces: Vec::new(),
         }
+    }
+
+    /// Whether favorite `tab` shows in space `space`: in every space, unless
+    /// it names the spaces it is for. Spaces that are gone (deleted, or of
+    /// another device) do not count: a favorite left with none shows
+    /// everywhere rather than nowhere.
+    pub fn favorite_shows(&self, tab: &TabItem, space: &str) -> bool {
+        let mut named = (tab.only_in.iter())
+            .filter(|id| self.spaces.iter().any(|s| s.id == **id))
+            .peekable();
+        named.peek().is_none() || named.any(|id| id == space)
     }
 
     /// Whether anything in the sidebar runs in profile `id`: a space, a

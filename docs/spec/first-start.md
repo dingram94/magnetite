@@ -146,7 +146,7 @@ shown.
 
 ## Not built yet
 
-- A colour for an imported space (Settings → Appearance has it afterwards).
+- A colour for an imported space (Settings → Spaces has it afterwards).
 - The default browser question on Linux.
 
 Code: `crates/ui/web/src/Welcome.tsx`, `crates/app/src/app/commands.rs`

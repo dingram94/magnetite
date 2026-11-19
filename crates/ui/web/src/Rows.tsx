@@ -109,6 +109,14 @@ export function tabMenu(ctx: RowContext, tab: TabItem, section: Section, at: { x
       });
     }
     items.push({ label: "New profile for this favorite…", onClick: () => ctx.newProfileFor(tab.id) });
+    // For every space, or for this one alone.
+    const here = spaces.find((sp) => sp.id === ctx.spaceId);
+    if (here && spaces.filter((sp) => sp.id !== ctx.state.private_space).length > 1) {
+      const own = (tab.only_in ?? []).filter((id) => spaces.some((sp) => sp.id === id));
+      items.push(SEPARATOR);
+      items.push({ label: `${own.length === 0 ? "● " : "○ "}Show in every space`, onClick: () => own.length > 0 && send({ cmd: "set_favorite_spaces", id: tab.id, spaces: [] }) });
+      items.push({ label: `${own.length > 0 ? "● " : "○ "}Show only in ${here.title}`, onClick: () => send({ cmd: "set_favorite_spaces", id: tab.id, spaces: [here.id] }) });
+    }
   }
   const targets = inPrivate ? [] : spaces.filter((sp) => sp.id !== ctx.state.private_space);
   if (targets.length > 1) {

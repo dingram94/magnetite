@@ -17,8 +17,9 @@ From top to bottom:
    With Settings → Appearance → "Extension bar" on, a row of pinned
    extensions follows, and the title band has none (`extensions.md`).
 3. **Media rows**: up to two, for media in tabs not on screen (`media.md`).
-4. **Favorites**: grids of icons, the same in every space: one list per
-   profile that has favorites (below). Hidden while there are none.
+4. **Favorites**: grids of icons, the same in every space but for the
+   favorites that are for one space only: one list per profile that has
+   favorites to show (below). Hidden while there are none.
 5. **Space title**, then the **pinned** tabs and folders of that space
    (`spaces.md`). Only the current space is rendered.
 6. A divider with **Clear**, which archives all Today tabs of the space.
@@ -164,6 +165,16 @@ Code: `crates/engine/src/tabshare.rs`, `tabshare_hook.js`;
   accounts of one site, each in its list.
 - The favorites of one split show as one tile with an icon per page
   (`split-view.md`).
+- A favorite shows in every space, or only in the spaces it names. The
+  context menu has "Show in every space" and "Show only in <the current
+  space>"; Settings → Spaces → Favorites has the choice for every favorite
+  and any space, or several of them. So a space can have favorites of its own next to those
+  all spaces share. A new favorite shows in every space. A favorite for
+  one space only is left out of that space's Ctrl+Tab order and web panel
+  key elsewhere, and a tile dropped among the favorites lands between the
+  ones the space shows. Spaces that are gone (deleted, or only on another
+  device) do not count: a favorite left with none shows in every space. A
+  favorite that leaves the favorites forgets its spaces.
 - "Open as panel" makes a favorite or a pinned tab a web panel: a click then opens it
   over the page in front instead of in its place (`web-panels.md`).
 

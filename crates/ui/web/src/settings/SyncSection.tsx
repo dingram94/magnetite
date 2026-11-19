@@ -22,7 +22,7 @@ const POLL_MS = 500;
  */
 function SpacesOnThisDevice({ info, reload }: { info: Info; reload: () => Promise<Info> }) {
   return (
-    <Field label="Spaces" hint="A space that is only on this device is not synced: devices that still sync it lose it with their next sync. Logins and favorites that only such spaces use stay here too.">
+    <Field label="Spaces" hint="A space that is only on this device is not synced: devices that still sync it lose it with their next sync. Profiles and favorites that only such spaces use stay here too.">
       <div className="iso-list">
         {info.spaces.map((sp) => (
           <label key={sp.id} className="iso-row" data-search-row>

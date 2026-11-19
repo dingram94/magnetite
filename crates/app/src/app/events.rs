@@ -178,18 +178,16 @@ impl EngineDelegate for MagnetiteApp {
                 self.with_state(|s| s.settings.autofill = autofill);
                 self.save_soon();
                 engine.set_autofill(autofill);
-                // An open Settings page shows these switches: it asks for
-                // its data again (`SettingsPage.tsx`).
-                let js = r#"window.dispatchEvent(new Event("magnetite-settings-changed"))"#;
-                for page in self.own_page_tabs("magnetite://ui/settings") {
-                    engine.content_ui_eval(page, js);
-                }
+                self.tell_settings_pages(engine);
             }
             EngineEvent::ExtensionMenu(action) => match action {
                 ExtensionMenuAction::Open(id) => self.open_extension(engine, &id),
                 ExtensionMenuAction::TogglePin(id) => {
-                    let pinned = self.with_state(|s| s.settings.pinned_extensions.contains(&id));
-                    self.pin_extension(engine, &id, !pinned);
+                    let pinned = self.with_state(|s| {
+                        let front = s.front_context().map(|c| c.id).unwrap_or_default();
+                        s.pins(&front).contains(&id)
+                    });
+                    self.pin_extension(engine, &id, !pinned, None);
                 }
                 ExtensionMenuAction::Manage => {
                     self.open_url(engine, "chrome://extensions", false);

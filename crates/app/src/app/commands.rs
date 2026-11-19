@@ -7,13 +7,13 @@ use std::path::Path;
 use magnetite_core::sidebar::Section;
 use magnetite_core::smart::{Service, SmartFolder, SmartSource};
 use magnetite_core::split::Side;
-use magnetite_core::{Color, Space, TabItem};
+use magnetite_core::{Color, SidebarNode, Space, TabItem};
 use magnetite_engine::{Engine, MediaAction, Shortcut};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::state::import::{SpaceChoice, choose_spaces, preview};
-use crate::state::{AppState, ArcImport, SidebarEffect, icon_image_ok, new_id};
+use crate::state::{AppState, ArcImport, SidebarEffect, icon_image_ok, new_id, now};
 use crate::sync::{self, Job};
 use crate::{capture, downloads, lock, url_policy};
 
@@ -34,6 +34,15 @@ pub(super) enum DownloadCopy {
     Path,
 }
 
+/// The kinds of file bookmarks are exported as.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum BookmarkFormat {
+    Html,
+    Json,
+    Csv,
+}
+
 /// Chromium's own pages: for what its password manager and autofill hold,
 /// and its dialog that deletes cookies, site data and the cache.
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -43,6 +52,11 @@ pub(super) enum EnginePage {
     Addresses,
     Cards,
     ClearData,
+    /// Chromium's page of installed extensions, and the store to get them
+    /// from: Settings → Extensions opens them as a tab in the profile it
+    /// is about.
+    Extensions,
+    WebStore,
 }
 
 impl EnginePage {
@@ -52,6 +66,8 @@ impl EnginePage {
             Self::Addresses => "chrome://settings/contactInfo",
             Self::Cards => "chrome://settings/payments",
             Self::ClearData => "chrome://settings/clearBrowserData",
+            Self::Extensions => "chrome://extensions",
+            Self::WebStore => "https://chromewebstore.google.com/category/extensions",
         }
     }
 }
@@ -148,9 +164,13 @@ pub(super) enum UiCommand {
         id: String,
     },
     /// Show an extension in the sidebar, or stop showing it there.
+    /// `profile`: the profile whose sidebar it is about (Settings →
+    /// Extensions names one); without it, that of the page in front.
     PinExtension {
         id: String,
         pinned: bool,
+        #[serde(default)]
+        profile: Option<String>,
     },
     /// Open an extension's options page as a tab.
     ExtensionOptions {
@@ -211,10 +231,14 @@ pub(super) enum UiCommand {
         id: String,
         title: String,
     },
+    /// A new space. It becomes the current one, unless `stay` is set
+    /// (Settings → Spaces, whose page would go out of sight with it).
     NewSpace {
         title: String,
         #[serde(default)]
         icon: Option<String>,
+        #[serde(default)]
+        stay: bool,
     },
     /// Give space `id` another name (an empty one keeps its name), another
     /// glyph, or both. A glyph takes the place of the space's own picture
@@ -709,6 +733,40 @@ pub(super) enum UiCommand {
     DuplicateFavorite {
         id: String,
     },
+    /// Open the Chrome Web Store page of extension `id` as a tab that runs
+    /// in profile `profile`: the way to install there what another profile
+    /// has (Settings → Extensions).
+    OpenExtensionStore {
+        id: String,
+        profile: String,
+    },
+    /// Favorite `id` to place `index` of its list (Settings → Spaces sorts
+    /// a whole list, whatever the space in front shows of it).
+    MoveFavorite {
+        id: String,
+        index: usize,
+    },
+    /// A new favorite for address `url`, last in the main profile's list.
+    AddFavorite {
+        url: String,
+    },
+    /// The pinned tabs of space `space` as bookmarks of that space; with
+    /// `remove` they then leave Pinned (closed, into the archive).
+    PinnedToBookmarks {
+        space: String,
+        #[serde(default)]
+        remove: bool,
+    },
+    /// Remove every bookmark of space `space`.
+    ClearBookmarks {
+        space: String,
+    },
+    /// The spaces favorite `id` shows in; none: every space.
+    SetFavoriteSpaces {
+        id: String,
+        #[serde(default)]
+        spaces: Vec<String>,
+    },
     /// Give one tab (a favorite) its own profile; `None` follows the space.
     SetTabProfile {
         id: String,
@@ -891,9 +949,19 @@ pub(super) enum UiCommand {
         key: String,
     },
     /// Add the bookmarks of a bookmarks file (`html`: its text, as Safari
-    /// and other browsers export it) to the current space.
+    /// and other browsers export it) to space `space`, or to the current
+    /// one.
     ImportBookmarks {
         html: String,
+        #[serde(default)]
+        space: Option<String>,
+    },
+    /// The bookmarks of space `space`, or of every space, as the text of a
+    /// file in `format`, with a name for the file.
+    ExportBookmarks {
+        format: BookmarkFormat,
+        #[serde(default)]
+        space: Option<String>,
     },
     /// Media row and tab speaker buttons; `id` is a tab id.
     Media {
@@ -927,7 +995,7 @@ impl MagnetiteApp {
             if s.sidebar.profiles.iter().any(|p| p.id == id) {
                 Ok(s.context(Some(id)))
             } else {
-                Err("Those logins are gone.".into())
+                Err("That profile is gone.".into())
             }
         })
     }
@@ -1082,7 +1150,7 @@ impl MagnetiteApp {
                 });
                 self.push_state(engine);
             }
-            UiCommand::NewSpace { title, icon } => {
+            UiCommand::NewSpace { title, icon, stay } => {
                 let id = self.with_state(|s| {
                     let id = new_id();
                     let profile = s.default_profile_id();
@@ -1108,7 +1176,12 @@ impl MagnetiteApp {
                     });
                     id
                 });
+                if stay {
+                    self.push_state(engine);
+                    return Ok(json!({ "id": id }));
+                }
                 self.activate_space(engine, &id);
+                self.tell_settings_pages(engine);
             }
             UiCommand::RenameSpace { id, title, icon } => {
                 self.with_state(|s| {
@@ -1128,6 +1201,7 @@ impl MagnetiteApp {
                     }
                 });
                 self.push_state(engine);
+                self.tell_settings_pages(engine);
             }
             UiCommand::DeleteSpace { id } if self.with_state(|s| s.is_private_space(&id)) => {
                 self.close_private_space(engine);
@@ -1148,10 +1222,12 @@ impl MagnetiteApp {
                 }
                 let space = self.with_state(|s| s.active_space.clone());
                 self.activate_space(engine, &space);
+                self.tell_settings_pages(engine);
             }
             UiCommand::MoveSpace { id, index } => {
                 self.with_state(|s| s.move_space(&id, index));
                 self.push_state(engine);
+                self.tell_settings_pages(engine);
             }
             UiCommand::NewFolder { title, parent } => {
                 self.with_state(|s| s.new_folder(&title, parent.as_deref()));
@@ -1648,6 +1724,121 @@ impl MagnetiteApp {
                 });
                 self.push_state(engine);
             }
+            UiCommand::OpenExtensionStore { id, profile } => {
+                if !magnetite_engine::is_extension_id(&id) {
+                    return Err("That is no extension.".into());
+                }
+                if self.with_state(|s| s.profile_for_context(&profile).is_none()) {
+                    return Err("That profile is gone.".into());
+                }
+                let url = format!("https://chromewebstore.google.com/detail/{id}");
+                let source = url_policy::Source::User;
+                self.open_url_from(engine, &url, false, source, Some(&profile));
+            }
+            UiCommand::MoveFavorite { id, index } => {
+                self.with_state(|s| {
+                    for list in &mut s.sidebar.favorites {
+                        if let Some(from) = list.items.iter().position(|t| t.id == id) {
+                            let item = list.items.remove(from);
+                            let to = index.min(list.items.len());
+                            list.items.insert(to, item);
+                            break;
+                        }
+                    }
+                });
+                self.push_state(engine);
+                self.tell_settings_pages(engine);
+            }
+            UiCommand::AddFavorite { url } => {
+                let url = self.normalise_url(&url);
+                if url.starts_with("magnetite://")
+                    || !url_policy::allowed(&url, url_policy::Source::User)
+                {
+                    return Err("That is no address of a web page.".into());
+                }
+                // Named by its site until its page says what it is called.
+                let site = url.split_once("://").map_or(url.as_str(), |(_, rest)| rest);
+                let host = site.split(['/', '?', '#']).next().unwrap_or(site);
+                self.with_state(|s| {
+                    let profile_id = s.default_profile_id();
+                    let favorite = TabItem {
+                        home_url: Some(url.clone()),
+                        created_at: Some(now()),
+                        ..TabItem::new(new_id(), &url, host)
+                    };
+                    let lists = &mut s.sidebar.favorites;
+                    match lists.iter_mut().find(|f| f.profile_id == profile_id) {
+                        Some(list) => list.items.push(favorite),
+                        None => lists.push(magnetite_core::FavoriteSet {
+                            profile_id,
+                            items: vec![favorite],
+                        }),
+                    }
+                    s.normalise_favorites();
+                });
+                self.push_state(engine);
+                self.tell_settings_pages(engine);
+            }
+            UiCommand::PinnedToBookmarks { space, remove } => {
+                if self.with_state(|s| s.space(&space).is_none() || s.is_private_space(&space)) {
+                    return Err("That space is gone.".into());
+                }
+                let (added, pinned) = self.with_state(|s| {
+                    let added = s.pinned_to_bookmarks(&space);
+                    // What leaves Pinned: its tabs, not a smart folder's items.
+                    let pinned: Vec<String> = (s.space(&space).into_iter())
+                        .flat_map(|sp| sp.pinned.iter())
+                        .filter(|n| !matches!(n, SidebarNode::Folder(f) if f.smart.is_some()))
+                        .flat_map(SidebarNode::tabs)
+                        .map(|t| t.id.clone())
+                        .collect();
+                    (added, pinned)
+                });
+                if remove {
+                    // As if each was unpinned and closed: it is in the
+                    // archive, should the bookmark not be enough.
+                    for id in &pinned {
+                        self.with_state(|s| {
+                            let to = Destination {
+                                space: &space,
+                                section: Section::Today,
+                                index: 0,
+                                folder: None,
+                                profile: None,
+                            };
+                            move_tab(s, id, &to);
+                        });
+                        self.close_tab(engine, id);
+                    }
+                }
+                self.push_state(engine);
+                self.tell_settings_pages(engine);
+                return Ok(json!({ "bookmarks": added, "pinned": pinned.len() }));
+            }
+            UiCommand::ClearBookmarks { space } => {
+                let removed = self.with_state(|s| s.clear_bookmarks(&space));
+                self.push_state(engine);
+                self.tell_settings_pages(engine);
+                return Ok(json!({ "bookmarks": removed }));
+            }
+            UiCommand::SetFavoriteSpaces { id, spaces } => {
+                self.with_state(|s| {
+                    // Only spaces there are, and never the private one: it
+                    // shows no favorites.
+                    let spaces: Vec<String> = (spaces.into_iter())
+                        .filter(|sp| s.space(sp).is_some() && !s.is_private_space(sp))
+                        .collect();
+                    let favorites = s.sidebar.favorites.iter_mut();
+                    if let Some(t) = favorites
+                        .flat_map(|f| f.items.iter_mut())
+                        .find(|t| t.id == id)
+                    {
+                        t.only_in = spaces;
+                    }
+                });
+                self.push_state(engine);
+                self.tell_settings_pages(engine);
+            }
             UiCommand::SetTabProfile { id, profile } => {
                 let content = self.with_state(|s| {
                     // A tab of the private space keeps its own profile, and
@@ -1705,6 +1896,19 @@ impl MagnetiteApp {
             }
             UiCommand::GetSettings => {
                 let extensions = self.front_extensions(engine);
+                // And those of every lasting profile, for Settings →
+                // Extensions: an extension is installed profile by profile.
+                let lasting: Vec<String> = self.with_state(|s| {
+                    let lasting = s.sidebar.profiles.iter().filter(|p| !p.ephemeral);
+                    lasting.map(|p| p.id.clone()).collect()
+                });
+                let profile_extensions: Vec<_> = (lasting.iter())
+                    .map(|id| {
+                        let context = self.with_state(|s| s.context(Some(id)));
+                        let pinned = self.with_state(|s| s.pins(id).to_vec());
+                        json!({ "profile": id, "extensions": engine.extensions(context.as_ref()), "pinned": pinned })
+                    })
+                    .collect();
                 let keychain = if engine.config().use_mock_keychain {
                     "test"
                 } else {
@@ -1721,6 +1925,7 @@ impl MagnetiteApp {
                     json!({
                         "keychain": keychain,
                         "extensions": extensions,
+                        "profile_extensions": profile_extensions,
                         "sync_signed_in": sync::signed_in(s.data_dir()),
                         "settings": for_ui(json!({ "settings": s.settings }))["settings"],
                         "profiles": s.sidebar.profiles.iter().filter(|p| !s.private_profiles.contains(&p.id)).map(|p| {
@@ -1728,9 +1933,9 @@ impl MagnetiteApp {
                             profile["synced"] = json!(!kept_profiles.contains(&p.id));
                             profile
                         }).collect::<Vec<_>>(),
-                        "spaces": s.sidebar.spaces.iter().filter(|sp| !s.is_private_space(&sp.id)).map(|sp| json!({"id": sp.id, "title": sp.title, "icon": sp.icon, "icon_image": sp.icon_image, "accent": sp.accent, "profile_id": sp.profile_id, "synced": !s.unsynced_spaces.contains(&sp.id), "keys": space_keys.iter().find_map(|(own, keys)| (own.id == sp.id).then(|| keys.to_string())), "shortcut": sp.shortcut})).collect::<Vec<_>>(),
+                        "spaces": s.sidebar.spaces.iter().filter(|sp| !s.is_private_space(&sp.id)).map(|sp| json!({"id": sp.id, "title": sp.title, "icon": sp.icon, "icon_image": sp.icon_image, "accent": sp.accent, "profile_id": sp.profile_id, "bookmarks": sp.bookmarks.iter().flat_map(SidebarNode::tabs).count(), "pinned": sp.pinned.iter().filter(|n| !matches!(n, SidebarNode::Folder(f) if f.smart.is_some())).flat_map(SidebarNode::tabs).count(), "synced": !s.unsynced_spaces.contains(&sp.id), "keys": space_keys.iter().find_map(|(own, keys)| (own.id == sp.id).then(|| keys.to_string())), "shortcut": sp.shortcut})).collect::<Vec<_>>(),
                         "active_space": s.active_space,
-                        "favorites": s.sidebar.favorites.iter().flat_map(|f| f.items.iter()).map(|t| json!({"id": t.id, "title": t.title, "url": t.url, "profile_id": s.profile_for_tab(&t.id)})).collect::<Vec<_>>(),
+                        "favorites": s.sidebar.favorites.iter().flat_map(|f| f.items.iter()).map(|t| json!({"id": t.id, "title": t.title, "url": t.url, "profile_id": s.profile_for_tab(&t.id), "only_in": t.only_in.iter().filter(|sp| s.space(sp).is_some()).collect::<Vec<_>>()})).collect::<Vec<_>>(),
                         "archive_count": s.archive.len(),
                         "history_count": s.history.len(),
                         "default_browser": default_browser,
@@ -1887,9 +2092,17 @@ impl MagnetiteApp {
                 if let Some(id) = &profile
                     && self.with_state(|s| s.profile_for_context(id).is_none())
                 {
-                    return Err("Those logins are gone.".into());
+                    return Err("That profile is gone.".into());
                 }
                 let context = profile.or_else(|| self.with_state(|s| Some(s.default_profile_id())));
+                // The extension pages open as a tab of that profile: a tab
+                // is where Chromium installs from, and its prompt names
+                // the page it belongs to.
+                if matches!(page, EnginePage::Extensions | EnginePage::WebStore) {
+                    let source = url_policy::Source::User;
+                    self.open_url_from(engine, page.url(), false, source, context.as_deref());
+                    return Ok(json!({"ok": true}));
+                }
                 self.open_peek(
                     engine,
                     page.url(),
@@ -2012,7 +2225,14 @@ impl MagnetiteApp {
                 return Ok(self.with_state(|s| super::ui_json(s, &extensions, recording)));
             }
             UiCommand::OpenExtension { id } => self.open_extension(engine, &id),
-            UiCommand::PinExtension { id, pinned } => self.pin_extension(engine, &id, pinned),
+            UiCommand::PinExtension {
+                id,
+                pinned,
+                profile,
+            } => {
+                self.pin_extension(engine, &id, pinned, profile.as_deref());
+                self.tell_settings_pages(engine);
+            }
             UiCommand::ExtensionOptions { id } => {
                 let url = self
                     .front_extensions(engine)
@@ -2224,18 +2444,44 @@ impl MagnetiteApp {
                     "bookmarks": added.bookmarks,
                 }));
             }
-            UiCommand::ImportBookmarks { html } => {
+            UiCommand::ImportBookmarks { html, space } => {
                 if html.len() > MAX_BOOKMARKS_FILE {
                     return Err("That file is too large to be a bookmarks file.".into());
                 }
-                let found = magnetite_importer::bookmarks_file::bookmarks(&html)
+                // The HTML file browsers write, or Magnetite's own JSON or CSV.
+                let found = magnetite_importer::bookmarks_file::bookmarks_any(&html)
                     .map_err(|e| e.to_string())?;
                 let added = self.with_state(|s| {
-                    let space = s.active_space.clone();
+                    // A space that is gone, or the private one, is not asked for.
+                    let space = space
+                        .filter(|id| s.space(id).is_some() && !s.is_private_space(id))
+                        .unwrap_or_else(|| s.active_space.clone());
                     s.add_bookmarks(&space, found)
                 });
                 self.push_state(engine);
                 return Ok(json!({ "bookmarks": added }));
+            }
+            UiCommand::ExportBookmarks { format, space } => {
+                use magnetite_importer::export;
+                return self.with_state(|s| {
+                    // The private space's bookmarks stay where they are.
+                    let spaces: Vec<&Space> = (s.sidebar.spaces.iter())
+                        .filter(|sp| !s.is_private_space(&sp.id))
+                        .filter(|sp| space.as_ref().is_none_or(|id| &sp.id == id))
+                        .collect();
+                    if spaces.is_empty() {
+                        return Err("That space is gone.".to_string());
+                    }
+                    let (text, ending) = match format {
+                        BookmarkFormat::Html => (export::space_bookmarks_html(&spaces), "html"),
+                        BookmarkFormat::Json => (export::space_bookmarks_json(&spaces), "json"),
+                        BookmarkFormat::Csv => (export::space_bookmarks_csv(&spaces), "csv"),
+                    };
+                    let count: usize = (spaces.iter())
+                        .map(|sp| sp.bookmarks.iter().flat_map(magnetite_core::SidebarNode::tabs).count())
+                        .sum();
+                    Ok(json!({ "text": text, "name": format!("magnetite-bookmarks.{ending}"), "bookmarks": count }))
+                });
             }
             UiCommand::Shortcut { shortcut } => self.handle_shortcut(engine, shortcut),
             UiCommand::CopyLink { variant, notify } => {

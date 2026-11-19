@@ -80,6 +80,8 @@ pub struct UiState<'a> {
     pub smart: &'a HashMap<Id, SmartStatus>,
     /// Installed extensions of the profile the page in front uses.
     pub extensions: &'a [magnetite_engine::ExtensionInfo],
+    /// Those of them pinned to the sidebar in that profile, in order.
+    pub pinned_extensions: &'a [String],
 }
 
 /// Refresh state of a smart folder, for the sidebar and the dialog.
@@ -313,6 +315,7 @@ impl AppState {
             accounts: self.accounts.list(),
             smart: &self.smart_status,
             extensions,
+            pinned_extensions: self.pins(&self.front_context().map(|c| c.id).unwrap_or_default()),
         }
     }
 
@@ -329,6 +332,41 @@ impl AppState {
         Cow::Owned(sidebar)
     }
 
+    /// The key of profile `profile`'s pins: none for the default profile
+    /// (also named by `""`), whose list is `settings.pinned_extensions`, and
+    /// for a private profile, which runs the default profile's extensions.
+    fn pin_key(&self, profile: &str) -> Option<String> {
+        let other = (self.sidebar.profiles.iter())
+            .any(|p| p.id == profile && !p.is_default && !p.ephemeral);
+        (other && !self.private_profiles.contains(profile)).then(|| profile.to_string())
+    }
+
+    /// The extensions pinned to the sidebar in profile `profile`. A profile
+    /// that never had a pin changed shows those of the default profile.
+    pub fn pins(&self, profile: &str) -> &[String] {
+        let own = self
+            .pin_key(profile)
+            .and_then(|key| self.settings.profile_pins.get(&key));
+        own.unwrap_or(&self.settings.pinned_extensions)
+    }
+
+    /// The same, to change. From the first change on every lasting profile
+    /// has its own list (started as what it showed until then), so a pin in
+    /// one profile is not one in another.
+    pub fn pins_mut(&mut self, profile: &str) -> &mut Vec<String> {
+        let shown = self.settings.pinned_extensions.clone();
+        for p in &self.sidebar.profiles {
+            if !p.is_default && !p.ephemeral && !self.private_profiles.contains(&p.id) {
+                let own = self.settings.profile_pins.entry(p.id.clone());
+                own.or_insert_with(|| shown.clone());
+            }
+        }
+        match self.pin_key(profile) {
+            Some(key) => self.settings.profile_pins.entry(key).or_insert(shown),
+            None => &mut self.settings.pinned_extensions,
+        }
+    }
+
     /// Follow pins made in Chromium's own UI ("Pin to toolbar" on its
     /// extensions page) for `profile`: an extension Chromium newly pins is
     /// pinned here too, one it unpins leaves the sidebar. Pins changed here
@@ -339,22 +377,20 @@ impl AppState {
         if self.private_profiles.contains(profile) {
             return false;
         }
-        let seen = self
-            .settings
-            .chromium_pins_seen
-            .entry(profile.to_string())
-            .or_default();
-        if *seen == chromium {
+        let seen = (self.settings.chromium_pins_seen.get(profile))
+            .cloned()
+            .unwrap_or_default();
+        if seen == chromium {
             return false;
         }
-        let pinned = &mut self.settings.pinned_extensions;
+        let pinned = self.pins_mut(profile);
         for id in chromium.iter().filter(|id| !seen.contains(id)) {
             if !pinned.contains(id) {
                 pinned.push(id.clone());
             }
         }
         pinned.retain(|id| chromium.contains(id) || !seen.contains(id));
-        *seen = chromium;
+        (self.settings.chromium_pins_seen).insert(profile.to_string(), chromium);
         true
     }
 
@@ -436,8 +472,21 @@ mod tests {
         s.settings.pinned_extensions = ids(&["ours", "vault"]);
         assert!(s.follow_chromium_pins("", ids(&["ours"])));
         assert_eq!(s.settings.pinned_extensions, ids(&["ours"]));
-        // Another profile has its own record.
+        // Another profile has its own record, and its own pins: they start
+        // as the default profile's and part from them with the first change.
+        s.sidebar.profiles.push(magnetite_core::Profile {
+            id: "work".into(),
+            name: "Work".into(),
+            is_default: false,
+            ephemeral: false,
+        });
+        assert_eq!(s.pins("work"), ids(&["ours"]));
         assert!(s.follow_chromium_pins("work", ids(&["vault"])));
-        assert_eq!(s.settings.pinned_extensions, ids(&["ours", "vault"]));
+        assert_eq!(s.pins("work"), ids(&["ours", "vault"]));
+        assert_eq!(s.pins(""), ids(&["ours"]));
+        s.pins_mut("").clear();
+        assert_eq!(s.pins("work"), ids(&["ours", "vault"]));
+        // A profile that is gone, or unknown, has the default profile's.
+        assert_eq!(s.pins("nope"), ids(&[]));
     }
 }

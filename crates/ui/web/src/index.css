@@ -790,3 +790,28 @@ button.wel-space-icon:hover:not(:disabled) { background: color-mix(in srgb, var(
 .set-talks { padding-top: 6px; padding-bottom: 14px; }
 .set-talks li { display: flex; gap: 12px; padding: 5px 0; font-size: 13px; line-height: 18px; color: var(--muted); }
 .set-talks b { flex: none; width: 190px; font-weight: 500; color: var(--fg); }
+/* Settings → Spaces: a space as a line that opens its page, with the buttons that move it. */
+.set-space { display: flex; align-items: center; gap: 10px; padding-top: 8px; padding-bottom: 8px; }
+.set-space[draggable="true"] { cursor: grab; }
+.set-space[data-dragged], .set-fav[data-dragged] { opacity: 0.4; }
+.set-space[data-before], .set-fav[data-before] { box-shadow: inset 0 2px 0 var(--accent); }
+.set-space[data-after], .set-fav[data-after] { box-shadow: inset 0 -2px 0 var(--accent); }
+/* A favorite: handle, icon, name and its choices in a row that wraps when narrow. */
+.set-fav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding-top: 10px; padding-bottom: 10px; }
+.set-fav:hover .set-grip:not([aria-disabled]) { color: var(--fg); }
+.set-chip { padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 12.5px; color: var(--secondary); }
+.set-chip:hover { color: var(--fg); }
+.set-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.set-grip:active { cursor: grabbing; }
+.set-grip { display: grid; place-items: center; width: 20px; height: 30px; flex: none; margin-left: -6px; border-radius: 6px; color: var(--muted); cursor: grab; }
+.set-grip:hover:not([aria-disabled]), .set-space:hover .set-grip:not([aria-disabled]) { color: var(--fg); }
+.set-grip[aria-disabled] { opacity: 0.25; cursor: default; }
+.set-space-open { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; padding: 6px 8px; margin: 0 -8px 0 0; border-radius: 9px; text-align: left; }
+/* The whole row lights up as one: handle and space together. */
+.set-space:hover, .set-space:has(.set-space-open:focus-visible) { background: var(--row-hover); }
+.set-space-icon { display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 9px; background: rgba(255,255,255,0.06); }
+/* The icons to choose from for a space. */
+.set-glyphs { display: flex; flex-wrap: wrap; gap: 2px; }
+.set-glyphs button { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 7px; color: var(--secondary); }
+.set-glyphs button:hover { background: rgba(255,255,255,0.1); color: var(--fg); }
+.set-glyphs button[data-active] { background: var(--accent-soft); color: var(--accent); }

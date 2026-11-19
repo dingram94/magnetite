@@ -121,7 +121,7 @@ should not reach a private device, turn it on at the work device.
 - On the other devices the space goes with their next sync.
 - A separate profile that only such spaces use stays on the device with
   them: the profile, its favorites, and tabs in other spaces that run in
-  it are not sent either. Settings → Isolation marks it "only on this
+  it are not sent either. Settings → Spaces marks the space "only on this
   device". On the other devices that profile and its favorites stay, as
   for any profile a sidebar does not name, until they are removed there.
   As soon as a synced space uses the profile it is sent again. The default

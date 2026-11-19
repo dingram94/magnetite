@@ -1,0 +1,541 @@
+// Settings → Spaces: every space in the order of the sidebar, to add, name
+// and sort; a page per space with all that is the space's own (name, icon,
+// look, profile, what stays on this device, keys); and the profiles, each
+// with the spaces and favorites that share its logins.
+import { useEffect, useState } from "react";
+import { Favicon } from "../Favicon";
+import { Glyph, GLYPH_NAMES, glyphFor, SpaceGlyph } from "../Glyphs";
+import { Back, Forward } from "../Icons";
+import { accentCss, hostOf, send } from "../bridge";
+import { useArmed } from "../dismiss";
+import { SpaceLookFields } from "./AppearanceSection";
+import { Field, Group, Switch } from "./fields";
+import { keysLabel } from "./shortcutKeys";
+import type { Info, SettingsPatch } from "./types";
+
+type Space = Info["spaces"][number];
+type Profile = Info["profiles"][number];
+
+/** The name a profile goes by: the default one has none of its own. */
+export const profileName = (p: Profile | undefined) => (!p ? "A profile that is gone" : p.is_default ? "Main profile" : p.name);
+
+/** Choices of a profile list that are no profile: make one. */
+const NEW = "\u0000new";
+const PRIVATE = "\u0000private";
+/** A choice of a list of spaces that is no space: several of them. */
+const SOME = "\u0000some";
+
+/**
+ * The profile something runs in, to change: the main one, a profile of its
+ * own or one shared with others, or a private one that is forgotten when
+ * Magnetite quits. `assign` gets the id of the profile chosen.
+ */
+function ProfileChoice({ info, current, name, assign, label }: { info: Info; current: string; name: string; assign: (profile: string) => Promise<unknown>; label: string }) {
+  const kept = info.profiles.filter((p) => !p.ephemeral);
+  const now = info.profiles.find((p) => p.id === current);
+  // A new profile is named after what it is for, with a number when that
+  // name is taken: choosing "A new profile" twice makes two to tell apart.
+  const taken = new Set(kept.map((p) => profileName(p)));
+  let fresh = name;
+  for (let n = 2; taken.has(fresh); n++) fresh = `${name} ${n}`;
+  const create = async (ephemeral: boolean) => {
+    const r = await send({ cmd: "new_profile", name: ephemeral ? `${name} (private)` : fresh, ephemeral });
+    if (r.id) await assign(r.id);
+  };
+  return (
+    <select
+      className="field"
+      aria-label={label}
+      value={now?.ephemeral ? PRIVATE : current}
+      onChange={(e) => {
+        const to = e.target.value;
+        if (to === NEW) void create(false);
+        else if (to === PRIVATE) void (now?.ephemeral ? undefined : create(true));
+        else void assign(to);
+      }}
+    >
+      {kept.map((p) => <option key={p.id} value={p.id}>{profileName(p)}</option>)}
+      <option value={NEW}>A new profile, named “{fresh}”</option>
+      <option value={PRIVATE}>Private: forgotten when Magnetite quits</option>
+    </select>
+  );
+}
+
+/** A profile to choose from a list: its name and the spaces that use it, as "Work (Office, Clients)". */
+export function profileLabel(info: Pick<Info, "spaces">, p: Profile): string {
+  const spaces = info.spaces.filter((s) => s.profile_id === p.id).map((s) => s.title);
+  // A profile named after its only space says nothing twice.
+  if (spaces.length === 0 || (spaces.length === 1 && spaces[0] === profileName(p))) return profileName(p);
+  return `${profileName(p)} (${spaces.join(", ")})`;
+}
+
+/** All of one space. */
+function SpacePage({ info, space, update, reload, open }: { info: Info; space: Space; update: (patch: SettingsPatch) => void; reload: () => Promise<unknown>; open: (section: string, item?: string) => void }) {
+  const [name, setName] = useState(space.title);
+  useEffect(() => setName(space.title), [space.title]);
+  const [icons, setIcons] = useState(false);
+  const { armed, arm } = useArmed(4000);
+  const rename = () => {
+    const title = name.trim();
+    if (!title) return setName(space.title);
+    if (title !== space.title) void send({ cmd: "rename_space", id: space.id, title }).then(reload);
+  };
+  const profile = info.profiles.find((p) => p.id === space.profile_id);
+  const sharing = info.spaces.filter((s) => s.id !== space.id && s.profile_id === space.profile_id).map((s) => s.title);
+  const rules = info.settings.link_rules.filter((r) => r.space === space.id);
+  const current = space.id === info.active_space;
+  return (
+    <>
+      <button className="set-found" onClick={() => open("spaces")}>
+        <Back width={15} height={15} />
+        All spaces
+      </button>
+      <Group title="Name and icon">
+        <Field side label="Name">
+          <input className="field" style={{ width: 240 }} value={name} maxLength={80} aria-label="Name of the space" onChange={(e) => setName(e.target.value)} onBlur={rename} onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />
+        </Field>
+        <Field side label="Icon" hint="Shows on the space's button in the sidebar.">
+          <button className="btn inline-flex items-center gap-2" aria-expanded={icons} onClick={() => setIcons(!icons)}>
+            <span style={{ color: accentCss(space.accent ?? undefined) }}><SpaceGlyph icon={space.icon} title={space.title} size={15} /></span>
+            {icons ? "Done" : "Change"}
+          </button>
+        </Field>
+        {icons && (
+          <div className="set-row set-glyphs" role="group" aria-label="Icons">
+            {GLYPH_NAMES.map((g) => (
+              <button key={g} title={g} aria-label={g} aria-pressed={glyphFor(space.icon) === g} data-active={glyphFor(space.icon) === g || undefined} onClick={() => void send({ cmd: "rename_space", id: space.id, title: space.title, icon: g }).then(reload)}>
+                <Glyph name={g} size={15} />
+              </button>
+            ))}
+          </div>
+        )}
+      </Group>
+      <Group title="Look">
+        <SpaceLookFields info={info} space={space} update={update} reload={() => void reload()} />
+      </Group>
+      <Group title="Profile" hint="A profile is a set of logins of its own: cookies, site data and extensions. Spaces in one profile are signed in to the same accounts.">
+        <Field
+          side
+          label="This space uses"
+          hint={
+            profile?.ephemeral
+              ? "A private profile: what its pages store is gone when Magnetite quits."
+              : sharing.length > 0
+                ? `Shared with ${sharing.join(", ")}. Changing it loads this space's pages again, signed in as the other profile is.`
+                : "Changing it loads this space's pages again, signed in as the other profile is."
+          }
+        >
+          <ProfileChoice info={info} current={space.profile_id} name={space.title} label={`Profile of ${space.title}`} assign={(to) => send({ cmd: "set_space_profile", id: space.id, profile: to }).then(reload)} />
+        </Field>
+      </Group>
+      <SpaceBookmarks space={space} reload={reload} />
+      <Group title="On this device">
+        <label className="set-row flex cursor-default items-start gap-4" data-search-row>
+          <span className="min-w-0 flex-1" data-search-name>
+            <span className="set-label block">Only on this device</span>
+            <span className="set-hint block">Not synced: the space stays here, and devices that still sync it lose it with their next sync.</span>
+          </span>
+          <Switch label={`Keep ${space.title} only on this device`} checked={!space.synced} onChange={(only) => void send({ cmd: "set_space_synced", id: space.id, synced: !only }).then(reload)} />
+        </label>
+        <Field side label="Keys" hint={space.keys ? `${keysLabel(space.keys)} goes straight to this space.` : "No keys go straight to this space."}>
+          <button className="btn" onClick={() => open("shortcuts")}>Change in Shortcuts</button>
+        </Field>
+        <Field side label="Links from other apps" hint={rules.length > 0 ? `Open here for ${rules.map((r) => r.site).join(", ")}.` : "No site's links are sent to this space."}>
+          <button className="btn" onClick={() => open("links")}>Change in Links</button>
+        </Field>
+      </Group>
+      <Group>
+        <Field side label="Delete this space" hint={info.spaces.length < 2 ? "The last space cannot be deleted." : "Its pinned and Today tabs move to the archive."}>
+          <button className="btn" disabled={info.spaces.length < 2} data-danger={armed === space.id || undefined} onClick={() => arm(space.id, () => void send({ cmd: "delete_space", id: space.id }).then(reload).then(() => open("spaces")))}>
+            {armed === space.id ? "Click again to delete" : "Delete space…"}
+          </button>
+        </Field>
+      </Group>
+      {current && <p className="hint">This is the space the window shows now.</p>}
+    </>
+  );
+}
+
+/** The list of spaces, the profiles and the favorites. */
+function SpaceList({ info, reload, open }: { info: Info; reload: () => Promise<unknown>; open: (section: string, item?: string) => void }) {
+  const [name, setName] = useState("");
+  const { armed, arm } = useArmed();
+  const add = () => {
+    const title = name.trim();
+    if (!title) return;
+    setName("");
+    void send({ cmd: "new_space", title, stay: true }).then(reload);
+  };
+  const move = (id: string, index: number) => void send({ cmd: "move_space", id, index }).then(reload);
+  const [profile, setProfile] = useState("");
+  const addProfile = () => {
+    const name = profile.trim();
+    if (!name) return;
+    setProfile("");
+    void send({ cmd: "new_profile", name, ephemeral: false }).then(reload);
+  };
+  // Dragging a row sorts as well: the line shows where it would land.
+  const [dragged, setDragged] = useState<string | null>(null);
+  const [over, setOver] = useState<{ id: string; below: boolean } | null>(null);
+  const isBelow = (e: React.DragEvent<HTMLElement>) => {
+    const box = e.currentTarget.getBoundingClientRect();
+    return e.clientY > box.top + box.height / 2;
+  };
+  /** Where the dragged space ends up when dropped on row `i`, or null when it would not move. */
+  const landing = (i: number, below: boolean) => {
+    const from = info.spaces.findIndex((sp) => sp.id === dragged);
+    if (from < 0) return null;
+    let to = below ? i + 1 : i;
+    if (from < to) to -= 1;
+    return to === from ? null : to;
+  };
+  const kept = info.profiles.filter((p) => !p.ephemeral);
+  const usedBy = (id: string) => [
+    ...info.spaces.filter((s) => s.profile_id === id).map((s) => s.title),
+    ...info.favorites.filter((f) => f.profile_id === id).map((f) => f.title || hostOf(f.url)),
+  ];
+  return (
+    <>
+      <Group title="Spaces" hint="A space is a sidebar of its own for one part of your day, with its own tabs. Their order here is their order in the sidebar: drag a space by its handle to sort.">
+        {info.spaces.map((sp, i) => (
+          <div
+            key={sp.id}
+            className="set-row set-space"
+            data-search-row
+            data-dragged={dragged === sp.id || undefined}
+            data-before={(over?.id === sp.id && !over.below) || undefined}
+            data-after={(over?.id === sp.id && over.below) || undefined}
+            draggable={info.spaces.length > 1}
+            onDragStart={(e) => {
+              setDragged(sp.id);
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", sp.title);
+            }}
+            onDragEnd={() => { setDragged(null); setOver(null); }}
+            onDragOver={(e) => {
+              const below = isBelow(e);
+              if (landing(i, below) === null) return setOver(null);
+              e.preventDefault();
+              if (over?.id !== sp.id || over.below !== below) setOver({ id: sp.id, below });
+            }}
+            onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setOver(null)}
+            onDrop={(e) => {
+              e.preventDefault();
+              const index = landing(i, isBelow(e));
+              if (dragged && index !== null) move(dragged, index);
+              setDragged(null);
+              setOver(null);
+            }}
+          >
+            {/* Not a <button>: a drag cannot start on one. The row is what is shown being dragged. */}
+            <span
+              className="set-grip"
+              role="button"
+              tabIndex={info.spaces.length > 1 ? 0 : -1}
+              aria-disabled={info.spaces.length < 2 || undefined}
+              draggable={info.spaces.length > 1}
+              onDragStart={(e) => {
+                const row = e.currentTarget.parentElement;
+                if (row) e.dataTransfer.setDragImage(row, 16, row.offsetHeight / 2);
+              }}
+              title="Drag to sort, or press the up and down arrow keys"
+              aria-label={`Sort ${sp.title}: space ${i + 1} of ${info.spaces.length}. The up and down arrow keys move it.`}
+              onKeyDown={(e) => {
+                const to = e.key === "ArrowUp" ? i - 1 : e.key === "ArrowDown" ? i + 1 : -1;
+                if (to < 0 || to >= info.spaces.length) return;
+                e.preventDefault();
+                move(sp.id, to);
+              }}
+            >
+              <Grip />
+            </span>
+            <button className="set-space-open" onClick={() => open("spaces", sp.id)} title={`Everything about ${sp.title}`}>
+              <span className="set-space-icon" style={{ color: accentCss(sp.accent ?? undefined) }}><SpaceGlyph icon={sp.icon} title={sp.title} size={16} /></span>
+              <span className="min-w-0 flex-1">
+                <span className="set-label block truncate" data-search-name>{sp.title}</span>
+                <span className="set-hint block truncate" style={{ marginTop: 0 }}>
+                  {profileName(info.profiles.find((p) => p.id === sp.profile_id))}
+                  {!sp.synced && " · only on this device"}
+                  {sp.keys && ` · ${keysLabel(sp.keys)}`}
+                  {sp.id === info.active_space && " · current"}
+                </span>
+              </span>
+              <Forward width={15} height={15} className="text-[var(--muted)]" />
+            </button>
+          </div>
+        ))}
+        <Field label="A new space" hint="It comes last in the sidebar, in the main profile.">
+          <div className="flex gap-2">
+            <input className="field" style={{ maxWidth: 280 }} value={name} placeholder="Name" maxLength={80} aria-label="Name of the new space" onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
+            <button className="btn" disabled={!name.trim()} onClick={add}>Add space</button>
+          </div>
+        </Field>
+      </Group>
+
+      <Group title="Profiles" hint="A profile is a set of logins of its own: cookies, site data and extensions. What uses the same profile is signed in to the same accounts; a second profile is how to use a second account of one site. A private profile is not listed: it is forgotten when Magnetite quits.">
+        {kept.map((p) => {
+          const used = usedBy(p.id);
+          return (
+            <div key={p.id} className="set-row flex flex-wrap items-center gap-x-3 gap-y-2" data-search-row>
+              {p.is_default ? (
+                <span className="set-label w-[200px] shrink-0" data-search-name>Main profile</span>
+              ) : (
+                <span className="sr-only" data-search-name>{p.name} profile</span>
+              )}
+              {!p.is_default && (
+                <input
+                  className="field"
+                  style={{ width: 200 }}
+                  defaultValue={p.name}
+                  aria-label="Name of the profile"
+                  onBlur={(e) => {
+                    const to = e.target.value.trim();
+                    if (to && to !== p.name) void send({ cmd: "rename_profile", id: p.id, name: to }).then(reload);
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                />
+              )}
+              <span className="set-hint min-w-0 flex-1" style={{ marginTop: 0 }} data-search-name>
+                {used.length > 0 ? `Used by ${used.join(", ")}` : "Not used"}
+                {!p.synced && " · only on this device"}
+              </span>
+              {!p.is_default && used.length === 0 && (
+                <button className="btn" data-danger={armed === p.id || undefined} title="Its logins, cookies and site data leave this computer the next time Magnetite starts" onClick={() => arm(p.id, () => void send({ cmd: "delete_profile", id: p.id }).then(reload))}>
+                  {armed === p.id ? "Click again to delete" : "Delete"}
+                </button>
+              )}
+            </div>
+          );
+        })}
+        <Field label="A new profile" hint="It starts empty: nothing is signed in. Give it to a space on that space's page, or to a favorite below.">
+          <div className="flex gap-2">
+            <input className="field" style={{ maxWidth: 280 }} placeholder="Name" aria-label="Name of the new profile" value={profile} onChange={(e) => setProfile(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addProfile()} />
+            <button className="btn" disabled={!profile.trim()} onClick={addProfile}>Add profile</button>
+          </div>
+        </Field>
+      </Group>
+
+      <FavoriteList info={info} reload={reload} />
+    </>
+  );
+}
+
+/** The six dots a row is dragged by. */
+function Grip() {
+  return (
+    <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
+      {[3, 8, 13].flatMap((y) => [2, 8].map((x) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.4" />))}
+    </svg>
+  );
+}
+
+type Favorite = Info["favorites"][number];
+
+/**
+ * The favorites: to sort (inside the list of their profile, as in the
+ * sidebar), name, show in every space or in some, give a profile, remove,
+ * and add by address.
+ */
+function FavoriteList({ info, reload }: { info: Info; reload: () => Promise<unknown> }) {
+  const { armed, arm } = useArmed(4000);
+  const main = info.profiles.find((p) => p.is_default)?.id ?? "";
+  const profileOf = (f: Favorite) => f.profile_id ?? main;
+  const listOf = (f: Favorite) => info.favorites.filter((x) => profileOf(x) === profileOf(f));
+  const move = (id: string, index: number) => void send({ cmd: "move_favorite", id, index }).then(reload);
+  // Dragging by the handle sorts: the line shows where the favorite would land.
+  const [dragged, setDragged] = useState<string | null>(null);
+  const [over, setOver] = useState<{ id: string; below: boolean } | null>(null);
+  const isBelow = (e: React.DragEvent<HTMLElement>) => {
+    const box = e.currentTarget.getBoundingClientRect();
+    return e.clientY > box.top + box.height / 2;
+  };
+  /** Where the dragged favorite ends up in its list when dropped on `target`; null: nowhere new, or another profile's list. */
+  const landing = (target: Favorite, below: boolean) => {
+    const from = info.favorites.find((f) => f.id === dragged);
+    if (!from || profileOf(from) !== profileOf(target)) return null;
+    const list = listOf(target);
+    let to = list.indexOf(target) + (below ? 1 : 0);
+    if (list.indexOf(from) < to) to -= 1;
+    return to === list.indexOf(from) ? null : to;
+  };
+  // The favorites whose spaces are being chosen one by one.
+  const [choosing, setChoosing] = useState<Set<string>>(new Set());
+  const [url, setUrl] = useState("");
+  const [failed, setFailed] = useState<string>();
+  const add = () => {
+    const address = url.trim();
+    if (!address) return;
+    setFailed(undefined);
+    send({ cmd: "add_favorite", url: address }).then(
+      () => { setUrl(""); void reload(); },
+      (e: unknown) => setFailed(e instanceof Error ? e.message : String(e)),
+    );
+  };
+  return (
+    <Group title="Favorites" hint="The sites at the top of the sidebar. A favorite shows in every space, or only in the spaces you choose. Each runs in a profile; a copy in another profile (right-click → Duplicate favorite) is a second account of the same site.">
+      {info.favorites.map((f) => {
+        const name = f.title || hostOf(f.url);
+        const list = listOf(f);
+        const place = list.indexOf(f);
+        const some = f.only_in.length > 1 || choosing.has(f.id);
+        return (
+          <div
+            key={f.id}
+            className="set-row set-fav"
+            data-search-row
+            data-dragged={dragged === f.id || undefined}
+            data-before={(over?.id === f.id && !over.below) || undefined}
+            data-after={(over?.id === f.id && over.below) || undefined}
+            onDragOver={(e) => {
+              const below = isBelow(e);
+              if (landing(f, below) === null) return setOver(null);
+              e.preventDefault();
+              if (over?.id !== f.id || over.below !== below) setOver({ id: f.id, below });
+            }}
+            onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setOver(null)}
+            onDrop={(e) => {
+              e.preventDefault();
+              const index = landing(f, isBelow(e));
+              if (dragged && index !== null) move(dragged, index);
+              setDragged(null);
+              setOver(null);
+            }}
+          >
+            <span
+              className="set-grip"
+              role="button"
+              tabIndex={list.length > 1 ? 0 : -1}
+              aria-disabled={list.length < 2 || undefined}
+              draggable={list.length > 1}
+              title="Drag to sort, or press the up and down arrow keys"
+              aria-label={`Sort ${name}: favorite ${place + 1} of ${list.length}. The up and down arrow keys move it.`}
+              onDragStart={(e) => {
+                setDragged(f.id);
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", name);
+                const row = e.currentTarget.parentElement;
+                if (row) e.dataTransfer.setDragImage(row, 16, 24);
+              }}
+              onDragEnd={() => { setDragged(null); setOver(null); }}
+              onKeyDown={(e) => {
+                const to = e.key === "ArrowUp" ? place - 1 : e.key === "ArrowDown" ? place + 1 : -1;
+                if (to < 0 || to >= list.length) return;
+                e.preventDefault();
+                move(f.id, to);
+              }}
+            >
+              <Grip />
+            </span>
+            <Favicon url={f.url} />
+            <span className="sr-only" data-search-name>{name} {hostOf(f.url)}</span>
+            <input
+              key={f.title}
+              className="field min-w-0 flex-1"
+              style={{ minWidth: 140 }}
+              defaultValue={f.title}
+              placeholder={hostOf(f.url)}
+              title={f.url}
+              aria-label={`Name of the favorite ${name}`}
+              onBlur={(e) => {
+                const to = e.target.value.trim();
+                if (to !== f.title) void send({ cmd: "rename_tab", id: f.id, title: to }).then(reload);
+              }}
+              onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+            />
+            <select
+              className="field"
+              style={{ width: 170 }}
+              aria-label={`Where ${name} shows`}
+              value={some ? SOME : (f.only_in[0] ?? "")}
+              onChange={(e) => {
+                const to = e.target.value;
+                const next = new Set(choosing);
+                if (to === SOME) next.add(f.id);
+                else next.delete(f.id);
+                setChoosing(next);
+                if (to !== SOME) void send({ cmd: "set_favorite_spaces", id: f.id, spaces: to ? [to] : [] }).then(reload);
+              }}
+            >
+              <option value="">Every space</option>
+              {info.spaces.map((sp) => <option key={sp.id} value={sp.id}>Only {sp.title}</option>)}
+              {info.spaces.length > 2 && <option value={SOME}>Several spaces…</option>}
+            </select>
+            <span style={{ width: 170 }} className="flex-none">
+              <ProfileChoice info={info} current={profileOf(f)} name={name} label={`Profile of ${name}`} assign={(to) => send({ cmd: "set_tab_profile", id: f.id, profile: to === main ? null : to }).then(reload)} />
+            </span>
+            <button
+              className="btn"
+              data-danger={armed === f.id || undefined}
+              title="Takes it out of the favorites; its page is in the archive afterwards"
+              onClick={() => arm(f.id, () => void send({ cmd: "move_tab", id: f.id, space: info.active_space, section: "today", index: 0 }).then(() => send({ cmd: "close_tab", id: f.id })).then(reload))}
+            >
+              {armed === f.id ? "Click again" : "Remove"}
+            </button>
+            {some && (
+              <span className="flex basis-full flex-wrap items-center gap-1.5 pl-[58px]" role="group" aria-label={`Spaces ${name} shows in`}>
+                {info.spaces.map((sp) => {
+                  const on = f.only_in.includes(sp.id);
+                  return (
+                    <button
+                      key={sp.id}
+                      className="set-chip"
+                      aria-pressed={on}
+                      onClick={() => void send({ cmd: "set_favorite_spaces", id: f.id, spaces: on ? f.only_in.filter((x) => x !== sp.id) : [...f.only_in, sp.id] }).then(reload)}
+                    >
+                      {sp.title}
+                    </button>
+                  );
+                })}
+                {f.only_in.length === 0 && <span className="set-hint" style={{ marginTop: 0 }}>None chosen: it shows in every space.</span>}
+              </span>
+            )}
+          </div>
+        );
+      })}
+      <Field label="A new favorite" hint="By its address. It comes last, in the main profile, and shows in every space.">
+        <div className="flex gap-2">
+          <input className="field" style={{ maxWidth: 360 }} placeholder="example.com" aria-label="Address of the new favorite" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
+          <button className="btn" disabled={!url.trim()} onClick={add}>Add favorite</button>
+        </div>
+        {failed && <p className="set-hint" role="alert" style={{ color: "var(--danger)" }}>{failed}</p>}
+      </Field>
+    </Group>
+  );
+}
+
+/** All that is about the bookmarks of one space. */
+function SpaceBookmarks({ space, reload }: { space: Space; reload: () => Promise<unknown> }) {
+  const { armed, arm } = useArmed(4000);
+  const [said, setSaid] = useState<string>();
+  const say = (text: string) => { setSaid(text); void reload(); };
+  const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+  const toBookmarks = (remove: boolean) =>
+    send({ cmd: "pinned_to_bookmarks", space: space.id, remove }).then(
+      (r) => say(`${r.bookmarks ? `${plural(r.bookmarks, "bookmark")} added` : "Every pinned tab is a bookmark already"}${remove ? `; ${plural(r.pinned, "pinned tab")} closed.` : "."}`),
+      (e: unknown) => setSaid(e instanceof Error ? e.message : String(e)),
+    );
+  return (
+    <Group title="Bookmarks" hint="Saved addresses of this space, apart from its tabs. Importing and exporting is in Data & privacy.">
+      <Field side label={space.bookmarks === 0 ? "No bookmarks" : plural(space.bookmarks, "bookmark")} hint="Deleting removes all of them, folders included. It cannot be undone.">
+        <button className="btn" disabled={space.bookmarks === 0} data-danger={armed === "clear" || undefined} onClick={() => arm("clear", () => void send({ cmd: "clear_bookmarks", space: space.id }).then((r) => say(`${plural(r.bookmarks, "bookmark")} deleted.`)))}>
+          {armed === "clear" ? "Click again to delete" : "Delete bookmarks…"}
+        </button>
+      </Field>
+      <Field side label="Pinned tabs as bookmarks" hint={`${space.pinned === 0 ? "This space has no pinned tabs." : `${plural(space.pinned, "pinned tab")}.`} Copy keeps them pinned. Move closes them after: they are bookmarks then, and in the archive. Folders come along; smart folders do not.`}>
+        <div className="flex gap-2">
+          <button className="btn" disabled={space.pinned === 0} onClick={() => void toBookmarks(false)}>Copy</button>
+          <button className="btn" disabled={space.pinned === 0} data-danger={armed === "move" || undefined} onClick={() => arm("move", () => void toBookmarks(true))}>
+            {armed === "move" ? "Click again to move" : "Move…"}
+          </button>
+        </div>
+      </Field>
+      {said && <p className="set-row set-hint" role="status" style={{ marginTop: 0 }}>{said}</p>}
+    </Group>
+  );
+}
+
+/** `item` names the space whose page shows; without one, or once it is gone, the list. */
+export function SpacesSection({ info, update, reload, item, open }: { info: Info; update: (patch: SettingsPatch) => void; reload: () => Promise<unknown>; item?: string; open: (section: string, item?: string) => void }) {
+  const space = item ? info.spaces.find((s) => s.id === item) : undefined;
+  return space ? <SpacePage key={space.id} info={info} space={space} update={update} reload={reload} open={open} /> : <SpaceList info={info} reload={reload} open={open} />;
+}

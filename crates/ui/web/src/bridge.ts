@@ -19,6 +19,8 @@ export interface TabItem {
   unread: boolean;
   /** Profile override; absent means the space's (or the default) profile. */
   profile_id?: Id;
+  /** A favorite for these spaces only; absent or empty: for every space. */
+  only_in?: Id[];
   /** "Keep active": never unloaded for being out of sight, never auto-archived. */
   keep_active?: boolean;
   /** A favorite that opens as a web panel, over the page in front. */
@@ -280,6 +282,8 @@ export interface UiState {
   smart: Record<Id, SmartStatus>;
   /** Installed extensions of the profile the page in front uses. */
   extensions: ExtensionInfo[];
+  /** Those of them pinned to the sidebar in that profile, in order. */
+  pinned_extensions: string[];
   /** The page being recorded as a video: its tab, and since when (ms since 1970). */
   recording: { tab: Id | null; since: number } | null;
 }
@@ -292,6 +296,8 @@ export interface ExtensionInfo {
   options_url: string | null;
   /** Pinned in Chromium's own UI ("Pin to toolbar" on its extensions page). */
   chromium_pinned: boolean;
+  /** From the Chrome Web Store: it has a page there to install it from. */
+  from_store: boolean;
 }
 
 /** An extension's icon, served by the engine on this page's own origin (as the favicon cache, see `Favicon`). */
@@ -410,6 +416,9 @@ export interface SiteSearch {
   url: string;
 }
 
+/** The kinds of file bookmarks are exported as. */
+export type BookmarkFormat = "html" | "json" | "csv";
+
 export interface DownloadPrefs {
   folder: string;
   ask: boolean;
@@ -479,7 +488,7 @@ export type Command =
   | { cmd: "navigate"; url: string }
   | { cmd: "go_back" }
   | { cmd: "open_extension"; id: string }
-  | { cmd: "pin_extension"; id: string; pinned: boolean }
+  | { cmd: "pin_extension"; id: string; pinned: boolean; profile?: Id }
   | { cmd: "extension_options"; id: string }
   | { cmd: "go_forward" }
   | { cmd: "reload"; id?: Id }
@@ -525,7 +534,8 @@ export type Command =
   | { cmd: "set_web_panel"; id: Id; panel: boolean }
   | { cmd: "set_panel_mobile"; id: Id; mobile: boolean }
   | { cmd: "toggle_web_panel"; id: Id }
-  | { cmd: "new_space"; title: string; icon?: string }
+  /** A new space; it becomes the current one unless `stay` is set. */
+  | { cmd: "new_space"; title: string; icon?: string; stay?: boolean }
   | { cmd: "rename_space"; id: Id; title?: string; icon?: string }
   | { cmd: "delete_space"; id: Id }
   | { cmd: "move_space"; id: Id; index: number }
@@ -643,7 +653,8 @@ export type Command =
   | { cmd: "clear_downloads" }
   | { cmd: "show_downloads" }
   /** One of Chromium's own pages (saved passwords, addresses, cards) as a peek, in the logins of `profile`. */
-  | { cmd: "open_engine_page"; page: "passwords" | "addresses" | "cards" | "clear_data"; profile?: Id }
+  | { cmd: "open_engine_page"; page: "passwords" | "addresses" | "cards" | "clear_data" | "extensions" | "web_store"; profile?: Id }
+  | { cmd: "open_extension_store"; id: string; profile: Id }
   | { cmd: "show_bookmarks" }
   /** Save a tab's page to the bookmarks of its space; without `id`, the active tab's. */
   | { cmd: "add_bookmark"; id?: Id }
@@ -665,6 +676,11 @@ export type Command =
   | { cmd: "install_update" }
   | { cmd: "open_update_page" }
   | { cmd: "set_tab_profile"; id: Id; profile: Id | null }
+  | { cmd: "set_favorite_spaces"; id: Id; spaces: Id[] }
+  | { cmd: "move_favorite"; id: Id; index: number }
+  | { cmd: "add_favorite"; url: string }
+  | { cmd: "pinned_to_bookmarks"; space: Id; remove?: boolean }
+  | { cmd: "clear_bookmarks"; space: Id }
   | { cmd: "duplicate_favorite"; id: Id }
   | { cmd: "media"; id: Id; action: MediaAction }
   | { cmd: "set_muted"; id: Id; muted: boolean }
@@ -674,7 +690,9 @@ export type Command =
   | { cmd: "import_preview"; key: string }
   | { cmd: "import_from"; key: string }
   /** The text of a bookmarks file (the HTML browsers export): its bookmarks join the current space's. */
-  | { cmd: "import_bookmarks"; html: string }
+  | { cmd: "import_bookmarks"; html: string; space?: Id }
+  /** The bookmarks of space `space`, or of every space, as the text of a file. */
+  | { cmd: "export_bookmarks"; format: BookmarkFormat; space?: Id }
   | { cmd: "shortcut"; shortcut: string | { select_tab: number } | { select_space: number } }
   | { cmd: "set_shortcut"; action: ShortcutAction; keys: string | null }
   | { cmd: "set_space_shortcut"; id: Id; keys: string | null }
@@ -780,6 +798,7 @@ interface Replies {
   /** The recorded page's next picture (a JPEG, base64), or the end. */
   dev_record_frame: { frame?: string; done?: boolean };
   new_profile: { id: Id };
+  export_bookmarks: { text: string; name: string; bookmarks: number };
   smart_save: { id: Id };
   smart_connect: Account;
   smart_preview: SmartItem[];
@@ -804,6 +823,8 @@ interface Replies {
   capture_save: { saved: string | null };
   split_drop_frame: SplitDropFrame | { tab?: undefined };
   site_permissions: { rows: PermissionRow[] };
+  pinned_to_bookmarks: { bookmarks: number; pinned: number };
+  clear_bookmarks: { bookmarks: number };
   all_permissions: { rows: PermissionEntry[] };
   /** `null` once device mode is off. */
   device_get: DeviceConfig | null;
@@ -1103,6 +1124,16 @@ export function findTabInSpace(space: Space, id: Id): TabItem | null {
     if (n.kind === "folder") stack.push(...n.children);
   }
   return null;
+}
+
+/**
+ * Whether favorite `tab` shows in space `space`: in every space, unless it
+ * names the spaces it is for. Spaces that are gone do not count, so one left
+ * with none shows everywhere (as `favorite_shows` in the app).
+ */
+export function favoriteShows(sidebar: Snapshot, tab: TabItem, space: Id): boolean {
+  const named = (tab.only_in ?? []).filter((id) => sidebar.spaces.some((s) => s.id === id));
+  return named.length === 0 || named.includes(space);
 }
 
 /** Tab `id` anywhere: the favorites, then each space. */
