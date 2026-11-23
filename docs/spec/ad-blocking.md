@@ -12,7 +12,7 @@ own next to the app.
 
 ## Turning it on
 
-Settings → Ad blocking shows these controls. The welcome page asks first
+Settings → Content blocking shows these controls. The welcome page asks first
 whether to block with a recommended set of lists, with lists of one's own
 choice or not at all, and sets the same two things with that step's
 "Continue", not when the step is left another way (`first-start.md`):
@@ -110,7 +110,7 @@ that refuses to open the wall.
 The site panel (`site-controls.md`) has **Block ads** while the blocker is
 on. Turning it off lets the site (its registrable domain, as for clearing
 site data) load everything and run no scriptlets, in every tab and profile,
-and loads the page again. Settings → Ad blocking lists these sites, each with "Block again".
+and loads the page again. Settings → Content blocking lists these sites, each with "Block again".
 
 ## Stored data
 

@@ -181,7 +181,7 @@ export function CommandBar({ mode, state, profileFor, splitSide, onClose, onOpen
   // The site search the hint line names while nothing is typed: another one each time the bar opens.
   const [example] = useState(() => state.settings.site_searches[Math.floor(Math.random() * state.settings.site_searches.length)]);
   const quick = mode === "quick";
-  // The programs listening on this computer's ports (Settings → Developer), asked once per opening.
+  // The programs listening on this computer's ports (Settings → Developer tools), asked once per opening.
   const [servers, setServers] = useState<DevServer[]>([]);
   const wantsServers = state.settings.developer.enabled && !quick && !naming;
   useEffect(() => {

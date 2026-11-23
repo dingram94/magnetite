@@ -42,7 +42,7 @@ impl MagnetiteApp {
         })
     }
 
-    /// Whether the page at `url` counts as a local one (Settings → Developer).
+    /// Whether the page at `url` counts as a local one (Settings → Developer tools).
     fn is_dev_page(&self, url: &str) -> bool {
         self.with_state(|s| {
             let d = &s.settings.developer;
@@ -84,7 +84,7 @@ impl MagnetiteApp {
         }
     }
 
-    /// Settings → Developer changed (which hosts count as local, or the
+    /// Settings → Developer tools changed (which hosts count as local, or the
     /// tools turned off): every loaded page is looked at again.
     pub(super) fn dev_settings_changed(&self, engine: &Engine) {
         let pages: Vec<(ContentId, String)> = self.with_state(|s| {

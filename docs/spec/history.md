@@ -29,7 +29,7 @@ followed, an address typed, a page restored when its tab loads again.
 The history view replaces the sidebar, like the archive. It opens from:
 
 - the footer button: rest on it and choose "History", or make history what
-  a click opens (Settings → Tabs & archive);
+  a click opens (Settings → Tabs and archive);
 - History → Show History in the menu bar, or `Cmd+Y`;
 - the command "Open history".
 
@@ -46,12 +46,12 @@ The command bar finds visits too, below tabs and bookmarks
 
 | Setting | Options | Default |
 |---|---|---|
-| Settings → Data & privacy → "Keep history for" | 7, 30 or 90 days, 1 year, a number of days from 1 to 3650, or "Don't keep history" | 90 days |
+| Settings → Data and privacy → "Keep history for" | 7, 30 or 90 days, 1 year, a number of days from 1 to 3650, or "Don't keep history" | 90 days |
 
 A typed number is saved on Enter or when the field is left. The minute tick
 deletes older visits; a shorter period, or "Don't keep
 history", takes effect at once and deletes what is older for good. With
-"Don't keep history" nothing is recorded. Settings → Data & privacy shows
+"Don't keep history" nothing is recorded. Settings → Data and privacy shows
 the number of visits and has "Clear history" (after a second click). The
 period is this device's and does not sync.
 

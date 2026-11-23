@@ -300,7 +300,7 @@ impl SystemEngine {
     }
 }
 
-/// The ad blocker (Settings → Ad blocking, `adblock.rs`). A new installation
+/// The ad blocker (Settings → Content blocking, `adblock.rs`). A new installation
 /// starts with `recommended`; settings saved without any stay off, with no
 /// list.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]

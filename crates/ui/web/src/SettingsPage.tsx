@@ -2,23 +2,26 @@
 import { DeveloperSection } from "./settings/DeveloperSection";
 import { ProtectedVideoSection } from "./settings/ProtectedVideoSection";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AdblockIcon, Archive, Back, BracesIcon, CameraIcon, Close, CodeIcon, DevicesIcon, InfoIcon, PaletteIcon, PrivacyIcon, PuzzleIcon, Search, SettingsIcon, SharedIcon, SmartFolderIcon, type IconComponent, KeyIcon, KeyboardIcon, LinkIcon, VideoIcon } from "./Icons";
+import { AdblockIcon, Archive, Back, BookmarkIcon, BracesIcon, CameraIcon, Close, CodeIcon, CookieIcon, DevicesIcon, InfoIcon, PaletteIcon, Pin, PrivacyIcon, PuzzleIcon, Search, SettingsIcon, SharedIcon, SmartFolderIcon, type IconComponent, KeyIcon, KeyboardIcon, LinkIcon, VideoIcon } from "./Icons";
 import { SEARCH_ENGINES } from "./settings/searchEngines";
 import { EXTERNAL_LINKS } from "./settings/externalLinks";
 import { ARCHIVE_AFTER, UNLOAD_AFTER } from "./settings/tabTimes";
-import { applyAppearance, IS_MAC, keyLabel, send, type DefaultBrowser, type LinkRule, type Settings, type SiteSearch } from "./bridge";
+import { accentCss, applyAppearance, IS_MAC, keyLabel, send, type DefaultBrowser, type LinkRule, type Settings, type SiteSearch } from "./bridge";
 import { About } from "./settings/AboutSection";
 import { AdblockSection } from "./settings/AdblockSection";
 import { AutofillSection } from "./settings/AutofillSection";
 import { AppearanceSection } from "./settings/AppearanceSection";
 import { ExtensionsSection } from "./settings/ExtensionsSection";
 import { Field, Group, Toggle } from "./settings/fields";
-import { ExportBookmarks, ImportBookmarksFile, ImportBrowsers } from "./settings/ImportBrowsers";
+import { SpaceIcon } from "./Glyphs";
+import { BookmarksSection } from "./settings/BookmarksSection";
+import { ImportBrowsers } from "./settings/ImportBrowsers";
+import { PickList } from "./settings/PickList";
 import { PermissionsSection } from "./settings/PermissionsSection";
 import { SearchedSection, SearchResults } from "./settings/SearchResults";
 import { ShortcutsSection } from "./settings/ShortcutsSection";
 import { SiteCodeSection } from "./settings/SiteCodeSection";
-import { profileLabel, SpacesSection } from "./settings/SpacesSection";
+import { FavoritesSection, ProfilePick, ProfilesSection, spaceOptions, SpacesSection } from "./settings/SpacesSection";
 import { SmartFoldersSection } from "./settings/SmartFoldersSection";
 import { SyncSection, type SyncJob } from "./settings/SyncSection";
 import type { Info, SettingsPatch } from "./settings/types";
@@ -27,9 +30,10 @@ import type { Info, SettingsPatch } from "./settings/types";
 
 type Section = { id: string; label: string; Icon: IconComponent; title: string; intro: string };
 
+/** The groups of the list; the first one, the overall settings, has no name. */
 const GROUPS: { label: string; sections: Section[] }[] = [
   {
-    label: "Basics",
+    label: "",
     sections: [
       { id: "general", label: "General", Icon: SettingsIcon, title: "General", intro: "Windows, the command bar and the first start. No account is needed." },
       { id: "appearance", label: "Appearance", Icon: PaletteIcon, title: "Appearance", intro: "How the sidebar and Magnetite's own pages look. Web pages keep their own design." },
@@ -39,19 +43,23 @@ const GROUPS: { label: string; sections: Section[] }[] = [
   {
     label: "Browsing",
     sections: [
-      { id: "tabs", label: "Tabs & archive", Icon: Archive, title: "Tabs & archive", intro: "A closed tab goes to the archive, and Today tabs you stop using move there on their own. It can be opened again for as long as the archive keeps it." },
+      { id: "tabs", label: "Tabs and archive", Icon: Archive, title: "Tabs and archive", intro: "A closed tab goes to the archive, and Today tabs you stop using move there on their own. It can be opened again for as long as the archive keeps it." },
       { id: "links", label: "Links", Icon: LinkIcon, title: "Links", intro: "What happens to a link you click in another app, and to a link you copy." },
       { id: "search", label: "Search", Icon: Search, title: "Search", intro: "Used when what you type in the command bar is not a web address. A keyword and a space search one site instead." },
-      { id: "adblock", label: "Ad blocking", Icon: AdblockIcon, title: "Ad blocking", intro: "Magnetite can stop ads and trackers before they load, with filter lists you choose. Off until you turn it on." },
+      { id: "adblock", label: "Content blocking", Icon: AdblockIcon, title: "Content blocking", intro: "Magnetite can stop ads and trackers before they load, with filter lists you choose. Off until you turn it on." },
       { id: "video", label: "Protected video", Icon: VideoIcon, title: "Protected video", intro: "Some streaming services do not play in Magnetite's Chromium engine yet. Their pages open in your system's own web engine instead." },
       { id: "permissions", label: "Permissions", Icon: CameraIcon, title: "Permissions", intro: "The websites that may, or may not, use your camera, microphone or location, send notifications, open pop-ups or read the clipboard. A website asks first; this is what you answered." },
-      { id: "autofill", label: "Passwords & autofill", Icon: KeyIcon, title: "Passwords & autofill", intro: "Magnetite can keep your passwords, addresses and cards and fill them in for you. What it saves stays on this computer." },
+      { id: "autofill", label: "Passwords and autofill", Icon: KeyIcon, title: "Passwords and autofill", intro: "Magnetite can keep your passwords, addresses and cards and fill them in for you. What it saves stays on this computer." },
+      { id: "code", label: "User scripts and styles", Icon: BracesIcon, title: "User scripts and styles", intro: "Change how a site looks or behaves with CSS and JavaScript of your own: hide a part of a page, change its fonts or colours, or run a small script on it. They are for web pages, not for Magnetite's own." },
     ],
   },
   {
-    label: "Spaces",
+    label: "Organization",
     sections: [
       { id: "spaces", label: "Spaces", Icon: SharedIcon, title: "Spaces", intro: "Your spaces: their names, order and look, and the profile each one signs in with." },
+      { id: "profiles", label: "Profiles", Icon: CookieIcon, title: "Profiles", intro: "The sets of logins your spaces and favorites sign in with, and what uses each of them." },
+      { id: "favorites", label: "Favorites", Icon: Pin, title: "Favorites", intro: "The sites at the top of the sidebar: their names and order, the spaces each one shows in, and its profile." },
+      { id: "bookmarks", label: "Bookmarks", Icon: BookmarkIcon, title: "Bookmarks", intro: "The saved addresses of each space: adding its pinned tabs, deleting, and importing and exporting them as a file." },
       { id: "smart", label: "Smart folders", Icon: SmartFolderIcon, title: "Smart folders", intro: "Folders that fill themselves with your pull requests, issues or tickets. Magnetite asks the service from this computer; tokens stay here and are never synced." },
     ],
   },
@@ -65,9 +73,8 @@ const GROUPS: { label: string; sections: Section[] }[] = [
   {
     label: "Advanced",
     sections: [
-      { id: "code", label: "Custom CSS & JS", Icon: BracesIcon, title: "Custom CSS & JS", intro: "Change how a site looks or behaves with CSS and JavaScript of your own: hide a part of a page, change its fonts or colours, or run a small script on it." },
-      { id: "developer", label: "Developer", Icon: CodeIcon, title: "Developer", intro: "Tools for building and debugging websites." },
-      { id: "data", label: "Data & privacy", Icon: PrivacyIcon, title: "Data & privacy", intro: "No telemetry, no Magnetite account. What Magnetite keeps on this computer, and the few servers it talks to." },
+      { id: "developer", label: "Developer tools", Icon: CodeIcon, title: "Developer tools", intro: "Tools for building and debugging websites." },
+      { id: "data", label: "Data and privacy", Icon: PrivacyIcon, title: "Data and privacy", intro: "No telemetry, no Magnetite account. What Magnetite keeps on this computer, and the few servers it talks to." },
       { id: "about", label: "About", Icon: InfoIcon, title: "About Magnetite", intro: "A free, open-source browser built around a sidebar, on a Chromium engine, made in Europe." },
     ],
   },
@@ -326,6 +333,9 @@ export function SettingsPage() {
       )}
       {sectionId === "permissions" && <PermissionsSection info={info} />}
       {sectionId === "spaces" && <SpacesSection info={info} update={update} reload={reload} item={place.item} open={openSection} />}
+      {sectionId === "profiles" && <ProfilesSection info={info} reload={reload} open={openSection} />}
+      {sectionId === "favorites" && <FavoritesSection info={info} reload={reload} />}
+      {sectionId === "bookmarks" && <BookmarksSection key={place.id === "bookmarks" ? place.item : undefined} info={info} reload={reload} item={place.id === "bookmarks" ? place.item : undefined} />}
       {sectionId === "developer" && (
         <>
           <Group>
@@ -368,8 +378,9 @@ export function SettingsPage() {
           </Group>
           <Group title="Import">
           <ImportBrowsers />
-          <ImportBookmarksFile spaces={info.spaces} current={info.active_space} />
-          <ExportBookmarks spaces={info.spaces} />
+          <Field side label="Bookmarks as a file" hint="Importing a bookmarks file and exporting your bookmarks are in Bookmarks.">
+            <button className="btn" onClick={() => openSection("bookmarks")}>Open Bookmarks</button>
+          </Field>
           </Group>
           <Group title="What websites are told">
             <Toggle label="Tell websites not to sell or share my data" hint="Global Privacy Control: every request to a website carries the signal, and a page can read it in its scripts. Some laws oblige a website to honour it; whether one does is up to the website." checked={settings.global_privacy_control} onChange={(v) => update({ global_privacy_control: v })} />
@@ -415,16 +426,15 @@ export function SettingsPage() {
         {/* The sections as one list, for a page too narrow for them at its side. */}
         <select className="field set-nav-pick" aria-label="Section" value={shown ? sectionId : ""} onChange={(e) => openSection(e.target.value)}>
           {!shown && <option value="" disabled>Search results</option>}
-          {GROUPS.map((g) => (
-            <optgroup key={g.label} label={g.label}>
-              {g.sections.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </optgroup>
-          ))}
+          {GROUPS.map((g) => {
+            const options = g.sections.map((s) => <option key={s.id} value={s.id}>{s.label}</option>);
+            return g.label ? <optgroup key={g.label} label={g.label}>{options}</optgroup> : options;
+          })}
         </select>
         <div className="set-nav-list">
         {GROUPS.map((g) => (
           <div key={g.label} className="mt-3">
-            <div className="set-nav-label">{g.label}</div>
+            {g.label && <div className="set-nav-label">{g.label}</div>}
             {g.sections.map((s) => (
               <button key={s.id} className="row w-full" data-dim={(searching && !found.includes(s.id)) || undefined} data-active={(shown && sectionId === s.id) || undefined} onClick={() => openSection(s.id)}>
                 <span className="icon-slot" style={{ color: shown && sectionId === s.id ? "var(--accent)" : "var(--muted)" }}><s.Icon width={16} height={16} /></span>
@@ -441,11 +451,22 @@ export function SettingsPage() {
             <SearchResults query={query} sections={SECTIONS} body={body} open={openSection} onFound={onFound} none={found.length === 0} />
           ) : (
             <>
+              {/* Above the name: it leads away from the space, and is none of its settings. */}
+              {ownSpace && (
+                <button className="set-found" onClick={() => openSection("spaces")}>
+                  <Back width={15} height={15} />
+                  All spaces
+                </button>
+              )}
               <header className="mb-6 flex items-start gap-4">
-                <span className="set-icon"><section.Icon width={22} height={22} /></span>
+                {ownSpace ? (
+                  <span className="set-icon" style={{ color: accentCss(ownSpace.accent ?? undefined) }}><SpaceIcon space={ownSpace} size={22} /></span>
+                ) : (
+                  <span className="set-icon"><section.Icon width={22} height={22} /></span>
+                )}
                 <div>
                   <h1 ref={heading} tabIndex={-1} className="text-[22px] font-semibold tracking-[-0.01em] outline-none">{ownSpace?.title ?? section.title}</h1>
-                  <p className="mt-1 max-w-[560px] text-[14px] leading-5 text-[var(--muted)]">{section.intro}</p>
+                  <p className="mt-1 max-w-[560px] text-[14px] leading-5 text-[var(--muted)]">{ownSpace ? "The settings of this space alone: its name, icon, look and profile. “All spaces” leads back to the list." : section.intro}</p>
                 </div>
               </header>
               {searching && (
@@ -645,9 +666,7 @@ function ClearBrowsingData({ info, reload }: { info: Info; reload: () => Promise
     <Field side label="Cookies, site data and cache" hint="Delete what websites have stored on this computer, for the last hour or for all time. Deleting cookies signs you out of websites. The dialog is Chromium's own; the history it names is not the one above.">
       <div className="flex flex-wrap gap-2">
         {logins.length > 1 && (
-          <select className="field" value={profile} onChange={(e) => setChosen(e.target.value)} aria-label="Profile">
-            {logins.map((p) => <option key={p.id} value={p.id}>{profileLabel(info, p)}</option>)}
-          </select>
+          <ProfilePick info={info} profiles={logins} value={profile} onChoose={setChosen} />
         )}
         <button className="btn" disabled={!profile} onClick={open}>Delete…</button>
       </div>
@@ -766,10 +785,7 @@ function LinkRules({ saved, spaces, save }: { saved: LinkRule[]; spaces: Info["s
               <div className="flex flex-wrap items-center gap-2">
                 <input className="field mono" style={{ flex: "1 1 160px", minWidth: 0 }} value={r.site} placeholder="github.com/acme" aria-label="Site" aria-invalid={!!why || undefined} onChange={(e) => change(i, { site: e.target.value })} onBlur={() => commit(rows)} />
                 <span className="text-[13px] text-[var(--muted)]">opens in</span>
-                <select className="field" style={{ width: 180 }} value={spaces.some((s) => s.id === r.space) ? r.space : ""} aria-label="Space" onChange={(e) => commit(change(i, { space: e.target.value }))}>
-                  <option value="" disabled>a space…</option>
-                  {spaces.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
-                </select>
+                <PickList options={spaceOptions(spaces)} chosen={spaces.some((s) => s.id === r.space) ? [r.space] : []} none="a space…" label={`Space the links to ${r.site || "this site"} open in`} width={180} align="right" onChoose={([to]) => to && commit(change(i, { space: to }))} />
                 <button className="ib" title="Remove" aria-label={`Remove the rule for ${r.site || "a site"}`} onClick={() => { const next = rows.filter((_, j) => j !== i); setRows(next); commit(next); }}><Close width={14} height={14} /></button>
               </div>
               {why && <p className="set-hint" style={{ color: "var(--danger)" }}>Not saved: {why}</p>}

@@ -1,4 +1,4 @@
-//! The ad blocker's filter lists (Settings → Ad blocking): the lists one can
+//! The ad blocker's filter lists (Settings → Content blocking): the lists one can
 //! subscribe to, their download straight from the publisher, and when to
 //! fetch them again. Blocking with them is `magnetite_engine::Filters`.
 //!

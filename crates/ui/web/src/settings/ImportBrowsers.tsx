@@ -1,7 +1,10 @@
-// The browsers on this computer to import from, each at a click, and the import of a bookmarks file (Settings → Data & privacy).
+// The browsers on this computer to import from, each at a click (Settings → Data and privacy), and the bookmarks as a file, to import and export (Settings → Bookmarks).
 import { useEffect, useRef, useState } from "react";
 import { type BookmarkFormat, type ImportSource, send } from "../bridge";
 import { Field } from "./fields";
+import { PickList } from "./PickList";
+import { spaceOptions } from "./SpacesSection";
+import type { Info } from "./types";
 
 /** Browsers on this computer to import from; every import adds spaces. */
 export function ImportBrowsers() {
@@ -40,7 +43,7 @@ export function ImportBrowsers() {
 }
 
 /** A bookmarks file, as Safari and other browsers export it: its bookmarks join the current space's. */
-type Space = { id: string; title: string };
+type Space = Info["spaces"][number];
 
 export function ImportBookmarksFile({ spaces, current }: { spaces: Space[]; current: string }) {
   const input = useRef<HTMLInputElement>(null);
@@ -81,9 +84,10 @@ export function ImportBookmarksFile({ spaces, current }: { spaces: Space[]; curr
       />
       <div className="flex flex-wrap items-center gap-2">
         {spaces.length > 1 && (
-          <select className="field" style={{ width: 200 }} value={space?.id} aria-label="Space the bookmarks go to" onChange={(e) => setChosen(e.target.value)}>
-            {spaces.map((s) => <option key={s.id} value={s.id}>Into {s.title}</option>)}
-          </select>
+          <>
+            <span className="text-[13px] text-[var(--muted)]">Into</span>
+            <PickList options={spaceOptions(spaces)} chosen={space ? [space.id] : []} label="Space the bookmarks go to" width={200} onChoose={([to]) => to && setChosen(to)} />
+          </>
         )}
         <button className="btn" disabled={busy} onClick={() => input.current?.click()}>{busy ? "Importing…" : "Choose file…"}</button>
       </div>
@@ -99,17 +103,19 @@ const FORMATS: readonly { format: BookmarkFormat; label: string; type: string }[
 ];
 
 /**
- * The bookmarks of one space or of all, written to a file the browser
+ * The bookmarks of the spaces chosen or of all, written to a file the browser
  * downloads like any other: it lands where downloads go.
  */
 export function ExportBookmarks({ spaces }: { spaces: Space[] }) {
-  const [from, setFrom] = useState("");
+  // The spaces to export; none chosen is all of them.
+  const [chosen, setChosen] = useState<string[]>([]);
+  const from = chosen.filter((id) => spaces.some((s) => s.id === id));
   const [format, setFormat] = useState<BookmarkFormat>("html");
   const [result, setResult] = useState<{ text: string; failed: boolean } | null>(null);
   const run = async () => {
     setResult(null);
     try {
-      const r = await send({ cmd: "export_bookmarks", format, space: spaces.some((s) => s.id === from) ? from : undefined });
+      const r = await send({ cmd: "export_bookmarks", format, spaces: from });
       const kind = FORMATS.find((f) => f.format === format)!;
       const url = URL.createObjectURL(new Blob([r.text], { type: `${kind.type};charset=utf-8` }));
       const link = document.createElement("a");
@@ -123,13 +129,10 @@ export function ExportBookmarks({ spaces }: { spaces: Space[] }) {
     }
   };
   return (
-    <Field label="Export bookmarks" hint="The bookmarks of your spaces as a file: HTML is what every browser imports, JSON and CSV are for your own use. Tabs and favorites are not bookmarks and are not in it.">
+    <Field label="Export bookmarks" hint="The bookmarks of all your spaces, or of the ones you tick, as a file: HTML is what every browser imports, JSON and CSV are for your own use. Tabs and favorites are not bookmarks and are not in it.">
       <div className="flex flex-wrap items-center gap-2">
         {spaces.length > 1 && (
-          <select className="field" style={{ width: 200 }} value={from} aria-label="Space to export" onChange={(e) => setFrom(e.target.value)}>
-            <option value="">All spaces</option>
-            {spaces.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
-          </select>
+          <PickList several none="All spaces" options={spaceOptions(spaces)} chosen={from} label="Spaces to export" width={200} onChoose={setChosen} />
         )}
         <select className="field" style={{ width: 220 }} value={format} aria-label="Format" onChange={(e) => setFormat(e.target.value as BookmarkFormat)}>
           {FORMATS.map((f) => <option key={f.format} value={f.format}>{f.label}</option>)}

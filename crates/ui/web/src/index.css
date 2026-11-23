@@ -589,6 +589,8 @@ button:disabled, select:disabled, [aria-disabled="true"] { cursor: default; }
   .set-main { padding: 20px 16px; }
   .set-main .seg { flex-wrap: wrap; max-width: 100%; }
 }
+/* A section in the list has no close button to make room for: its name shows whole. */
+.set-nav .row:hover .title, .set-nav .row:focus-within .title { -webkit-mask-image: none; }
 .set-nav-label { padding: 4px 8px 4px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
 /* The search field above the sections, and the page of what it found:
    the name of each section, the sections the search left out (`data-miss`)
@@ -647,7 +649,7 @@ button:disabled, select:disabled, [aria-disabled="true"] { cursor: default; }
 .shortcut-keys { flex: none; min-width: 72px; display: flex; justify-content: flex-end; white-space: nowrap; }
 .shortcut-row kbd { min-width: 28px; padding: 3px 8px; border-radius: 6px; background: rgba(255,255,255,0.1); font: inherit; font-size: 13px; text-align: center; color: var(--fg); }
 
-/* Settings → Custom CSS & JS: a code field as wide as its card, growing downwards. */
+/* Settings → User scripts and styles: a code field as wide as its card, growing downwards. */
 textarea.field.code { display: block; width: 100%; height: auto; min-height: 96px; padding: 8px 10px; resize: vertical; font-size: 12.5px; line-height: 1.5; white-space: pre; tab-size: 2; }
 
 /* Licence texts page. */
@@ -822,23 +824,61 @@ button.wel-space-icon:hover:not(:disabled) { background: color-mix(in srgb, var(
 .set-talks b { flex: none; width: 190px; font-weight: 500; color: var(--fg); }
 /* Settings → Spaces: a space as a line that opens its page, with the buttons that move it. */
 .set-space { display: flex; align-items: center; gap: 10px; padding-top: 8px; padding-bottom: 8px; }
-.set-space[draggable="true"] { cursor: grab; }
-.set-space[data-dragged], .set-fav[data-dragged] { opacity: 0.4; }
-.set-space[data-before], .set-fav[data-before] { box-shadow: inset 0 2px 0 var(--accent); }
-.set-space[data-after], .set-fav[data-after] { box-shadow: inset 0 -2px 0 var(--accent); }
+.set-space[data-sortable] { cursor: grab; user-select: none; -webkit-user-select: none; }
+/* The row being dragged follows the pointer, above the others. */
+.set-space[data-dragged], .set-space[data-dragged]:hover, .set-fav[data-dragged] { position: relative; z-index: 2; border-top-color: transparent; background: var(--surface); box-shadow: 0 0 0 1px var(--line), 0 8px 24px rgba(0,0,0,0.35); }
+/* The other rows glide aside to make room where it would land. */
+html[data-sorting] [data-sort-row]:not([data-dragged]) { transition: transform 140ms ease; }
+/* While a row is dragged, the hand stays closed wherever the pointer is. */
+html[data-sorting], html[data-sorting] * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
 /* A favorite: handle, icon, name and its choices in a row that wraps when narrow. */
 .set-fav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding-top: 10px; padding-bottom: 10px; }
+/* The profile a list of favorites belongs to, above its first one. */
+.set-fav-head { padding-top: 12px; padding-bottom: 2px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.set-fav-head + .set-fav { border-top: 0; }
 .set-fav:hover .set-grip:not([aria-disabled]) { color: var(--fg); }
-.set-chip { padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 12.5px; color: var(--secondary); }
-.set-chip:hover { color: var(--fg); }
-.set-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+/* A choice from a list of Magnetite's own (`Pick`): a button that says what is chosen, the list under it. */
+.set-pick { position: relative; display: inline-block; flex: none; max-width: 100%; vertical-align: top; }
+.set-pick-button { display: flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; text-align: left; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 14px) 13px, calc(100% - 9px) 13px; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 26px; }
+.set-pick-button[aria-expanded="true"] { border-color: var(--accent); }
+.set-pick-button:disabled { opacity: 0.5; }
+/* A space on the button: its icon and name in its colour. */
+.set-tag { display: inline-flex; align-items: center; gap: 4px; min-width: 0; height: 22px; padding: 0 7px 0 6px; border-radius: 6px; font-size: 12.5px; color: var(--tag, var(--fg)); background: color-mix(in srgb, var(--tag, var(--fg)) 16%, transparent); }
+.set-tag > :first-child:not(:last-child) { flex: none; }
+.set-tag > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.set-tag-more { flex: none; padding: 0 2px; font-size: 12.5px; color: var(--muted); }
+.set-pick-list { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; display: block; min-width: 100%; width: max-content; max-width: 320px; max-height: 296px; overflow-y: auto; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); box-shadow: 0 12px 32px rgba(0,0,0,0.45); }
+.set-pick-list[data-align="right"] { left: auto; right: 0; }
+.set-pick-list[data-up] { top: auto; bottom: calc(100% + 4px); }
+.set-pick-list button { display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; padding: 0 10px 0 8px; border-radius: 6px; text-align: left; outline: none; }
+.set-pick-list button:hover, .set-pick-list button:focus-visible { background: rgba(255,255,255,0.1); }
+.set-pick-list button > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.set-pick-check { flex: none; color: var(--accent); visibility: hidden; }
+.set-pick-list button[aria-checked="true"] .set-pick-check { visibility: visible; }
+.set-pick-icon { display: grid; place-items: center; flex: none; width: 16px; }
+.set-pick-hint { flex: 1; text-align: right; padding-left: 12px; font-size: 12px; color: var(--muted); }
+.set-pick-list hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
 .set-grip:active { cursor: grabbing; }
-.set-grip { display: grid; place-items: center; width: 20px; height: 30px; flex: none; margin-left: -6px; border-radius: 6px; color: var(--muted); cursor: grab; }
+.set-grip { user-select: none; -webkit-user-select: none; touch-action: none; display: grid; place-items: center; width: 20px; height: 30px; flex: none; margin-left: -6px; border-radius: 6px; color: var(--muted); cursor: grab; }
 .set-grip:hover:not([aria-disabled]), .set-space:hover .set-grip:not([aria-disabled]) { color: var(--fg); }
 .set-grip[aria-disabled] { opacity: 0.25; cursor: default; }
 .set-space-open { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; padding: 6px 8px; margin: 0 -8px 0 0; border-radius: 9px; text-align: left; }
 /* The whole row lights up as one: handle and space together. */
 .set-space:hover, .set-space:has(.set-space-open:focus-visible) { background: var(--row-hover); }
+/* Settings → Profiles: a profile, the spaces that use it and the favorites that do, side by side. */
+.set-profile { display: grid; grid-template-columns: 180px minmax(0, 1fr) minmax(0, 1fr) auto; align-items: center; gap: 8px 14px; padding-top: 10px; padding-bottom: 10px; }
+.set-profile-head { padding-bottom: 6px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.set-profile-head + .set-profile { border-top: 0; padding-top: 4px; }
+.set-profile-cap { display: none; }
+.set-profile-link { color: inherit; text-align: left; }
+.set-profile-link:hover { color: var(--fg); text-decoration: underline; }
+@container (max-width: 720px) {
+  /* No room for columns: each profile says what its two lines are. */
+  .set-profile { grid-template-columns: minmax(0, 1fr); }
+  .set-profile-head { display: none; }
+  .set-profile-head + .set-profile { border-top: 0; padding-top: 10px; }
+  .set-profile-cap { display: inline; font-weight: 600; }
+}
 .set-space-icon { display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 9px; background: rgba(255,255,255,0.06); }
 /* The icons to choose from for a space. */
 .set-glyphs { display: flex; flex-wrap: wrap; gap: 2px; }

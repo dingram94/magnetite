@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 #[serde(default)]
 pub struct DevState {
     /// The page is served from this computer, or from a host the user named
-    /// (Settings → Developer): the developer bar shows for it.
+    /// (Settings → Developer tools): the developer bar shows for it.
     pub local: bool,
     /// Errors in the page's console since it began to load.
     pub errors: u32,
@@ -250,7 +250,7 @@ pub fn element_context(element: &Value, picture: Option<&Path>) -> String {
     out
 }
 
-/// Developer features (Settings → Developer). This device's own, never
+/// Developer features (Settings → Developer tools). This device's own, never
 /// synced.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]

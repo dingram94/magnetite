@@ -76,7 +76,7 @@ export function ProtectedVideoSection({ info, update }: { info: Info; update: (p
             {cleared === "failed" ? (
               <span className="set-hint block" role="alert" style={{ color: "var(--danger)" }}>It could not be deleted. Try again.</span>
             ) : (
-              <span className="set-hint block">{cleared === "done" ? "Deleted. The sites there ask you to sign in again." : cleared === "working" ? "Deleting…" : `The cookies, site storage and cache of the pages ${name} showed, in every profile. Chromium's are deleted under Data & privacy.`}</span>
+              <span className="set-hint block">{cleared === "done" ? "Deleted. The sites there ask you to sign in again." : cleared === "working" ? "Deleting…" : `The cookies, site storage and cache of the pages ${name} showed, in every profile. Chromium's are deleted under Data and privacy.`}</span>
             )}
           </span>
           {cleared === "confirm" ? (

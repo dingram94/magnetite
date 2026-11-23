@@ -1,4 +1,4 @@
-// Settings → Custom CSS & JS: the user's own CSS and JavaScript per site.
+// Settings → User scripts and styles: the user's own CSS and JavaScript per site.
 // Changes are saved when a field is left; a site that would not be kept
 // stays here, marked, and is left out until it is fixed.
 import { useEffect, useRef, useState } from "react";

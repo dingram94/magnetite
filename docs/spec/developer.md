@@ -12,7 +12,7 @@ A page is local when it is served over `http` or `https` from this computer:
 `localhost`, a name under it (`app.localhost`), or a loopback address
 (`127.0.0.1`, `::1`). Any other site becomes one with **Developer mode** in
 its site controls (the icon left of the address, under "This site"): the
-switch adds the site's host to Settings → Developer → "Also local", or takes
+switch adds the site's host to Settings → Developer tools → "Also local", or takes
 it out, and the page changes at once. That list also takes hosts typed in:
 `staging.example.org`, `*.test` for every name under one, or an address
 such as `192.168.1.4` for a server in the local network. For a page this

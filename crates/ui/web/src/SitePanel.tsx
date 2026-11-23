@@ -19,7 +19,7 @@ const PERMISSION_LABEL: Record<PermissionKind, string> = {
   clipboard: "Clipboard",
 };
 
-/** Ad blocking on this site, while the ad blocker is on (Settings → Ad blocking). */
+/** Ad blocking on this site, while the ad blocker is on (Settings → Content blocking). */
 function BlockAds({ url }: { url: string }) {
   const [ads, setAds] = useState<{ site: string | null; enabled: boolean; blocking: boolean } | null>(null);
   useEffect(() => {
@@ -213,7 +213,7 @@ function connection(item: TabItem, rt: TabRuntime | undefined): { text: string; 
 /**
  * "Developer mode": the developer bar, the caution border and the console error count for
  * this site, as for a page this computer serves (`developer.md`). Adds the
- * site's host to Settings → Developer → "Also local", or takes it out. A
+ * site's host to Settings → Developer tools → "Also local", or takes it out. A
  * page this computer serves (`own`) has them anyway.
  */
 function DevSwitch({ state, url, own }: { state: UiState; url: string; own: boolean }) {
@@ -298,7 +298,7 @@ export function SitePanel({ state, item, rt, onClose, inWindow = false }: { stat
           {!internal && !system && (
             <button title={`Your own CSS and JavaScript for ${host}`} onClick={() => { send({ cmd: "new_tab", url: `magnetite://ui/settings#code=${encodeURIComponent(host)}` }); onClose(); }}>
               <BracesIcon width={16} height={16} />
-              <span>Custom CSS & JS</span>
+              <span>User scripts and styles</span>
             </button>
           )}
           {!internal && !system && (

@@ -10,7 +10,7 @@ along.
 
 ## Using it
 
-- **Settings → Data & privacy → Import from another browser** shows a
+- **Settings → Data and privacy → Import from another browser** shows a
   button for every browser found on this computer. A click imports; the
   line below says how many spaces and tabs were added, or why nothing was.
   The command bar's "Import from another browser…" opens this section.
@@ -26,7 +26,7 @@ along.
 - Imported favorites join the favorites of their profile; an address that is
   already a favorite there is skipped. Imported Today tabs count as used at
   the time of the import, so auto-archive does not remove them at once.
-- **Settings → Data & privacy → Import a bookmarks file** takes the HTML
+- **Settings → Bookmarks → Import a bookmarks file** takes the HTML
   file a browser writes with "Export Bookmarks", and the JSON and CSV
   files Magnetite exports (`bookmarks.md`; told apart by how the file
   starts). A JSON or CSV file of several spaces comes in as a folder per

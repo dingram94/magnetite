@@ -501,7 +501,7 @@ export function Welcome() {
                 </li>
                 <li>
                   <b>Coming from Safari?</b> macOS keeps its tabs from other apps. Export its bookmarks there (File →
-                  Export → Bookmarks…) and import the file later under Settings → Data &amp; privacy.
+                  Export → Bookmarks…) and import the file later under Settings → Bookmarks.
                 </li>
               </ul>
             </>
@@ -557,7 +557,7 @@ export function Welcome() {
                       {own.length === 0 && <li className="set-hint" style={{ color: "var(--warn)" }}>Choose at least one list: without one, nothing is blocked.</li>}
                     </ul>
                   )}
-                  <Answer on={ads === "off"} title="Do not block" onClick={() => setAdsAnswer("off")}>Nothing is downloaded. You can turn it on later in Settings → Ad blocking.</Answer>
+                  <Answer on={ads === "off"} title="Do not block" onClick={() => setAdsAnswer("off")}>Nothing is downloaded. You can turn it on later in Settings → Content blocking.</Answer>
                 </div>
                 {wanted && wanted.length > 0 && (
                   <p className="set-hint">

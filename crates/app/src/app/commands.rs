@@ -1005,12 +1005,13 @@ pub(super) enum UiCommand {
         #[serde(default)]
         space: Option<String>,
     },
-    /// The bookmarks of space `space`, or of every space, as the text of a
-    /// file in `format`, with a name for the file.
+    /// The bookmarks of the spaces `spaces`, or of every space when none
+    /// is named, as the text of a file in `format`, with a name for the
+    /// file.
     ExportBookmarks {
         format: BookmarkFormat,
         #[serde(default)]
-        space: Option<String>,
+        spaces: Vec<String>,
     },
     /// Media row and tab speaker buttons; `id` is a tab id.
     Media {
@@ -2537,16 +2538,20 @@ impl MagnetiteApp {
                 self.push_state(engine);
                 return Ok(json!({ "bookmarks": added }));
             }
-            UiCommand::ExportBookmarks { format, space } => {
+            UiCommand::ExportBookmarks {
+                format,
+                spaces: named,
+            } => {
                 use magnetite_importer::export;
                 return self.with_state(|s| {
                     // The private space's bookmarks stay where they are.
                     let spaces: Vec<&Space> = (s.sidebar.spaces.iter())
                         .filter(|sp| !s.is_private_space(&sp.id))
-                        .filter(|sp| space.as_ref().is_none_or(|id| &sp.id == id))
+                        .filter(|sp| named.is_empty() || named.contains(&sp.id))
                         .collect();
+                    // Of several named, those that are still there count.
                     if spaces.is_empty() {
-                        return Err("That space is gone.".to_string());
+                        return Err(if named.len() > 1 { "Those spaces are gone." } else { "That space is gone." }.to_string());
                     }
                     let (text, ending) = match format {
                         BookmarkFormat::Html => (export::space_bookmarks_html(&spaces), "html"),

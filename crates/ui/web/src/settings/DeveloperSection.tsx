@@ -1,4 +1,4 @@
-// Settings → Developer, below the DevTools dock: the developer bar for
+// Settings → Developer tools, below the DevTools dock: the developer bar for
 // local pages and the hosts that count as local.
 import { useState } from "react";
 import { Field, Toggle } from "./fields";

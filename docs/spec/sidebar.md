@@ -57,7 +57,7 @@ the row turns the icon into a back arrow that takes the page back.
   opened in the background and was not viewed yet.
 - A click shows the tab and loads its page if needed. Tabs without a loaded
   page are dimmed. A page is unloaded once it has been off screen for more
-  than 4 hours (Settings → Tabs & archive: 10 minutes, 30 minutes,
+  than 4 hours (Settings → Tabs and archive: 10 minutes, 30 minutes,
   2, 4 or 12 hours, or never), unless it has media, is being shared, is the tab its space
   returns to, is a favorite or pinned, or is kept active. When the system runs short
   of memory, such pages are unloaded without waiting, also with "never":
@@ -68,7 +68,7 @@ the row turns the icon into a back arrow that takes the page back.
   for the space's empty window (`spaces.md`, "Look").
 - **Favorites and pinned tabs stay loaded** once opened, until they are
   closed, also when the system runs short of memory.
-- **Load pinned tabs at start** (Settings → Tabs & archive, off by
+- **Load pinned tabs at start** (Settings → Tabs and archive, off by
   default): the favorites and pinned tabs of every space load their pages
   in the background when Magnetite starts, three at a time, so none waits
   for its first click. Web panels and tabs that are no web address
@@ -173,7 +173,7 @@ Code: `crates/engine/src/tabshare.rs`, `tabshare_hook.js`;
   (`split-view.md`).
 - A favorite shows in every space, or only in the spaces it names. The
   context menu has "Show in every space" and "Show only in <the current
-  space>"; Settings → Spaces → Favorites has the choice for every favorite
+  space>"; Settings → Favorites has the choice for every favorite
   and any space, or several of them. So a space can have favorites of its own next to those
   all spaces share. A new favorite shows in every space. A favorite for
   one space only is left out of that space's Ctrl+Tab order and web panel
@@ -300,7 +300,7 @@ way ends the round. The list never takes the keyboard.
 
 | Setting | Values | Default |
 |---|---|---|
-| Settings → Tabs & archive → "Ctrl+Tab goes through the tabs" | by last use, in sidebar order | by last use |
+| Settings → Tabs and archive → "Ctrl+Tab goes through the tabs" | by last use, in sidebar order | by last use |
 
 In sidebar order the two keys go through the rows of the current space in
 the order of `Cmd+1` to `Cmd+9`: the pinned tabs, those in open folders

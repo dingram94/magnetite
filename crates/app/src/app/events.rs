@@ -366,7 +366,7 @@ impl EngineDelegate for MagnetiteApp {
             EngineEvent::DevToolsMenu { id, action } => match action {
                 DevToolsAction::Close => engine.content_close_devtools(id),
                 DevToolsAction::Dock(dock) => {
-                    // The choice becomes the setting, as in Settings → Developer.
+                    // The choice becomes the setting, as in Settings → Developer tools.
                     self.with_state(|s| s.settings.devtools_dock = dock);
                     Self::apply_devtools_dock(engine, dock);
                     self.push_state(engine);

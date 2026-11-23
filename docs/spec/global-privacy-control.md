@@ -6,7 +6,7 @@ one does is up to the website.
 
 ## The setting
 
-Settings → Data & privacy → "Tell websites not to sell or share my data".
+Settings → Data and privacy → "Tell websites not to sell or share my data".
 Off at first. Not synced.
 
 ## What is sent

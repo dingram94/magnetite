@@ -1,5 +1,5 @@
 // Developer tools for the page in front: shown for a local page (this
-// computer, or a host named in Settings → Developer), for any page shown as
+// computer, or a host named in Settings → Developer tools), for any page shown as
 // something else, and while a page is recorded. Whose project the page is,
 // its console errors, the DevTools panels a click away, emulation and the
 // time zone, the responsive split, a capture set, a recording, and a reset.

@@ -130,7 +130,7 @@ the page's own full screen.
   by site, so storage of another subdomain stays until all is deleted.
 - **Settings → Protected video → "WebKit's website data"** ("WebView2's") deletes the
   cookies, site storage and cache of every profile there. Chromium's own
-  dialog (Data & privacy) does not reach them.
+  dialog (Data and privacy) does not reach them.
 - **A page that cannot be loaded** shows a note with the reason and the
   address; reload tries the address again.
 

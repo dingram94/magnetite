@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { send, type ExtensionInfo } from "../bridge";
 import { Field, Group, Switch } from "./fields";
-import { profileLabel, profileName } from "./SpacesSection";
+import { ProfilePick, profileName } from "./SpacesSection";
 import type { Info } from "./types";
 
 export function ExtensionsSection({ info, reload }: { info: Info; reload: () => Promise<unknown> }) {
@@ -51,9 +51,7 @@ export function ExtensionsSection({ info, reload }: { info: Info; reload: () => 
     <Group>
       {several && (
         <Field side label="Profile" hint="Each profile has its own extensions, with their own data. Everything below is about the profile chosen here.">
-          <select className="field" value={profile} onChange={(e) => setChosen(e.target.value)} aria-label="Profile">
-            {profiles.map((p) => <option key={p.id} value={p.id}>{profileLabel(info, p)}</option>)}
-          </select>
+          <ProfilePick info={info} profiles={profiles} value={profile} onChoose={setChosen} />
         </Field>
       )}
       <Field label={several ? `Extensions of ${name}` : "Your extensions"} hint={several ? `The switch puts an extension into the sidebar, above your tabs, in the spaces of ${name}. Chromium's own “Pin” on its extensions page works too.` : "The switch puts an extension into the sidebar, above your tabs. Chromium's own “Pin” on its extensions page works too."}>

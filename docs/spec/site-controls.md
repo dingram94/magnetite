@@ -50,7 +50,7 @@ focus returns to the chip.
   load has finished, or "Unavailable" for other pages without a network
   origin. A page in a profile other than the default adds "Profile: name".
 - **Tools:** Capture, Share (the macOS share menu for the page's URL; macOS
-  only), Custom CSS & JS (opens Settings at this site, see below) and Developer
+  only), User scripts and styles (opens Settings at this site, see below) and Developer
   tools. Magnetite's own pages offer Share only, and nothing below.
 - **Zoom:** − and + move through Chromium's zoom steps, 25 % to 500 %; a
   click on the value gives the site the zoom every site starts with again.
@@ -101,7 +101,7 @@ and `localhost` count as they are.
 
 ## Custom CSS and JavaScript
 
-Settings → Custom CSS & JS holds CSS and JavaScript of the user's own per
+Settings → User scripts and styles holds CSS and JavaScript of the user's own per
 site: to hide a part of a page, change fonts and colours, or run a small
 script.
 
@@ -129,7 +129,7 @@ Each page has its own Chrome DevTools. `Cmd+Option+I`, View → Developer
 Tools, the site panel and the command bar ("Toggle developer tools") open or
 close them. "Inspect" in a page's context menu opens them at that element.
 
-| Settings → Developer → "Developer tools open" | Layout |
+| Settings → Developer tools → "Developer tools open" | Layout |
 |---|---|
 | Right of the page (default) | 42 % of the page's width at first; DevTools at least 240 px wide, the page 320 px |
 | Below the page | 40 % of the page's height at first; DevTools at least 120 px high, the page 160 px |
@@ -261,7 +261,7 @@ them from its preferences (`profile.content_settings.exceptions.…`).
 
 ## Deleting the data of all websites
 
-Settings → Data & privacy → "Cookies, site data and cache" has "Delete…".
+Settings → Data and privacy → "Cookies, site data and cache" has "Delete…".
 It opens Chromium's own dialog "Delete browsing data" over the page, as the
 lists of saved passwords open (`passwords-and-autofill.md`).
 

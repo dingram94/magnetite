@@ -153,9 +153,9 @@ share one. The default profile always exists.
 
 ### Choosing a profile
 
-Settings → Spaces names profiles as such. A space (on its page, or
-when it is added there) and a favorite (in the list of favorites) choose
-one of:
+Settings names profiles as such. A space (on its page in Settings →
+Spaces, or when it is added there) and a favorite (in Settings →
+Favorites) choose one of:
 
 | Choice | Profile | Logins |
 |---|---|---|
@@ -163,15 +163,17 @@ one of:
 | A profile by its name | a persistent profile | Its own logins, kept between restarts, shared by all that choose it. "A new profile" makes one named after the item. |
 | Private | a profile in memory | Its own logins, gone when Magnetite quits. Created per item and removed once nothing uses it. |
 
-The group "Profiles" lists every lasting profile with the spaces and
-favorites that use it, so what shares logins shows in one place.
+Settings → Profiles lists every lasting profile with the spaces that use
+it and the favorites that do, each in a column of their own, so what
+shares logins shows in one place. A profile needs no space: one that only
+favorites use keeps their logins apart from every space's.
 
 A private profile keeps its browsing off the disk: its Today tabs are not
 saved, synced or archived, its pinned tabs and favorites are saved with
 their home page only, its pages leave no history (`history.md`), and its
 icons are not cached (`docs/design/security.md`).
 
-Persistent profiles can be renamed in Settings → Spaces, and deleted there
+Persistent profiles can be renamed in Settings → Profiles, and deleted there
 once nothing uses them: no space, no favorite, no mini window, and no tab
 or peek that was opened from a page of that profile and still runs in it. The same holds
 for the clean-up of private profiles. The data folder of a profile deleted

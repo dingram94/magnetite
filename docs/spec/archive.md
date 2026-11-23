@@ -37,7 +37,7 @@ of a split's) and the tab each other space returns to are never archived.
 
 | Setting | Options | Default |
 |---|---|---|
-| Settings → Tabs & archive → "Archive Today tabs after" | 12 hours, 24 hours, 7 days, 30 days, Never | 12 hours |
+| Settings → Tabs and archive → "Archive Today tabs after" | 12 hours, 24 hours, 7 days, 30 days, Never | 12 hours |
 
 With "Never" no tab is archived by itself; Today tabs stay until they are
 closed. Their pages are still unloaded (`sidebar.md`). Auto-archive skips the active tab of each space,
@@ -54,14 +54,14 @@ The period is one of the settings that sync (`sync.md`).
   search field that matches title and address. A click restores a tab;
   the × on its row removes it from the archive for good.
 - The command bar finds archived tabs among its results (`command-bar.md`).
-- Settings → Tabs & archive shows the number of archived tabs.
+- Settings → Tabs and archive shows the number of archived tabs.
 
 A restored tab returns to the top of Today in the space it came from, or in
 the current space if that space is gone. It becomes the active tab and its
 record leaves the archive.
 
 The footer button is shared with the bookmarks, the history and the
-downloads. A click opens the view chosen in Settings → Tabs & archive (the
+downloads. A click opens the view chosen in Settings → Tabs and archive (the
 archive by default), or the downloads while a download runs; resting on the
 button offers all four and, below a line, Settings.
 
@@ -123,7 +123,7 @@ With "Forever" there is no period, and records only leave by hand.
 
 | Setting | Options | Default |
 |---|---|---|
-| Settings → Tabs & archive → "Keep archived tabs for" | 30, 60 or 90 days, a number of days from 1 to 3650, or Forever | 90 days |
+| Settings → Tabs and archive → "Keep archived tabs for" | 30, 60 or 90 days, a number of days from 1 to 3650, or Forever | 90 days |
 
 A typed number is saved on Enter or when the field is left. A shorter period
 deletes older records within a minute, and they cannot be brought back. The

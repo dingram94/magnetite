@@ -22,7 +22,7 @@ space with separate logins does not offer what another one saved.
 
 ## Settings
 
-Settings → Passwords & autofill:
+Settings → Passwords and autofill:
 
 | Setting | Default |
 |---|---|

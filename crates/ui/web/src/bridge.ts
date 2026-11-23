@@ -169,7 +169,7 @@ export interface Emulation {
 
 /** A page for developers (`dev.rs`). */
 export interface DevState {
-  /** Served from this computer or a host named in Settings → Developer. */
+  /** Served from this computer or a host named in Settings → Developer tools. */
   local: boolean;
   /** Console errors since the page began to load. */
   errors: number;
@@ -346,7 +346,7 @@ export interface Settings {
   external_links: "tab" | "peek" | "mini";
   /** Which space a link from another app opens in, by its site. */
   link_rules: LinkRule[];
-  /** The user's own CSS and JavaScript per site (Settings → Custom CSS & JS). */
+  /** The user's own CSS and JavaScript per site (Settings → User scripts and styles). */
   site_code: SiteCode[];
   /** The system-wide quick search key (⌥⌘N) is on; this device's own choice. */
   quick_search: boolean;
@@ -368,9 +368,9 @@ export interface Settings {
   library_opens: LibraryView;
   /** The order Ctrl+Tab goes through the tabs in: by last use, or as the sidebar lists them. */
   tab_order: "recent" | "sidebar";
-  /** Chromium's password manager and autofill: which parts are on (Settings → Passwords & autofill). */
+  /** Chromium's password manager and autofill: which parts are on (Settings → Passwords and autofill). */
   autofill: { passwords: boolean; addresses: boolean; cards: boolean; breach_check: boolean };
-  /** Tell websites not to sell or share the user's data: Global Privacy Control (Settings → Data & privacy). */
+  /** Tell websites not to sell or share the user's data: Global Privacy Control (Settings → Data and privacy). */
   global_privacy_control: boolean;
   /** Where downloads go (Settings → General): `folder` as a whole path, empty for the system's Downloads folder; `ask` to be asked for each file. A patch can empty `folder`; a new one comes from `choose_download_folder`. */
   downloads: DownloadPrefs;
@@ -378,8 +378,8 @@ export interface Settings {
   page_zoom: number;
   /** Spell check in text fields, and the languages websites are asked for, the preferred one first, as language tags; empty for the system's (Settings → General). */
   languages: { spellcheck: boolean; languages: string[] };
-  /** The ad blocker (Settings → Ad blocking); this device's own choice, never synced. */
-  /** Developer features (Settings → Developer). */
+  /** The ad blocker (Settings → Content blocking); this device's own choice, never synced. */
+  /** Developer features (Settings → Developer tools). */
   developer: { enabled: boolean; hosts: string[] };
   /** Which sites the system's own web engine shows (Settings → Protected video): the known streaming services, and sites of the user's own, by host. This device's own, never synced. */
   system_engine: { known: boolean; auto: boolean; sites: string[]; chromium: string[] };
@@ -717,7 +717,7 @@ export type Command =
   /** The text of a bookmarks file (the HTML browsers export): its bookmarks join the current space's. */
   | { cmd: "import_bookmarks"; html: string; space?: Id }
   /** The bookmarks of space `space`, or of every space, as the text of a file. */
-  | { cmd: "export_bookmarks"; format: BookmarkFormat; space?: Id }
+  | { cmd: "export_bookmarks"; format: BookmarkFormat; spaces?: Id[] }
   | { cmd: "shortcut"; shortcut: string | { select_tab: number } | { select_space: number } }
   | { cmd: "set_shortcut"; action: ShortcutAction; keys: string | null }
   | { cmd: "set_shortcut_first"; action: ShortcutAction; first: ShortcutFirst }

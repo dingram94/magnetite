@@ -1,17 +1,20 @@
 // Settings → Spaces: every space in the order of the sidebar, to add, name
-// and sort; a page per space with all that is the space's own (name, icon,
-// look, profile, what stays on this device, keys); and the profiles, each
-// with the spaces and favorites that share its logins.
-import { useEffect, useState, useRef } from "react";
+// and sort, and a page per space with all that is the space's own (name,
+// icon, look, profile, what stays on this device, keys). Settings →
+// Profiles: the profiles, each with the spaces and the favorites that share
+// its logins. Settings → Favorites: the favorites.
+import { Fragment, useEffect, useState, useRef } from "react";
 import { Favicon } from "../Favicon";
 import { iconUrl, storeIcon } from "../backgrounds";
 import { Glyph, GLYPH_NAMES, glyphFor, SpaceIcon } from "../Glyphs";
-import { Back, Forward } from "../Icons";
+import { Forward } from "../Icons";
 import { accentCss, hostOf, send } from "../bridge";
 import { useArmed } from "../dismiss";
 import { OwnImage, SpaceLookFields } from "./AppearanceSection";
+import { PickList, type PickOption } from "./PickList";
 import { Field, Group, Switch } from "./fields";
 import { keysLabel } from "./shortcutKeys";
+import { useSorting } from "./sorting";
 import type { Info, SettingsPatch } from "./types";
 
 type Space = Info["spaces"][number];
@@ -23,8 +26,6 @@ export const profileName = (p: Profile | undefined) => (!p ? "A profile that is 
 /** Choices of a profile list that are no profile: make one. */
 const NEW = "\u0000new";
 const PRIVATE = "\u0000private";
-/** A choice of a list of spaces that is no space: several of them. */
-const SOME = "\u0000some";
 
 /**
  * The name a new profile for `name` gets: a new profile is named after
@@ -38,18 +39,22 @@ function freshProfileName(info: Info, name: string) {
   return fresh;
 }
 
+/** The spaces as choices, each with its icon and its colour. */
+export function spaceOptions(spaces: Space[]): PickOption[] {
+  return spaces.map((sp) => ({ value: sp.id, label: sp.title, icon: <SpaceIcon space={sp} size={12} />, color: accentCss(sp.accent ?? undefined) }));
+}
+
 /**
- * The choices of a profile list: the lasting profiles by id, then `NEW`
- * (one named `fresh`, else after the space) and `PRIVATE`.
+ * The choices of a profile list: the lasting profiles by id, each with the
+ * spaces that use it, then `NEW` (one named `fresh`, else after the space)
+ * and `PRIVATE`.
  */
-function ProfileOptions({ info, fresh }: { info: Info; fresh?: string }) {
-  return (
-    <>
-      {info.profiles.filter((p) => !p.ephemeral).map((p) => <option key={p.id} value={p.id}>{profileName(p)}</option>)}
-      <option value={NEW}>{fresh ? `A new profile, named “${fresh}”` : "A new profile, named after the space"}</option>
-      <option value={PRIVATE}>Private: forgotten when Magnetite quits</option>
-    </>
-  );
+function profileOptions(info: Info, fresh?: string): PickOption[] {
+  return [
+    ...info.profiles.filter((p) => !p.ephemeral).map((p) => ({ value: p.id, label: profileName(p), hint: info.spaces.filter((s) => s.profile_id === p.id).map((s) => s.title).join(", ") })),
+    { value: NEW, label: "A new profile", hint: fresh ? `named “${fresh}”` : "named after the space", apart: true },
+    { value: PRIVATE, label: "Private", hint: "forgotten when Magnetite quits" },
+  ];
 }
 
 /**
@@ -57,7 +62,7 @@ function ProfileOptions({ info, fresh }: { info: Info; fresh?: string }) {
  * own or one shared with others, or a private one that is forgotten when
  * Magnetite quits. `assign` gets the id of the profile chosen.
  */
-function ProfileChoice({ info, current, name, assign, label }: { info: Info; current: string; name: string; assign: (profile: string) => Promise<unknown>; label: string }) {
+function ProfileChoice({ info, current, name, assign, label, width }: { info: Info; current: string; name: string; assign: (profile: string) => Promise<unknown>; label: string; width?: number }) {
   const now = info.profiles.find((p) => p.id === current);
   const fresh = freshProfileName(info, name);
   // A new profile is being made and given: no other choice until then,
@@ -73,29 +78,29 @@ function ProfileChoice({ info, current, name, assign, label }: { info: Info; cur
     }
   };
   return (
-    <select
-      className="field"
-      aria-label={label}
+    <PickList
+      options={profileOptions(info, fresh)}
+      chosen={[now?.ephemeral ? PRIVATE : current]}
+      label={label}
+      width={width}
+      align="right"
       disabled={creating}
-      value={now?.ephemeral ? PRIVATE : current}
-      onChange={(e) => {
-        const to = e.target.value;
+      onChoose={([to]) => {
         if (to === NEW) void create(false);
         else if (to === PRIVATE) void (now?.ephemeral ? undefined : create(true));
-        else void assign(to);
+        else if (to) void assign(to);
       }}
-    >
-      <ProfileOptions info={info} fresh={fresh} />
-    </select>
+    />
   );
 }
 
-/** A profile to choose from a list: its name and the spaces that use it, as "Work (Office, Clients)". */
-export function profileLabel(info: Pick<Info, "spaces">, p: Profile): string {
-  const spaces = info.spaces.filter((s) => s.profile_id === p.id).map((s) => s.title);
-  // A profile named after its only space says nothing twice.
-  if (spaces.length === 0 || (spaces.length === 1 && spaces[0] === profileName(p))) return profileName(p);
-  return `${profileName(p)} (${spaces.join(", ")})`;
+/**
+ * One of `profiles` to choose, for a section that is about one profile:
+ * each with the spaces that use it.
+ */
+export function ProfilePick({ info, profiles, value, onChoose }: { info: Info; profiles: Profile[]; value: string | undefined; onChoose: (profile: string) => void }) {
+  const options = profiles.map((p) => ({ value: p.id, label: profileName(p), hint: info.spaces.filter((s) => s.profile_id === p.id).map((s) => s.title).join(", ") }));
+  return <PickList options={options} chosen={value ? [value] : []} label="Profile" width={220} align="right" onChoose={([to]) => to && onChoose(to)} />;
 }
 
 /** All of one space. */
@@ -118,10 +123,6 @@ function SpacePage({ info, space, update, reload, open }: { info: Info; space: S
   const glyph = ownIcon == null ? glyphFor(space.icon) : null;
   return (
     <>
-      <button className="set-found" onClick={() => open("spaces")}>
-        <Back width={15} height={15} />
-        All spaces
-      </button>
       <Group title="Name and icon">
         <Field side label="Name">
           <input className="field" style={{ width: 240 }} value={name} maxLength={80} aria-label="Name of the space" onChange={(e) => setName(e.target.value)} onBlur={rename} onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />
@@ -163,10 +164,14 @@ function SpacePage({ info, space, update, reload, open }: { info: Info; space: S
                 : "Changing it loads this space's pages again, signed in as the other profile is."
           }
         >
-          <ProfileChoice info={info} current={space.profile_id} name={space.title} label={`Profile of ${space.title}`} assign={(to) => send({ cmd: "set_space_profile", id: space.id, profile: to }).then(reload)} />
+          <ProfileChoice info={info} current={space.profile_id} name={space.title} label={`Profile of ${space.title}`} width={220} assign={(to) => send({ cmd: "set_space_profile", id: space.id, profile: to }).then(reload)} />
         </Field>
       </Group>
-      <SpaceBookmarks space={space} reload={reload} />
+      <Group title="Bookmarks">
+        <Field side label={space.bookmarks === 0 ? "No bookmarks" : `${space.bookmarks} bookmark${space.bookmarks === 1 ? "" : "s"}`} hint="Adding this space's pinned tabs to them, deleting, importing and exporting are in Bookmarks.">
+          <button className="btn" onClick={() => open("bookmarks", space.id)}>Open Bookmarks</button>
+        </Field>
+      </Group>
       <Group title="On this device">
         <label className="set-row flex cursor-default items-start gap-4" data-search-row>
           <span className="min-w-0 flex-1" data-search-name>
@@ -194,10 +199,9 @@ function SpacePage({ info, space, update, reload, open }: { info: Info; space: S
   );
 }
 
-/** The list of spaces, the profiles and the favorites. */
+/** The list of spaces. */
 function SpaceList({ info, reload, open }: { info: Info; reload: () => Promise<unknown>; open: (section: string, item?: string) => void }) {
   const [name, setName] = useState("");
-  const { armed, arm } = useArmed();
   const kept = info.profiles.filter((p) => !p.ephemeral);
   // The profile the new space gets; it stays chosen for the next one. One
   // that is gone since falls back to the main profile.
@@ -212,83 +216,34 @@ function SpaceList({ info, reload, open }: { info: Info; reload: () => Promise<u
     void send({ cmd: "new_space", title, stay: true, profile }).then(reload);
   };
   const move = (id: string, index: number) => void send({ cmd: "move_space", id, index }).then(reload);
-  const [profile, setProfile] = useState("");
-  // Why a profile could not be deleted (it is in use since the list was drawn).
-  const [undeleted, setUndeleted] = useState<string>();
-  const deleteProfile = (id: string) =>
-    send({ cmd: "delete_profile", id }).then(
-      () => setUndeleted(undefined),
-      (e: unknown) => setUndeleted(e instanceof Error ? e.message : String(e)),
-    ).then(reload);
-  const addProfile = () => {
-    const name = profile.trim();
-    if (!name) return;
-    setProfile("");
-    void send({ cmd: "new_profile", name, ephemeral: false }).then(reload);
-  };
   // Dragging a row sorts as well: the line shows where it would land.
-  const [dragged, setDragged] = useState<string | null>(null);
-  const [over, setOver] = useState<{ id: string; below: boolean } | null>(null);
-  const isBelow = (e: React.DragEvent<HTMLElement>) => {
-    const box = e.currentTarget.getBoundingClientRect();
-    return e.clientY > box.top + box.height / 2;
-  };
-  /** Where the dragged space ends up when dropped on row `i`, or null when it would not move. */
-  const landing = (i: number, below: boolean) => {
+  /** Where the dragged space ends up when dropped on the row of `target`, or null when it would not move. */
+  const landing = (dragged: string, target: string, below: boolean) => {
     const from = info.spaces.findIndex((sp) => sp.id === dragged);
-    if (from < 0) return null;
+    const i = info.spaces.findIndex((sp) => sp.id === target);
+    if (from < 0 || i < 0) return null;
     let to = below ? i + 1 : i;
     if (from < to) to -= 1;
     return to === from ? null : to;
   };
-  const usedBy = (id: string) => [
-    ...info.spaces.filter((s) => s.profile_id === id).map((s) => s.title),
-    ...info.favorites.filter((f) => f.profile_id === id).map((f) => f.title || hostOf(f.url)),
-  ];
+  const sorting = useSorting(landing, move);
   return (
-    <>
-      <Group title="Spaces" hint="A space is a sidebar of its own for one part of your day, with its own tabs. Their order here is their order in the sidebar: drag a space by its handle to sort.">
+      <Group title="All spaces" hint="A space is a sidebar of its own for one part of your day, with its own tabs. Their order here is their order in the sidebar: drag a space by its handle to sort.">
         {info.spaces.map((sp, i) => (
           <div
             key={sp.id}
             className="set-row set-space"
             data-search-row
-            data-dragged={dragged === sp.id || undefined}
-            data-before={(over?.id === sp.id && !over.below) || undefined}
-            data-after={(over?.id === sp.id && over.below) || undefined}
-            draggable={info.spaces.length > 1}
-            onDragStart={(e) => {
-              setDragged(sp.id);
-              e.dataTransfer.effectAllowed = "move";
-              e.dataTransfer.setData("text/plain", sp.title);
-            }}
-            onDragEnd={() => { setDragged(null); setOver(null); }}
-            onDragOver={(e) => {
-              const below = isBelow(e);
-              if (landing(i, below) === null) return setOver(null);
-              e.preventDefault();
-              if (over?.id !== sp.id || over.below !== below) setOver({ id: sp.id, below });
-            }}
-            onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setOver(null)}
-            onDrop={(e) => {
-              e.preventDefault();
-              const index = landing(i, isBelow(e));
-              if (dragged && index !== null) move(dragged, index);
-              setDragged(null);
-              setOver(null);
-            }}
+            data-sortable={info.spaces.length > 1 || undefined}
+            {...sorting.row(sp.id)}
+            {...sorting.handle(sp.id, info.spaces.length > 1)}
           >
-            {/* Not a <button>: a drag cannot start on one. The row is what is shown being dragged. */}
+            {/* The whole row is dragged by; the handle shows that, and takes the keys. */}
             <span
               className="set-grip"
               role="button"
               tabIndex={info.spaces.length > 1 ? 0 : -1}
               aria-disabled={info.spaces.length < 2 || undefined}
-              draggable={info.spaces.length > 1}
-              onDragStart={(e) => {
-                const row = e.currentTarget.parentElement;
-                if (row) e.dataTransfer.setDragImage(row, 16, row.offsetHeight / 2);
-              }}
               title="Drag to sort, or press the up and down arrow keys"
               aria-label={`Sort ${sp.title}: space ${i + 1} of ${info.spaces.length}. The up and down arrow keys move it.`}
               onKeyDown={(e) => {
@@ -319,60 +274,111 @@ function SpaceList({ info, reload, open }: { info: Info; reload: () => Promise<u
           <div className="flex flex-wrap gap-2">
             {/* The name gives way to the profile, which shows its choice whole. */}
             <input className="field" style={{ flex: "1 1 160px", maxWidth: 280 }} value={name} placeholder="Name" maxLength={80} aria-label="Name of the new space" onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
-            <select className="field" style={{ width: "auto", flex: "none", maxWidth: 360 }} aria-label="Profile of the new space" value={chosen} onChange={(e) => setSpaceProfile(e.target.value)}>
-              <ProfileOptions info={info} />
-            </select>
+            <PickList options={profileOptions(info)} chosen={[chosen]} label="Profile of the new space" width={190} onChoose={([to]) => to && setSpaceProfile(to)} />
             <button className="btn" disabled={!name.trim()} onClick={add}>Add space</button>
           </div>
         </Field>
       </Group>
+  );
+}
 
+/**
+ * Settings → Profiles: every lasting profile with the spaces and the
+ * favorites that use it, each in a column of its own (a space and a
+ * favorite may have the same name), to add, rename and delete.
+ */
+export function ProfilesSection({ info, reload, open }: { info: Info; reload: () => Promise<unknown>; open: (section: string, item?: string) => void }) {
+  const { armed, arm } = useArmed();
+  const kept = info.profiles.filter((p) => !p.ephemeral);
+  const main = kept.find((p) => p.is_default)?.id;
+  const [profile, setProfile] = useState("");
+  // Why a profile could not be deleted (it is in use since the list was drawn).
+  const [undeleted, setUndeleted] = useState<string>();
+  const deleteProfile = (id: string) =>
+    send({ cmd: "delete_profile", id }).then(
+      () => setUndeleted(undefined),
+      (e: unknown) => setUndeleted(e instanceof Error ? e.message : String(e)),
+    ).then(reload);
+  const addProfile = () => {
+    const name = profile.trim();
+    if (!name) return;
+    setProfile("");
+    void send({ cmd: "new_profile", name, ephemeral: false }).then(reload);
+  };
+  const spacesOf = (id: string) => info.spaces.filter((s) => s.profile_id === id);
+  // A favorite without a profile of its own is in the main one.
+  const favoritesOf = (id: string) => info.favorites.filter((f) => (f.profile_id ?? main) === id).map((f) => f.title || hostOf(f.url));
+  return (
+    <>
       <Group title="Profiles" hint="A profile is a set of logins of its own: cookies, site data and extensions. What uses the same profile is signed in to the same accounts; a second profile is how to use a second account of one site. A private profile is not listed: it is forgotten when Magnetite quits.">
+        <div className="set-row set-profile set-profile-head" aria-hidden="true">
+          <span>Profile</span>
+          <span>Used by spaces</span>
+          <span>Used by favorites</span>
+          <span />
+        </div>
         {kept.map((p) => {
-          const used = usedBy(p.id);
+          const spaces = spacesOf(p.id);
+          const favorites = favoritesOf(p.id);
           return (
-            <div key={p.id} className="set-row flex flex-wrap items-center gap-x-3 gap-y-2" data-search-row>
+            <div key={p.id} className="set-row set-profile" data-search-row>
               {p.is_default ? (
-                <span className="set-label w-[200px] shrink-0" data-search-name>Main profile</span>
+                <span className="set-label" data-search-name>Main profile</span>
               ) : (
-                <span className="sr-only" data-search-name>{p.name} profile</span>
+                <span>
+                  <span className="sr-only" data-search-name>{p.name} profile</span>
+                  <input
+                    key={p.name}
+                    className="field"
+                    defaultValue={p.name}
+                    aria-label="Name of the profile"
+                    onBlur={(e) => {
+                      const to = e.target.value.trim();
+                      if (to && to !== p.name) void send({ cmd: "rename_profile", id: p.id, name: to }).then(reload);
+                    }}
+                    onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                  />
+                </span>
               )}
-              {!p.is_default && (
-                <input
-                  key={p.name}
-                  className="field"
-                  style={{ width: 200 }}
-                  defaultValue={p.name}
-                  aria-label="Name of the profile"
-                  onBlur={(e) => {
-                    const to = e.target.value.trim();
-                    if (to && to !== p.name) void send({ cmd: "rename_profile", id: p.id, name: to }).then(reload);
-                  }}
-                  onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-                />
-              )}
-              <span className="set-hint min-w-0 flex-1" style={{ marginTop: 0 }} data-search-name>
-                {used.length > 0 ? `Used by ${used.join(", ")}` : "Not used"}
+              <span className="set-hint min-w-0" style={{ marginTop: 0 }} data-search-name>
+                <span className="set-profile-cap">Used by spaces: </span>
+                {spaces.length > 0
+                  ? spaces.map((sp, i) => (
+                      <span key={sp.id}>
+                        {i > 0 && ", "}
+                        <button className="set-profile-link" title={`Everything about ${sp.title}`} onClick={() => open("spaces", sp.id)}>{sp.title}</button>
+                      </span>
+                    ))
+                  : "None"}
                 {!p.synced && " · only on this device"}
               </span>
-              {!p.is_default && used.length === 0 && (
-                <button className="btn" data-danger={armed === p.id || undefined} title="Its logins, cookies and site data leave this computer the next time Magnetite starts" onClick={() => arm(p.id, () => void deleteProfile(p.id))}>
-                  {armed === p.id ? "Click again to delete" : "Delete"}
-                </button>
-              )}
+              <span className="set-hint min-w-0" style={{ marginTop: 0 }} data-search-name>
+                <span className="set-profile-cap">Used by favorites: </span>
+                {favorites.length > 0 ? favorites.join(", ") : "None"}
+              </span>
+              <span>
+                {!p.is_default && spaces.length === 0 && favorites.length === 0 && (
+                  <button className="btn" data-danger={armed === p.id || undefined} title="Its logins, cookies and site data leave this computer the next time Magnetite starts" onClick={() => arm(p.id, () => void deleteProfile(p.id))}>
+                    {armed === p.id ? "Click again to delete" : "Delete"}
+                  </button>
+                )}
+              </span>
             </div>
           );
         })}
         {undeleted && <p className="set-row set-hint" role="alert" style={{ marginTop: 0, color: "var(--danger)" }}>That profile was not deleted: {undeleted}.</p>}
-        <Field label="A new profile" hint="It starts empty: nothing is signed in. Give it to a space when adding the space or on its page, or to a favorite below.">
+        <Field label="A new profile" hint="It starts empty: nothing is signed in. Give it to a space when adding the space or on its page, or to a favorite in Favorites.">
           <div className="flex gap-2">
             <input className="field" style={{ maxWidth: 280 }} placeholder="Name" aria-label="Name of the new profile" value={profile} onChange={(e) => setProfile(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addProfile()} />
             <button className="btn" disabled={!profile.trim()} onClick={addProfile}>Add profile</button>
           </div>
         </Field>
       </Group>
-
-      <FavoriteList info={info} reload={reload} />
+      <Group title="A profile for favorites only" hint="A profile needs no space. A favorite runs in its own profile whichever space is in front: its page stays signed in to that profile's accounts, and its cookies and site data stay apart from the space's. The history is one list for all profiles; only a private profile leaves nothing in it.">
+        <Field side label="Give a favorite a profile" hint="In Favorites, each favorite has a list to choose its profile from.">
+          <button className="btn" onClick={() => open("favorites")}>Open Favorites</button>
+        </Field>
+      </Group>
     </>
   );
 }
@@ -389,11 +395,11 @@ function Grip() {
 type Favorite = Info["favorites"][number];
 
 /**
- * The favorites: to sort (inside the list of their profile, as in the
+ * Settings → Favorites: the favorites, to sort (inside the list of their profile, as in the
  * sidebar), name, show in every space or in some, give a profile, remove,
  * and add by address.
  */
-function FavoriteList({ info, reload }: { info: Info; reload: () => Promise<unknown> }) {
+export function FavoritesSection({ info, reload }: { info: Info; reload: () => Promise<unknown> }) {
   const { armed, arm } = useArmed(4000);
   const main = info.profiles.find((p) => p.is_default)?.id ?? "";
   const profileOf = (f: Favorite) => f.profile_id ?? main;
@@ -404,21 +410,24 @@ function FavoriteList({ info, reload }: { info: Info; reload: () => Promise<unkn
   const listOf = (f: Favorite) => info.favorites.filter((x) => profileOf(x) === profileOf(f));
   const move = (id: string, index: number) => void send({ cmd: "move_favorite", id, index }).then(reload);
   // Dragging by the handle sorts: the line shows where the favorite would land.
-  const [dragged, setDragged] = useState<string | null>(null);
-  const [over, setOver] = useState<{ id: string; below: boolean } | null>(null);
-  const isBelow = (e: React.DragEvent<HTMLElement>) => {
-    const box = e.currentTarget.getBoundingClientRect();
-    return e.clientY > box.top + box.height / 2;
-  };
   /** Where the dragged favorite ends up in its list when dropped on `target`; null: nowhere new, or another profile's list. */
-  const landing = (target: Favorite, below: boolean) => {
+  const landing = (dragged: string, targetId: string, below: boolean) => {
     const from = info.favorites.find((f) => f.id === dragged);
-    if (!from || profileOf(from) !== profileOf(target)) return null;
+    const target = info.favorites.find((f) => f.id === targetId);
+    if (!from || !target || profileOf(from) !== profileOf(target)) return null;
     const list = listOf(target);
     let to = list.indexOf(target) + (below ? 1 : 0);
     if (list.indexOf(from) < to) to -= 1;
     return to === list.indexOf(from) ? null : to;
   };
+  const sorting = useSorting(landing, move);
+  // As in the sidebar: one list per profile, in the order of the profiles.
+  const rank = (f: Favorite) => {
+    const at = info.profiles.findIndex((p) => p.id === profileOf(f));
+    return at < 0 ? info.profiles.length : at;
+  };
+  const byProfile = info.favorites.map((f, i) => ({ f, i })).sort((a, b) => rank(a.f) - rank(b.f) || a.i - b.i).map((x) => x.f);
+  const lists = new Set(info.favorites.map(profileOf)).size;
   // The spaces just chosen for a favorite, until its save is done and the
   // page has read the answer: two quick clicks both count, the second on
   // top of the first. Each choice has a number, so the answer to an older
@@ -431,8 +440,6 @@ function FavoriteList({ info, reload }: { info: Info; reload: () => Promise<unkn
     const done = () => setPicked((p) => (p[id]?.turn === turn ? Object.fromEntries(Object.entries(p).filter(([key]) => key !== id)) : p));
     void send({ cmd: "set_favorite_spaces", id, spaces }).then(reload).then(done, done);
   };
-  // The favorites whose spaces are being chosen one by one.
-  const [choosing, setChoosing] = useState<Set<string>>(new Set());
   const [url, setUrl] = useState("");
   const [failed, setFailed] = useState<string>();
   const add = () => {
@@ -445,52 +452,30 @@ function FavoriteList({ info, reload }: { info: Info; reload: () => Promise<unkn
     );
   };
   return (
-    <Group title="Favorites" hint="The sites at the top of the sidebar. A favorite shows in every space, or only in the spaces you choose. Each runs in a profile; a copy in another profile (right-click → Duplicate favorite) is a second account of the same site.">
-      {info.favorites.map((f) => {
+    <Group title="Favorites" hint="The sites at the top of the sidebar. A favorite shows in every space, or only in the spaces you choose. Each runs in a profile; a copy in another profile (right-click → Duplicate favorite) is a second account of the same site. As in the sidebar, every profile has a list of its own, and a favorite is sorted inside its list.">
+      {byProfile.map((f, i) => {
         const name = f.title || hostOf(f.url);
         const list = listOf(f);
         const place = list.indexOf(f);
         const shows = picked[f.id]?.spaces ?? f.only_in;
-        const some = shows.length > 1 || choosing.has(f.id);
+        // The first of a profile's list is headed by the profile, once there is more than one list.
+        const heads = lists > 1 && (i === 0 || profileOf(byProfile[i - 1]!) !== profileOf(f));
         return (
+          <Fragment key={f.id}>
+          {heads && <div className="set-row set-fav-head">{profileName(info.profiles.find((p) => p.id === profileOf(f)))}</div>}
           <div
-            key={f.id}
             className="set-row set-fav"
             data-search-row
-            data-dragged={dragged === f.id || undefined}
-            data-before={(over?.id === f.id && !over.below) || undefined}
-            data-after={(over?.id === f.id && over.below) || undefined}
-            onDragOver={(e) => {
-              const below = isBelow(e);
-              if (landing(f, below) === null) return setOver(null);
-              e.preventDefault();
-              if (over?.id !== f.id || over.below !== below) setOver({ id: f.id, below });
-            }}
-            onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setOver(null)}
-            onDrop={(e) => {
-              e.preventDefault();
-              const index = landing(f, isBelow(e));
-              if (dragged && index !== null) move(dragged, index);
-              setDragged(null);
-              setOver(null);
-            }}
+            {...sorting.row(f.id)}
           >
             <span
               className="set-grip"
               role="button"
               tabIndex={list.length > 1 ? 0 : -1}
               aria-disabled={list.length < 2 || undefined}
-              draggable={list.length > 1}
-              title="Drag to sort, or press the up and down arrow keys"
+              {...sorting.handle(f.id, list.length > 1)}
+              title={list.length > 1 ? "Drag to sort, or press the up and down arrow keys" : "The only favorite of its profile: there is nothing to sort"}
               aria-label={`Sort ${name}: favorite ${place + 1} of ${list.length}. The up and down arrow keys move it.`}
-              onDragStart={(e) => {
-                setDragged(f.id);
-                e.dataTransfer.effectAllowed = "move";
-                e.dataTransfer.setData("text/plain", name);
-                const row = e.currentTarget.parentElement;
-                if (row) e.dataTransfer.setDragImage(row, 16, 24);
-              }}
-              onDragEnd={() => { setDragged(null); setOver(null); }}
               onKeyDown={(e) => {
                 const to = e.key === "ArrowUp" ? place - 1 : e.key === "ArrowDown" ? place + 1 : -1;
                 if (to < 0 || to >= list.length) return;
@@ -516,26 +501,8 @@ function FavoriteList({ info, reload }: { info: Info; reload: () => Promise<unkn
               }}
               onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
             />
-            <select
-              className="field"
-              style={{ width: 170 }}
-              aria-label={`Where ${name} shows`}
-              value={some ? SOME : (shows[0] ?? "")}
-              onChange={(e) => {
-                const to = e.target.value;
-                const next = new Set(choosing);
-                if (to === SOME) next.add(f.id);
-                else next.delete(f.id);
-                setChoosing(next);
-                if (to !== SOME) choose(f.id, to ? [to] : []);
-              }}
-            >
-              <option value="">Every space</option>
-              {info.spaces.map((sp) => <option key={sp.id} value={sp.id}>Only {sp.title}</option>)}
-              {/* Also while it is the choice made: with a space deleted, two may be left. */}
-              {(info.spaces.length > 2 || some) && <option value={SOME}>Several spaces…</option>}
-            </select>
-            <span style={{ width: 170 }} className="flex-none">
+            <PickList several none="Every space" options={spaceOptions(info.spaces)} chosen={shows} label={`Where ${name} shows`} onChoose={(spaces) => choose(f.id, spaces)} />
+            <span className="flex-none">
               <ProfileChoice info={info} current={profileOf(f)} name={name} label={`Profile of ${name}`} assign={(to) => send({ cmd: "set_tab_profile", id: f.id, profile: to === main ? null : to }).then(reload)} />
             </span>
             <button
@@ -546,25 +513,8 @@ function FavoriteList({ info, reload }: { info: Info; reload: () => Promise<unkn
             >
               {armed === f.id ? "Click again" : "Remove"}
             </button>
-            {some && (
-              <span className="flex basis-full flex-wrap items-center gap-1.5 pl-[58px]" role="group" aria-label={`Spaces ${name} shows in`}>
-                {info.spaces.map((sp) => {
-                  const on = shows.includes(sp.id);
-                  return (
-                    <button
-                      key={sp.id}
-                      className="set-chip"
-                      aria-pressed={on}
-                      onClick={() => choose(f.id, on ? shows.filter((x) => x !== sp.id) : [...shows, sp.id])}
-                    >
-                      {sp.title}
-                    </button>
-                  );
-                })}
-                {shows.length === 0 && <span className="set-hint" style={{ marginTop: 0 }}>None chosen: it shows in every space.</span>}
-              </span>
-            )}
           </div>
+          </Fragment>
         );
       })}
       <Field label="A new favorite" hint="By its address. It comes last, in the main profile, and shows in every space.">
@@ -574,37 +524,6 @@ function FavoriteList({ info, reload }: { info: Info; reload: () => Promise<unkn
         </div>
         {failed && <p className="set-hint" role="alert" style={{ color: "var(--danger)" }}>{failed}</p>}
       </Field>
-    </Group>
-  );
-}
-
-/** All that is about the bookmarks of one space. */
-function SpaceBookmarks({ space, reload }: { space: Space; reload: () => Promise<unknown> }) {
-  const { armed, arm } = useArmed(4000);
-  const [said, setSaid] = useState<string>();
-  const say = (text: string) => { setSaid(text); void reload(); };
-  const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
-  const toBookmarks = (remove: boolean) =>
-    send({ cmd: "pinned_to_bookmarks", space: space.id, remove }).then(
-      (r) => say(`${r.bookmarks ? `${plural(r.bookmarks, "bookmark")} added` : "Every pinned tab is a bookmark already"}${remove ? `; ${plural(r.pinned, "pinned tab")} closed.` : "."}`),
-      (e: unknown) => setSaid(e instanceof Error ? e.message : String(e)),
-    );
-  return (
-    <Group title="Bookmarks" hint="Saved addresses of this space, apart from its tabs. Importing and exporting is in Data & privacy.">
-      <Field side label={space.bookmarks === 0 ? "No bookmarks" : plural(space.bookmarks, "bookmark")} hint="Deleting removes all of them, folders included. It cannot be undone.">
-        <button className="btn" disabled={!space.bookmark_tree} data-danger={armed === "clear" || undefined} onClick={() => arm("clear", () => void send({ cmd: "clear_bookmarks", space: space.id }).then((r) => say(`${plural(r.bookmarks, "bookmark")} deleted.`)))}>
-          {armed === "clear" ? "Click again to delete" : "Delete bookmarks…"}
-        </button>
-      </Field>
-      <Field side label="Pinned tabs as bookmarks" hint={`${space.pinned === 0 ? "This space has no pinned tabs." : `${plural(space.pinned, "pinned tab")}.`} Copy keeps them pinned. Move closes them after: they are bookmarks then, and in the archive. Folders come along; smart folders do not.`}>
-        <div className="flex gap-2">
-          <button className="btn" disabled={space.pinned === 0} onClick={() => void toBookmarks(false)}>Copy</button>
-          <button className="btn" disabled={space.pinned === 0} data-danger={armed === "move" || undefined} onClick={() => arm("move", () => void toBookmarks(true))}>
-            {armed === "move" ? "Click again to move" : "Move…"}
-          </button>
-        </div>
-      </Field>
-      {said && <p className="set-row set-hint" role="status" style={{ marginTop: 0 }}>{said}</p>}
     </Group>
   );
 }

@@ -8,7 +8,7 @@ all spaces at once.
 
 The footer button at the bottom left of the sidebar opens it: rest on the
 button and choose "Bookmarks", or make bookmarks what a click opens (Settings
-→ Tabs & archive). The command "Open bookmarks" does the same. The view
+→ Tabs and archive). The command "Open bookmarks" does the same. The view
 takes the sidebar's place; the arrow at its top goes back.
 
 - **One section per space**, in the order of the spaces, whatever space is
@@ -60,11 +60,12 @@ The command bar finds bookmarks too (`command-bar.md`).
   `import.md`).
 - A bookmarks file adds its bookmarks to the space chosen for it, the
   current one unless another is chosen (`import.md`).
-- **Settings → Data & privacy → Export bookmarks** writes the bookmarks of
-  all spaces, or of one, to a file where downloads go
+- **Settings → Bookmarks → Export bookmarks** writes the bookmarks of
+  all spaces, or of the spaces ticked (one or several), to a file where
+  downloads go
   (`magnetite-bookmarks.html`, `.json` or `.csv`):
   - **HTML**: the bookmarks file browsers read and write, a folder per
-    space when all are exported. Magnetite reads it back.
+    space when more than one is exported. Magnetite reads it back.
   - **JSON**: a list of spaces, each with its bookmarks and folders
     (`title` and `url`, or `folder` and `children`).
   - **CSV**: a row per bookmark (`space`, `folder`, `title`, `url`), the
@@ -77,11 +78,12 @@ The command bar finds bookmarks too (`command-bar.md`).
     folders with one name side by side come back as one. HTML and JSON
     keep them apart.
   The private space is never exported. Nothing is sent anywhere.
-- The page of a space in Settings → Spaces has, for that space's
-  bookmarks:
+- Settings → Bookmarks shows the bookmarks of one space, the space in
+  front until another is chosen from its list (`settings.md`). For that
+  space's bookmarks it has:
   - **Delete bookmarks…** (click again to confirm): all of them, folders
     included.
-  - **Pinned tabs as bookmarks → Copy**: every pinned tab becomes a
+  - **Add pinned tabs to bookmarks → Copy**: every pinned tab becomes a
     bookmark of its pinned page, in the folders it is pinned in; an
     address that is a bookmark already is left out, and so is a smart
     folder. The tabs stay pinned.
