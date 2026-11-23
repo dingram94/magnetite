@@ -23,7 +23,8 @@ export type PickOption = {
  * which is the list's first entry and unticks them all. Without, one is
  * chosen and the list closes. Options with a colour show on the button as
  * tags, as many as have room, then how many more ("+3"); resting the
- * pointer on it names them all.
+ * pointer on it names them all. The list closes when the keyboard leaves
+ * it (Tab), on Esc and on a click elsewhere.
  */
 export function PickList({ options, chosen, several, none, label, width = 170, align = "left", disabled, onChoose }: {
   options: PickOption[];
@@ -61,7 +62,8 @@ export function PickList({ options, chosen, several, none, label, width = 170, a
     const away = (e: PointerEvent) => !root.current?.contains(e.target as Node) && setOpen(false);
     const key = (e: KeyboardEvent) => {
       if (e.key === "Escape") return close(true);
-      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      // The arrow keys are the list's only while the keyboard is in it.
+      if ((e.key !== "ArrowDown" && e.key !== "ArrowUp") || !root.current?.contains(document.activeElement)) return;
       const all = [...(list.current?.querySelectorAll("button") ?? [])];
       const at = all.indexOf(document.activeElement as HTMLButtonElement);
       e.preventDefault();
@@ -95,7 +97,7 @@ export function PickList({ options, chosen, several, none, label, width = 170, a
     onChoose(chosen.includes(value) ? chosen.filter((v) => v !== value) : [...chosen, value]);
   };
   return (
-    <span ref={root} className="set-pick" style={{ width }}>
+    <span ref={root} className="set-pick" style={{ width }} onBlur={(e) => e.relatedTarget && !e.currentTarget.contains(e.relatedTarget) && setOpen(false)}>
       <button className="field set-pick-button" disabled={disabled} aria-haspopup="menu" aria-expanded={open} aria-label={`${label}: ${names || none || "nothing chosen"}`} title={more > 0 ? names : undefined} onClick={() => setOpen(!open)}>
         {now.length === 0 && <span className="truncate">{none}</span>}
         {now.some((o) => o.color)

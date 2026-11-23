@@ -59,7 +59,7 @@ export function BookmarksSection({ info, reload, item }: { info: Info; reload: (
       )}
       {space && <SpaceBookmarks key={space.id} space={space} reload={reload} />}
       <Group title="As a file">
-        <ImportBookmarksFile key={space?.id} spaces={info.spaces} current={space?.id ?? info.active_space} />
+        <ImportBookmarksFile key={space?.id} spaces={info.spaces} current={space?.id ?? info.active_space} imported={reload} />
         <ExportBookmarks spaces={info.spaces} />
       </Group>
     </>

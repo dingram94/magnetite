@@ -42,10 +42,10 @@ export function ImportBrowsers() {
   );
 }
 
-/** A bookmarks file, as Safari and other browsers export it: its bookmarks join the current space's. */
+/** A bookmarks file, as Safari and other browsers export it: its bookmarks join those of the space chosen (`current` at first). `imported` hears when some were added. */
 type Space = Info["spaces"][number];
 
-export function ImportBookmarksFile({ spaces, current }: { spaces: Space[]; current: string }) {
+export function ImportBookmarksFile({ spaces, current, imported }: { spaces: Space[]; current: string; imported?: () => Promise<unknown> }) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ text: string; failed: boolean } | null>(null);
@@ -59,6 +59,8 @@ export function ImportBookmarksFile({ spaces, current }: { spaces: Space[]; curr
       const r = await send({ cmd: "import_bookmarks", html: await file.text(), space: space?.id });
       const where = space ? space.title : "the current space";
       setResult({ text: r.bookmarks ? `Added ${count(r.bookmarks, "bookmark")} to ${where}.` : `Every bookmark of that file is in ${where} already.`, failed: false });
+      // The page counts the bookmarks of its space: it reads them again.
+      void imported?.().catch(() => undefined);
     } catch (e: unknown) {
       setResult({ text: e instanceof Error ? e.message : String(e), failed: true });
     } finally {

@@ -117,13 +117,24 @@ export function useSorting(landing: (dragged: string, target: string, below: boo
 
   const handle = (id: string, enabled: boolean) => ({
     onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
-      if (!enabled || e.button !== 0 || drag.current) return;
+      // A press that never became a drag is over, wherever it was let go.
+      if (!enabled || e.button !== 0 || drag.current?.active) return;
       // A field in the row is typed into and chosen from, not dragged by.
       if ((e.target as HTMLElement).closest("input, select, textarea")) return;
       const row = e.currentTarget.closest<HTMLElement>("[data-sort-row]");
       if (!row) return;
       const scroller = row.closest<HTMLElement>("main");
       drag.current = { id, pointer: e.pointerId, handle: e.currentTarget, row, scroller, startY: e.clientY, startScroll: scroller?.scrollTop ?? 0, y: e.clientY, active: false, frame: 0, slots: [] };
+      // Until the press is a drag the handle does not keep the pointer, so
+      // a release elsewhere (the pointer left it sideways) is heard here.
+      const pressed = drag.current;
+      const over = () => {
+        window.removeEventListener("pointerup", over, true);
+        window.removeEventListener("pointercancel", over, true);
+        if (drag.current === pressed && !pressed.active) drag.current = null;
+      };
+      window.addEventListener("pointerup", over, true);
+      window.addEventListener("pointercancel", over, true);
     },
     onPointerMove: (e: React.PointerEvent<HTMLElement>) => {
       const d = drag.current;
