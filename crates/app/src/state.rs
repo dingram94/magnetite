@@ -33,12 +33,13 @@ pub use adopt::icon_image_ok;
 pub(crate) use folders::folder_in_tree_mut;
 pub use history::{History, Visit};
 pub use private::ShowIn;
+pub use profiles::ChosenProfile;
 pub use settings::{
     AdblockSettings, Appearance, NewTabLinks, PROTECTED_VIDEO_SITES, Settings, SidebarEffect,
     SiteSearch, SyncSettings, SystemEngine, TabOrder, typed_site,
 };
 pub use share::read_link as read_shared;
-pub use tabs::{SpaceProfile, TabSwitch};
+pub use tabs::TabSwitch;
 
 /// What the sidebar UI receives on every change.
 #[derive(Serialize)]

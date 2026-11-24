@@ -503,25 +503,23 @@ export function FavoritesSection({ info, reload }: { info: Info; reload: () => P
     setFailed(undefined);
     setAdding(true);
     try {
-      // The favorite first: an address that is none leaves no profile behind.
-      const { id } = await send({ cmd: "add_favorite", url: address });
+      // The app makes the favorite and its profile in one step: an address
+      // that is none makes no profile, and the favorite is never in the main
+      // profile on its way to another. A new profile is named after the
+      // site, as the app names the favorite.
+      const site = address.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").split(/[/?#]/)[0]!.replace(/^www\./, "");
+      const profile = chosen === PRIVATE ? "private" : chosen === NEW ? { new: freshProfileName(info, site) } : { id: chosen };
+      const added = await send({ cmd: "add_favorite", url: address, profile });
       setUrl("");
-      if (chosen !== main) {
-        // As the app names the favorite: by its site.
-        const site = address.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").split(/[/?#]/)[0]!.replace(/^www\./, "");
-        const to =
-          chosen === NEW ? (await send({ cmd: "new_profile", name: freshProfileName(info, site), ephemeral: false })).id
-          : chosen === PRIVATE ? (await send({ cmd: "new_profile", name: `${site} (private)`, ephemeral: true })).id
-          : chosen;
-        // A profile made for this favorite is not made again for the next.
-        if (chosen === NEW) setNewProfile(to);
-        await send({ cmd: "set_tab_profile", id, profile: to });
-      }
+      // A profile made for this favorite is not made again for the next.
+      if (chosen === NEW) setNewProfile(added.profile);
     } catch (e) {
       setFailed(e instanceof Error ? e.message : String(e));
     } finally {
+      // The form waits for the new profile to be on the list: until then
+      // the choice would show the main profile, and the next favorite get it.
+      await reload().catch(() => undefined);
       setAdding(false);
-      void reload();
     }
   };
   return (

@@ -1,14 +1,83 @@
 //! Profiles: which one a tab runs in, private profiles, and the favorites,
 //! which are kept as one list per profile.
 
-use magnetite_core::Id;
+use magnetite_core::{Id, TabItem};
 
-use super::{AppState, new_id};
+use super::{AppState, new_id, now};
 
 /// How many deleted profiles a device remembers.
 const MAX_DELETED_PROFILES: usize = 256;
 
+/// The profile a new space or favorite runs in (`AppState::new_space`,
+/// `AppState::add_favorite`; without one, the default profile):
+/// `{"id": …}`, `{"new": name}` or `"private"`.
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChosenProfile {
+    /// A profile there is already.
+    Id(Id),
+    /// A new lasting profile by this name.
+    New(String),
+    /// A private profile of its own: in memory, gone when Magnetite quits.
+    Private,
+}
+
 impl AppState {
+    /// The id of the profile `chosen` for something new named `name`; a
+    /// profile it asks for is made now (a private one is named
+    /// "`name` (private)"). Errs, making nothing, when the profile chosen is
+    /// gone or is one of the private space's.
+    pub(super) fn chosen_profile(
+        &mut self,
+        chosen: Option<ChosenProfile>,
+        name: &str,
+    ) -> Result<Id, &'static str> {
+        Ok(match chosen {
+            None => self.default_profile_id(),
+            Some(ChosenProfile::Id(id)) => {
+                let known = self.sidebar.profiles.iter().any(|p| p.id == id);
+                // The private space's profiles are for nothing else.
+                if !known || self.private_profiles.contains(&id) {
+                    return Err("That profile is gone.");
+                }
+                id
+            }
+            Some(ChosenProfile::New(name)) => self.add_profile(&name, false),
+            Some(ChosenProfile::Private) => self.add_profile(&format!("{name} (private)"), true),
+        })
+    }
+
+    /// Add a favorite for `url` (an address already checked), named `host`
+    /// until its page says what it is called, last in the list of the
+    /// profile `chosen` (a private one is named after the site). The
+    /// favorite and its profile come in one step: no save or sync sees the
+    /// one without the other. Returns the favorite's id and its profile's.
+    pub fn add_favorite(
+        &mut self,
+        url: &str,
+        host: &str,
+        chosen: Option<ChosenProfile>,
+    ) -> Result<(Id, Id), &'static str> {
+        let site = host.strip_prefix("www.").unwrap_or(host);
+        let profile_id = self.chosen_profile(chosen, site)?;
+        let id = new_id();
+        let favorite = TabItem {
+            home_url: Some(url.into()),
+            created_at: Some(now()),
+            ..TabItem::new(id.clone(), url, host)
+        };
+        let lists = &mut self.sidebar.favorites;
+        match lists.iter_mut().find(|f| f.profile_id == profile_id) {
+            Some(list) => list.items.push(favorite),
+            None => lists.push(magnetite_core::FavoriteSet {
+                profile_id: profile_id.clone(),
+                items: vec![favorite],
+            }),
+        }
+        self.normalise_favorites();
+        Ok((id, profile_id))
+    }
+
     /// Engine context of the page in front: the one the active tab runs in
     /// (a favorite without a profile of its own runs in the default one, as
     /// `present` opens it), else the active space's. Extensions are per
@@ -240,7 +309,7 @@ impl AppState {
 mod tests {
     use magnetite_core::{Profile, Space, TabItem};
 
-    use super::MAX_DELETED_PROFILES;
+    use super::{ChosenProfile, MAX_DELETED_PROFILES};
     use crate::state::TabRuntime;
     use crate::state::testing::{state, tab};
 
@@ -266,6 +335,29 @@ mod tests {
         // A favorite naming a profile that is gone runs in the profile of its list.
         assert_eq!(s.profile_for_tab("stale"), Some(s.default_profile_id()));
         assert_eq!(s.profile_for_tab("a"), Some(space_profile));
+    }
+
+    #[test]
+    fn a_new_favorite_comes_in_its_private_profile_and_a_gone_profile_makes_nothing() {
+        let mut s = state();
+        let url = "https://www.example.org/";
+        let (id, profile) = s
+            .add_favorite(url, "www.example.org", Some(ChosenProfile::Private))
+            .unwrap();
+        let made = s.sidebar.profiles.iter().find(|p| p.id == profile).unwrap();
+        assert_eq!(
+            (made.name.as_str(), made.ephemeral),
+            ("example.org (private)", true)
+        );
+        assert_eq!(s.profile_for_tab(&id), Some(profile));
+        assert!(s.is_private_tab(&id), "never in the main profile");
+
+        let profiles = s.sidebar.profiles.len();
+        let favorites = s.sidebar.favorites.clone();
+        let gone = Some(ChosenProfile::Id("gone".into()));
+        assert!(s.add_favorite(url, "www.example.org", gone).is_err());
+        assert_eq!(s.sidebar.profiles.len(), profiles);
+        assert_eq!(s.sidebar.favorites, favorites);
     }
 
     #[test]

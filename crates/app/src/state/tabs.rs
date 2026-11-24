@@ -8,20 +8,7 @@ use magnetite_engine::{ContentId, MemoryPressure};
 
 use super::history::page_of;
 use super::settings::{MAX_ARCHIVE_DAYS, NEVER_ARCHIVE};
-use super::{AppState, ArchivedTab, Peek, TabRuntime, new_id, now};
-
-/// The profile a new space runs in (`AppState::new_space`; without one, the
-/// default profile): `{"id": …}`, `{"new": name}` or `"private"`.
-#[derive(Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SpaceProfile {
-    /// A profile there is already.
-    Id(Id),
-    /// A new lasting profile by this name.
-    New(String),
-    /// A private profile of its own: in memory, gone when Magnetite quits.
-    Private,
-}
+use super::{AppState, ArchivedTab, ChosenProfile, Peek, TabRuntime, new_id, now};
 
 pub(super) fn find_in_tree_mut<'a>(
     nodes: &'a mut [SidebarNode],
@@ -674,26 +661,14 @@ impl AppState {
         &mut self,
         title: &str,
         icon: Option<String>,
-        profile: Option<SpaceProfile>,
+        profile: Option<ChosenProfile>,
     ) -> Result<Id, &'static str> {
         let title = match title.trim() {
             "" => "New space",
             title => title,
         };
-        let profile_id = match profile {
-            None => self.default_profile_id(),
-            Some(SpaceProfile::Id(id)) => {
-                let known = self.sidebar.profiles.iter().any(|p| p.id == id);
-                // The private space's profiles are for nothing else.
-                if !known || self.private_profiles.contains(&id) {
-                    return Err("That profile is gone.");
-                }
-                id
-            }
-            Some(SpaceProfile::New(name)) => self.add_profile(&name, false),
-            // Named like the private profile a space's page makes.
-            Some(SpaceProfile::Private) => self.add_profile(&format!("{title} (private)"), true),
-        };
+        // A private one is named like the one a space's page makes.
+        let profile_id = self.chosen_profile(profile, title)?;
         let id = new_id();
         let space = Space {
             id: id.clone(),
@@ -1273,17 +1248,17 @@ mod tests {
         assert!(profile_of(&s, &main).is_default);
 
         let work = s
-            .new_space("Work", None, Some(SpaceProfile::New("Work".into())))
+            .new_space("Work", None, Some(ChosenProfile::New("Work".into())))
             .unwrap();
         let lasting = profile_of(&s, &work);
         assert_eq!((lasting.name.as_str(), lasting.ephemeral), ("Work", false));
         let office = s
-            .new_space("Office", None, Some(SpaceProfile::Id(lasting.id.clone())))
+            .new_space("Office", None, Some(ChosenProfile::Id(lasting.id.clone())))
             .unwrap();
         assert_eq!(profile_of(&s, &office).id, lasting.id, "shared with Work");
 
         let secret = s
-            .new_space("Secret", None, Some(SpaceProfile::Private))
+            .new_space("Secret", None, Some(ChosenProfile::Private))
             .unwrap();
         let private = profile_of(&s, &secret);
         assert_eq!(
@@ -1300,12 +1275,12 @@ mod tests {
     fn a_new_space_is_refused_a_profile_that_is_gone_or_the_private_spaces() {
         let mut s = state();
         let spaces = s.sidebar.spaces.len();
-        let gone = SpaceProfile::Id("gone".into());
+        let gone = ChosenProfile::Id("gone".into());
         assert!(s.new_space("Work", None, Some(gone)).is_err());
         let private_space = s.open_private_space(false);
         let theirs = s.space(&private_space).unwrap().profile_id.clone();
         assert!(
-            s.new_space("Work", None, Some(SpaceProfile::Id(theirs)))
+            s.new_space("Work", None, Some(ChosenProfile::Id(theirs)))
                 .is_err()
         );
         assert_eq!(

@@ -526,6 +526,12 @@ export interface SyncSettings {
   last_error: string | null;
 }
 
+/**
+ * The profile a new space or favorite runs in: one there is, a new one by
+ * this name, or a private one of its own.
+ */
+export type ChosenProfile = { id: Id } | { new: string } | "private";
+
 export type Command =
   | { cmd: "ready" }
   | { cmd: "activate_tab"; id: Id }
@@ -593,10 +599,9 @@ export type Command =
   | { cmd: "toggle_web_panel"; id: Id }
   /**
    * A new space; it becomes the current one unless `stay` is set. It runs in
-   * `profile`: one there is, a new one by this name, or a private one of its
-   * own; without it, in the main profile.
+   * `profile`; without it, in the main profile.
    */
-  | { cmd: "new_space"; title: string; icon?: string; stay?: boolean; profile?: { id: Id } | { new: string } | "private" }
+  | { cmd: "new_space"; title: string; icon?: string; stay?: boolean; profile?: ChosenProfile }
   | { cmd: "rename_space"; id: Id; title?: string; icon?: string }
   | { cmd: "delete_space"; id: Id }
   | { cmd: "move_space"; id: Id; index: number }
@@ -753,7 +758,8 @@ export type Command =
   | { cmd: "set_tab_profile"; id: Id; profile: Id | null }
   | { cmd: "set_favorite_spaces"; id: Id; spaces: Id[] }
   | { cmd: "move_favorite"; id: Id; index: number }
-  | { cmd: "add_favorite"; url: string }
+  /** A new favorite, last in the list of `profile`; without it, of the main profile. */
+  | { cmd: "add_favorite"; url: string; profile?: ChosenProfile }
   /** The path of the data folder to the clipboard. */
   | { cmd: "copy_data_dir" }
   /** The data folder in the system's file manager. */
@@ -879,7 +885,7 @@ interface Replies {
   /** The recorded page's next picture (a JPEG, base64), or the end. */
   dev_record_frame: { frame?: string; done?: boolean };
   new_profile: { id: Id };
-  add_favorite: { id: Id };
+  add_favorite: { id: Id; profile: Id };
   copy_data_dir: { ok: boolean };
   export_bookmarks: { text: string; name: string; bookmarks: number };
   smart_save: { id: Id };
