@@ -49,7 +49,9 @@ A section's name has no "&": "Tabs and archive".
   the import from another browser (`import.md`; a bookmarks file is
   imported and exported in Bookmarks), the servers
   Magnetite talks to, each with what for, what websites are told
-  (`global-privacy-control.md`), and where the data lives.
+  (`global-privacy-control.md`), and where the data lives: the path of
+  the data folder, as text to select, with "Copy" beside it and "Open",
+  which shows the folder in the system's file manager.
 
 The address names the section: `magnetite://ui/settings#links`.
 
@@ -58,8 +60,14 @@ The address names the section: `magnetite://ui/settings#links`.
 Four sections of the group Organization:
 
 - **Spaces**: every space in the order of the sidebar, each with its icon,
-  its profile, "only on this device" and its keys where it has them. A
-  click on a space opens its page. A space is moved by dragging it (its
+  its name, its profile, "only on this device" and its keys where it has
+  them. The name is a field: the space is renamed in the list. "Private"
+  is a switch on the row: on, the space gets a private profile of its own,
+  forgotten when Magnetite quits (`spaces.md`); off, it gets back the
+  profile it had before, or the main one where that is not known any more
+  (the page was left since). Either way its pages load again. The arrow at
+  the end of the row, or a click on the row beside the name, opens the
+  space's page. A space is moved by dragging it (its
   handle on the left, or the row): it follows the pointer, with the
   hand closed, and the other spaces make room where it lands; Esc gives
   up. With the
@@ -70,7 +78,8 @@ Four sections of the group Organization:
 - **Profiles**: every lasting profile with what uses it, in two columns:
   "Used by spaces" and "Used by favorites" (a space and a favorite may
   have the same name). A space named there opens its page. A profile is
-  renamed there, and deleted once nothing uses it (`spaces.md`). "A new
+  renamed there, and deleted once nothing uses it (`spaces.md`); the
+  columns stand in line whether a profile has that button or not. "A new
   profile" adds an empty one by name, to give to a space or a favorite
   afterwards. The section says that a profile may be for favorites only,
   and what that means for logins and for the history. In a narrow page
@@ -78,8 +87,12 @@ Four sections of the group Organization:
 - **Favorites**: every favorite, to name, to sort inside the list of its
   profile (drag its handle, or the arrow keys on it), to show in every
   space or in the spaces ticked (below), to give a profile, and to remove (its page
-  is in the archive afterwards). "A new favorite" adds one by its
-  address (`sidebar.md`).
+  is in the archive afterwards). The columns are headed "Name", "Shows
+  in" and "Profile"; a narrow page has no room for columns, and none of
+  the heads. "A new favorite" adds one by its address (`sidebar.md`), in
+  the profile chosen beside the address (the choices of "Choosing a
+  profile" in `spaces.md`; a new profile is named after the site); the
+  choice stays for the next favorite.
   With favorites in more than one profile, each profile's list is
   headed by the profile's name, in the order of the profiles. The handle
   of a profile's only favorite is greyed out and says why.

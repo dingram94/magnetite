@@ -576,7 +576,7 @@ export function Welcome() {
             <>
               <Heading title="How it looks">
                 The sidebar and Magnetite's own pages; web pages keep their own design. This page follows what you choose.
-                Each space can have a colour and a background of its own later, in Settings → Appearance.
+                Each space can have a color and a background of its own later, in Settings → Appearance.
               </Heading>
               <section className="set-card">
                 <div className="set-label">Back, forward and the address</div>

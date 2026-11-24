@@ -92,9 +92,9 @@ export function Toggle({ label, hint, checked, onChange }: { label: string; hint
   );
 }
 
-export function Switch({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+export function Switch({ label, checked, disabled, onChange }: { label: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void }) {
   return (
-    <button type="button" role="switch" aria-label={label} aria-checked={checked} onClick={() => onChange(!checked)} className="relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors" style={{ background: checked ? "var(--accent)" : "rgba(255,255,255,0.15)" }}>
+    <button type="button" role="switch" aria-label={label} aria-checked={checked} disabled={disabled} onClick={() => onChange(!checked)} className="relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-50" style={{ background: checked ? "var(--accent)" : "rgba(255,255,255,0.15)" }}>
       <span className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all" style={{ left: checked ? 18 : 2 }} />
     </button>
   );

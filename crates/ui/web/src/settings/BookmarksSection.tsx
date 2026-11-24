@@ -24,7 +24,7 @@ function SpaceBookmarks({ space, reload }: { space: Space; reload: () => Promise
       (e: unknown) => setSaid(e instanceof Error ? e.message : String(e)),
     );
   return (
-    <Group title={`Bookmarks of ${space.title}`} hint="Saved addresses of this space, apart from its tabs.">
+    <Group title={`Bookmarks in ${space.title}`} hint="Saved addresses of this space, apart from its tabs.">
       <Field side label={space.bookmarks === 0 ? "No bookmarks" : plural(space.bookmarks, "bookmark")} hint="Deleting removes all of them, folders included. It cannot be undone.">
         <button className="btn" disabled={!space.bookmark_tree} data-danger={armed === "clear" || undefined} onClick={() => arm("clear", () => void send({ cmd: "clear_bookmarks", space: space.id }).then((r) => say(`${plural(r.bookmarks, "bookmark")} deleted.`)))}>
           {armed === "clear" ? "Click again to delete" : "Delete bookmarks…"}

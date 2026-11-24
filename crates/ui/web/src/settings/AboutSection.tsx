@@ -49,11 +49,11 @@ export function About({ info, update }: { info: Info; update: (patch: SettingsPa
         </div>
       </Field>
 
-      <Field label="Licence" hint="Magnetite is free software under the European Union Public Licence 1.2 (EUPL-1.2): use, study, share and change it; changed versions you share stay under the same licence. It builds on open-source software whose licences travel with it. This software uses code of FFmpeg licensed under the LGPLv2.1; how to get its source is in the open-source licences.">
+      <Field label="License" hint="Magnetite is free software under the European Union Public Licence 1.2 (EUPL-1.2): use, study, share and change it; changed versions you share stay under the same license. It builds on open-source software whose licenses travel with it. This software uses code of FFmpeg licensed under the LGPLv2.1; how to get its source is in the open-source licenses.">
         <div className="flex flex-wrap gap-2">
-          <button className="btn" data-search-name onClick={() => open("magnetite://ui/licenses#magnetite")}>EUPL-1.2 licence</button>
-          <button className="btn" data-search-name onClick={() => open("magnetite://ui/licenses#notices")}>Open-source licences</button>
-          <button className="btn" data-search-name onClick={() => open("chrome://credits")}>Chromium licences</button>
+          <button className="btn" data-search-name onClick={() => open("magnetite://ui/licenses#magnetite")}>EUPL-1.2 license</button>
+          <button className="btn" data-search-name onClick={() => open("magnetite://ui/licenses#notices")}>Open-source licenses</button>
+          <button className="btn" data-search-name onClick={() => open("chrome://credits")}>Chromium licenses</button>
         </div>
       </Field>
       </Group>
@@ -75,7 +75,7 @@ function Updates({ checkUpdates, update }: { checkUpdates: boolean; update: (pat
   const line =
     !st || st.state === "idle" ? "Not checked yet."
     : st.state === "unavailable" ? "This build does not update itself: it has no release key. Updates come with the next release from the project's page."
-    : st.state === "system" ? "Your system's updates bring new versions of Magnetite (dnf, apt or the software centre). Magnetite offers a restart once one is installed."
+    : st.state === "system" ? "Your system's updates bring new versions of Magnetite (dnf, apt or the software center). Magnetite offers a restart once one is installed."
     : st.state === "checking" ? "Checking…"
     : st.state === "up_to_date" ? `Magnetite is up to date. Last checked ${new Date(st.checked_at * 1000).toLocaleString()}.`
     : st.state === "available" ? `Magnetite ${st.version} is available.`

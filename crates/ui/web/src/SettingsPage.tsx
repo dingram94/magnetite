@@ -50,7 +50,7 @@ const GROUPS: { label: string; sections: Section[] }[] = [
       { id: "video", label: "Protected video", Icon: VideoIcon, title: "Protected video", intro: "Some streaming services do not play in Magnetite's Chromium engine yet. Their pages open in your system's own web engine instead." },
       { id: "permissions", label: "Permissions", Icon: CameraIcon, title: "Permissions", intro: "The websites that may, or may not, use your camera, microphone or location, send notifications, open pop-ups or read the clipboard. A website asks first; this is what you answered." },
       { id: "autofill", label: "Passwords and autofill", Icon: KeyIcon, title: "Passwords and autofill", intro: "Magnetite can keep your passwords, addresses and cards and fill them in for you. What it saves stays on this computer." },
-      { id: "code", label: "User scripts and styles", Icon: BracesIcon, title: "User scripts and styles", intro: "Change how a site looks or behaves with CSS and JavaScript of your own: hide a part of a page, change its fonts or colours, or run a small script on it. They are for web pages, not for Magnetite's own." },
+      { id: "code", label: "User scripts and styles", Icon: BracesIcon, title: "User scripts and styles", intro: "Change how a site looks or behaves with CSS and JavaScript of your own: hide a part of a page, change its fonts or colors, or run a small script on it. They are for web pages, not for Magnetite's own." },
     ],
   },
   {
@@ -396,7 +396,7 @@ export function SettingsPage() {
           </Field>
           </Group>
           <Group title="What websites are told">
-            <Toggle label="Tell websites not to sell or share my data" hint="Global Privacy Control: every request to a website carries the signal, and a page can read it in its scripts. Some laws oblige a website to honour it; whether one does is up to the website." checked={settings.global_privacy_control} onChange={(v) => update({ global_privacy_control: v })} />
+            <Toggle label="Tell websites not to sell or share my data" hint="Global Privacy Control: every request to a website carries the signal, and a page can read it in its scripts. Some laws oblige a website to honor it; whether one does is up to the website." checked={settings.global_privacy_control} onChange={(v) => update({ global_privacy_control: v })} />
           </Group>
           <Group title="What Magnetite talks to" hint="Nothing else leaves this computer: no telemetry, no usage data, no account.">
             <ul className="set-list set-talks">
@@ -410,7 +410,7 @@ export function SettingsPage() {
           </Group>
           <Group title="On this computer">
           <Field label="Where your data lives" hint="The sidebar, archive and settings are in state.json, the history in history.json; Chromium's profile data (cookies, cache, extensions) in the cef folder next to it.">
-            <code className="block rounded-lg bg-white/5 px-3 py-2 text-[12px] text-[var(--secondary)]">{info.data_dir}</code>
+            <DataFolder path={info.data_dir} />
           </Field>
           {info.keychain === "test" && (
             <Field
@@ -861,5 +861,29 @@ function SiteSearches({ saved, save }: { saved: SiteSearch[]; save: (sites: Site
         <button className="btn" onClick={() => setRows((list) => [...list, { keyword: "", name: "", url: "" }])}>Add site</button>
       </div>
     </Field>
+  );
+}
+
+/** The path of the data folder: text to select, a button that copies it and one that shows the folder in the file manager. */
+function DataFolder({ path }: { path: string }) {
+  const [said, setSaid] = useState<string>();
+  const copy = () =>
+    send({ cmd: "copy_data_dir" }).then(
+      (r) => setSaid(r.ok ? "Copied" : "Could not copy"),
+      () => setSaid("Could not copy"),
+    );
+  useEffect(() => {
+    if (!said) return;
+    const t = window.setTimeout(() => setSaid(undefined), 2000);
+    return () => window.clearTimeout(t);
+  }, [said]);
+  return (
+    <div className="flex items-center gap-2">
+      <code className="set-path min-w-0 flex-1 rounded-lg bg-white/5 px-3 py-2 text-[12px] text-[var(--secondary)]">{path}</code>
+      <button className="btn flex-none" onClick={() => void copy()}>
+        <span aria-live="polite">{said ?? "Copy"}</span>
+      </button>
+      <button className="btn flex-none" title="Shows the folder in your file manager" onClick={() => void send({ cmd: "open_data_dir" }).catch(() => setSaid("Could not open"))}>Open</button>
+    </div>
   );
 }

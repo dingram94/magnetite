@@ -754,6 +754,10 @@ export type Command =
   | { cmd: "set_favorite_spaces"; id: Id; spaces: Id[] }
   | { cmd: "move_favorite"; id: Id; index: number }
   | { cmd: "add_favorite"; url: string }
+  /** The path of the data folder to the clipboard. */
+  | { cmd: "copy_data_dir" }
+  /** The data folder in the system's file manager. */
+  | { cmd: "open_data_dir" }
   | { cmd: "pinned_to_bookmarks"; space: Id; remove?: boolean }
   | { cmd: "clear_bookmarks"; space: Id }
   | { cmd: "duplicate_favorite"; id: Id }
@@ -875,6 +879,8 @@ interface Replies {
   /** The recorded page's next picture (a JPEG, base64), or the end. */
   dev_record_frame: { frame?: string; done?: boolean };
   new_profile: { id: Id };
+  add_favorite: { id: Id };
+  copy_data_dir: { ok: boolean };
   export_bookmarks: { text: string; name: string; bookmarks: number };
   smart_save: { id: Id };
   smart_connect: Account;

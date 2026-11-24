@@ -56,13 +56,13 @@ function profileOption(info: Info, p: Profile): PickOption {
 
 /**
  * The choices of a profile list: the lasting profiles by id, each with the
- * spaces that use it, then `NEW` (one named `fresh`, else after the space)
- * and `PRIVATE`.
+ * spaces that use it, then `NEW` (one named `fresh`, else after what it is
+ * for: `after`) and `PRIVATE`.
  */
-function profileOptions(info: Info, fresh?: string): PickOption[] {
+function profileOptions(info: Info, fresh?: string, after = "space"): PickOption[] {
   return [
     ...info.profiles.filter((p) => !p.ephemeral).map((p) => profileOption(info, p)),
-    { value: NEW, label: "A new profile", hint: fresh ? `named “${fresh}”` : "named after the space", apart: true },
+    { value: NEW, label: "A new profile", hint: fresh ? `named “${fresh}”` : `named after the ${after}`, apart: true },
     { value: PRIVATE, label: "Private", hint: "forgotten when Magnetite quits" },
   ];
 }
@@ -225,6 +225,28 @@ function SpaceList({ info, reload, open }: { info: Info; reload: () => Promise<u
     void send({ cmd: "new_space", title, stay: true, profile }).then(reload);
   };
   const move = (id: string, index: number) => send({ cmd: "move_space", id, index }).then(reload);
+  const main = kept.find((p) => p.is_default)?.id ?? "";
+  // The profile a space had before it was made private here, to give back
+  // when it is private no longer; the main one where that is not known.
+  const before = useRef<Record<string, string>>({});
+  // The space whose profile is being changed: one change at a time.
+  const [changing, setChanging] = useState<string>();
+  const setPrivate = async (sp: Space, on: boolean) => {
+    setChanging(sp.id);
+    try {
+      let to = before.current[sp.id];
+      if (on) {
+        before.current[sp.id] = sp.profile_id;
+        to = (await send({ cmd: "new_profile", name: `${sp.title} (private)`, ephemeral: true })).id;
+      } else if (!to || !kept.some((p) => p.id === to)) {
+        to = main;
+      }
+      if (to) await send({ cmd: "set_space_profile", id: sp.id, profile: to });
+      await reload();
+    } finally {
+      setChanging(undefined);
+    }
+  };
   // Dragging a row sorts as well: the line shows where it would land.
   /** Where the dragged space ends up when dropped on the row of `target`, or null when it would not move. */
   const landing = (dragged: string, target: string, below: boolean) => {
@@ -237,8 +259,11 @@ function SpaceList({ info, reload, open }: { info: Info; reload: () => Promise<u
   };
   const sorting = useSorting(landing, move);
   return (
-      <Group title="All spaces" hint="A space is a sidebar of its own for one part of your day, with its own tabs. Their order here is their order in the sidebar: drag a space by its handle to sort.">
-        {info.spaces.map((sp, i) => (
+      <Group title="All spaces" hint="A space is a sidebar of its own for one part of your day, with its own tabs. Their order here is their order in the sidebar: drag a space by its handle to sort. A private space forgets its logins, cookies and site data when Magnetite quits.">
+        {info.spaces.map((sp, i) => {
+          const profile = info.profiles.find((p) => p.id === sp.profile_id);
+          const isPrivate = !!profile?.ephemeral;
+          return (
           <div
             key={sp.id}
             className="set-row set-space"
@@ -264,21 +289,40 @@ function SpaceList({ info, reload, open }: { info: Info; reload: () => Promise<u
             >
               <Grip />
             </span>
-            <button className="set-space-open" onClick={() => open("spaces", sp.id)} title={`Everything about ${sp.title}`}>
-              <span className="set-space-icon" style={{ color: accentCss(sp.accent ?? undefined) }}><SpaceIcon space={sp} size={16} /></span>
-              <span className="min-w-0 flex-1">
-                <span className="set-label block truncate" data-search-name>{sp.title}</span>
-                <span className="set-hint block truncate" style={{ marginTop: 0 }}>
-                  {profileName(info.profiles.find((p) => p.id === sp.profile_id))}
-                  {!sp.synced && " · only on this device"}
-                  {sp.keys && ` · ${keysLabel(sp.keys)}`}
-                  {sp.id === info.active_space && " · current"}
-                </span>
+            <span className="set-space-icon" style={{ color: accentCss(sp.accent ?? undefined) }}><SpaceIcon space={sp} size={16} /></span>
+            <span className="sr-only" data-search-name>{sp.title}</span>
+            <input
+              key={sp.title}
+              className="field set-space-name"
+              defaultValue={sp.title}
+              maxLength={80}
+              aria-label={`Name of the space ${sp.title}`}
+              onBlur={(e) => {
+                const to = e.target.value.trim();
+                if (!to) e.target.value = sp.title;
+                else if (to !== sp.title) void send({ cmd: "rename_space", id: sp.id, title: to }).then(reload);
+              }}
+              onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+            />
+            {/* The rest of the row opens the space's page; the keyboard has the arrow for that. */}
+            <button className="set-space-open" tabIndex={-1} aria-hidden="true" onClick={() => open("spaces", sp.id)} title={`Everything about ${sp.title}`}>
+              <span className="set-hint block truncate" style={{ marginTop: 0 }}>
+                {isPrivate ? "Private profile" : profileName(profile)}
+                {!sp.synced && " · only on this device"}
+                {sp.keys && ` · ${keysLabel(sp.keys)}`}
+                {sp.id === info.active_space && " · current"}
               </span>
-              <Forward width={15} height={15} className="text-[var(--muted)]" />
+            </button>
+            <label className="set-space-private" title={isPrivate ? "Private: its logins, cookies and site data are gone when Magnetite quits. Turning it off loads its pages again in the profile it had before, or the main one." : "Make this space private: its pages load again in a profile of its own that is forgotten when Magnetite quits."}>
+              <span>Private</span>
+              <Switch label={`${sp.title} is private`} checked={isPrivate} disabled={changing !== undefined} onChange={(on) => void setPrivate(sp, on)} />
+            </label>
+            <button className="set-space-go" onClick={() => open("spaces", sp.id)} title={`Everything about ${sp.title}`} aria-label={`Everything about ${sp.title}`}>
+              <Forward width={15} height={15} />
             </button>
           </div>
-        ))}
+          );
+        })}
         <Field label="A new space" hint="It comes last in the sidebar. Its profile decides which logins its pages use.">
           <div className="flex flex-wrap gap-2">
             {/* The name gives way to the profile, which shows its choice whole. */}
@@ -368,7 +412,7 @@ export function ProfilesSection({ info, reload, open }: { info: Info; reload: ()
               <span>
                 {!p.is_default && spaces.length === 0 && favorites.length === 0 && (
                   <button className="btn" data-danger={armed === p.id || undefined} title="Its logins, cookies and site data leave this computer the next time Magnetite starts" onClick={() => arm(p.id, () => void deleteProfile(p.id))}>
-                    {armed === p.id ? "Click again to delete" : "Delete"}
+                    {armed === p.id ? "Click again" : "Delete"}
                   </button>
                 )}
               </span>
@@ -383,7 +427,7 @@ export function ProfilesSection({ info, reload, open }: { info: Info; reload: ()
           </div>
         </Field>
       </Group>
-      <Group title="A profile for favorites only" hint="A profile needs no space. A favorite runs in its own profile whichever space is in front: its page stays signed in to that profile's accounts, and its cookies and site data stay apart from the space's. The history is one list for all profiles; only a private profile leaves nothing in it.">
+      <Group title="Profiles for favorites only" hint="A profile needs no space. A favorite runs in its own profile whichever space is in front: its page stays signed in to that profile's accounts, and its cookies and site data stay apart from the space's. The history is one list for all profiles; only a private profile leaves nothing in it.">
         <Field side label="Give a favorite a profile" hint="In Favorites, each favorite has a list to choose its profile from.">
           <button className="btn" onClick={() => open("favorites")}>Open Favorites</button>
         </Field>
@@ -447,17 +491,51 @@ export function FavoritesSection({ info, reload }: { info: Info; reload: () => P
   };
   const [url, setUrl] = useState("");
   const [failed, setFailed] = useState<string>();
-  const add = () => {
+  // The profile the new favorite gets; it stays chosen for the next one. One
+  // that is gone since falls back to the main profile.
+  const [newProfile, setNewProfile] = useState<string>();
+  const kept = info.profiles.filter((p) => !p.ephemeral);
+  const chosen = newProfile && (newProfile === NEW || newProfile === PRIVATE || kept.some((p) => p.id === newProfile)) ? newProfile : main;
+  const [adding, setAdding] = useState(false);
+  const add = async () => {
     const address = url.trim();
-    if (!address) return;
+    if (!address || adding) return;
     setFailed(undefined);
-    send({ cmd: "add_favorite", url: address }).then(
-      () => { setUrl(""); void reload(); },
-      (e: unknown) => setFailed(e instanceof Error ? e.message : String(e)),
-    );
+    setAdding(true);
+    try {
+      // The favorite first: an address that is none leaves no profile behind.
+      const { id } = await send({ cmd: "add_favorite", url: address });
+      setUrl("");
+      if (chosen !== main) {
+        // As the app names the favorite: by its site.
+        const site = address.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "").split(/[/?#]/)[0]!.replace(/^www\./, "");
+        const to =
+          chosen === NEW ? (await send({ cmd: "new_profile", name: freshProfileName(info, site), ephemeral: false })).id
+          : chosen === PRIVATE ? (await send({ cmd: "new_profile", name: `${site} (private)`, ephemeral: true })).id
+          : chosen;
+        // A profile made for this favorite is not made again for the next.
+        if (chosen === NEW) setNewProfile(to);
+        await send({ cmd: "set_tab_profile", id, profile: to });
+      }
+    } catch (e) {
+      setFailed(e instanceof Error ? e.message : String(e));
+    } finally {
+      setAdding(false);
+      void reload();
+    }
   };
   return (
     <Group title="Favorites" hint="The sites at the top of the sidebar. A favorite shows in every space, or only in the spaces you choose. Each runs in a profile; a copy in another profile (right-click → Duplicate favorite) is a second account of the same site. As in the sidebar, every profile has a list of its own, and a favorite is sorted inside its list.">
+      {info.favorites.length > 0 && (
+        <div className="set-row set-fav set-fav-cols" aria-hidden="true">
+          <span />
+          <span />
+          <span>Name</span>
+          <span>Shows in</span>
+          <span>Profile</span>
+          <span />
+        </div>
+      )}
       {info.favorites.map((f, i) => {
         const name = f.title || hostOf(f.url);
         const list = listOf(f);
@@ -494,8 +572,7 @@ export function FavoritesSection({ info, reload }: { info: Info; reload: () => P
             <span className="sr-only" data-search-name>{name} {hostOf(f.url)}</span>
             <input
               key={f.title}
-              className="field min-w-0 flex-1"
-              style={{ minWidth: 140 }}
+              className="field min-w-0"
               defaultValue={f.title}
               placeholder={hostOf(f.url)}
               title={f.url}
@@ -507,7 +584,7 @@ export function FavoritesSection({ info, reload }: { info: Info; reload: () => P
               onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
             />
             <PickList several none="Every space" options={spaceOptions(info.spaces)} chosen={shows} label={`Where ${name} shows`} onChoose={(spaces) => choose(f.id, spaces)} />
-            <span className="flex-none">
+            <span>
               <ProfileChoice info={info} current={profileOf(f)} name={name} label={`Profile of ${name}`} assign={(to) => send({ cmd: "set_tab_profile", id: f.id, profile: to === main ? null : to }).then(reload)} />
             </span>
             <button
@@ -522,10 +599,11 @@ export function FavoritesSection({ info, reload }: { info: Info; reload: () => P
           </Fragment>
         );
       })}
-      <Field label="A new favorite" hint="By its address. It comes last, in the main profile, and shows in every space.">
-        <div className="flex gap-2">
-          <input className="field" style={{ maxWidth: 360 }} placeholder="example.com" aria-label="Address of the new favorite" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} />
-          <button className="btn" disabled={!url.trim()} onClick={add}>Add favorite</button>
+      <Field label="A new favorite" hint="By its address. It comes last in the list of its profile and shows in every space. Its profile decides which logins its page uses.">
+        <div className="flex flex-wrap gap-2">
+          <input className="field" style={{ flex: "1 1 200px", maxWidth: 360 }} placeholder="example.com" aria-label="Address of the new favorite" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void add()} />
+          <PickList options={profileOptions(info, undefined, "site")} chosen={[chosen]} label="Profile of the new favorite" width={190} onChoose={([to]) => to && setNewProfile(to)} />
+          <button className="btn" disabled={!url.trim() || adding} onClick={() => void add()}>Add favorite</button>
         </div>
         {failed && <p className="set-hint" role="alert" style={{ color: "var(--danger)" }}>{failed}</p>}
       </Field>

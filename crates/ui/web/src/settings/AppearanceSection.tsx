@@ -30,7 +30,7 @@ export function ColourSwatches({ value, onPick }: { value: Color | null | undefi
         const on = sameColour(value ?? DEFAULT_ACCENT, c);
         return <button key={name} type="button" className="swatch" title={name} aria-label={name} aria-pressed={on} data-on={on || undefined} style={{ background: accentCss(c) }} onClick={() => onPick(c)} />;
       })}
-      <label className="swatch custom" title="Any colour">
+      <label className="swatch custom" title="Any color">
         <input type="color" value={toHex(value)} onChange={(e) => onPick(fromHex(e.target.value))} />
       </label>
     </div>
@@ -140,13 +140,13 @@ export function SpaceLookFields({ info, space, update, reload }: { info: Info; s
   const stored = lookOf(saved, space.id);
   return (
     <>
-      <Field side label="Colour" hint="Tints the sidebar and outlines the focused page in split view. It syncs with the space.">
+      <Field side label="Color" hint="Tints the sidebar and outlines the focused page in split view. It syncs with the space.">
         <ColourSwatches value={space.accent} onPick={colour} />
       </Field>
-      <Field side label="Colour strength" hint="How much of the space colour the window takes.">
+      <Field side label="Color strength" hint="How much of the space color the window takes.">
         <Slider value={look.tint} min={0} max={30} step={1} unit="%" reset={8} onChange={(v, now) => setLook({ tint: v }, now)} />
       </Field>
-      <Field label="Background" hint="An effect in the space colour across the window, or a picture of your own under the sidebar's rows.">
+      <Field label="Background" hint="An effect in the space color across the window, or a picture of your own under the sidebar's rows.">
         <div className="flex flex-wrap items-center gap-3">
           <select className="field" style={{ width: 200 }} value={look.sidebar_effect} aria-label="Background" onChange={(e) => setLook({ sidebar_effect: e.target.value as SpaceLook["sidebar_effect"] }, true)}>
             {EFFECTS.map(([label, effect]) => <option key={effect} value={effect}>{label}</option>)}
@@ -233,7 +233,7 @@ export function AppearanceSection({ info, update, open }: { info: Info; update: 
       </Field>
       </Group>
       <Group>
-        <Field side label="Colours and backgrounds" hint="Each space has a colour and a background of its own. They are with the space, in Settings → Spaces.">
+        <Field side label="Colors and backgrounds" hint="Each space has a color and a background of its own. They are with the space, in Settings → Spaces.">
           <button className="btn" onClick={() => open("spaces")}>Open Spaces</button>
         </Field>
       </Group>

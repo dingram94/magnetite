@@ -792,9 +792,15 @@ pub(super) enum UiCommand {
         index: usize,
     },
     /// A new favorite for address `url`, last in the main profile's list.
+    /// Answers with its id.
     AddFavorite {
         url: String,
     },
+    /// Put the path of the data folder on the clipboard (Settings → Data
+    /// and privacy shows it).
+    CopyDataDir,
+    /// Show the data folder in the system's file manager.
+    OpenDataDir,
     /// The pinned tabs of space `space` as bookmarks of that space; with
     /// `remove` they then leave Pinned (closed, into the archive).
     PinnedToBookmarks {
@@ -1842,12 +1848,13 @@ impl MagnetiteApp {
                 // Named by its site until its page says what it is called.
                 let site = url.split_once("://").map_or(url.as_str(), |(_, rest)| rest);
                 let host = site.split(['/', '?', '#']).next().unwrap_or(site);
+                let id = new_id();
                 self.with_state(|s| {
                     let profile_id = s.default_profile_id();
                     let favorite = TabItem {
                         home_url: Some(url.clone()),
                         created_at: Some(now()),
-                        ..TabItem::new(new_id(), &url, host)
+                        ..TabItem::new(id.clone(), &url, host)
                     };
                     let lists = &mut s.sidebar.favorites;
                     match lists.iter_mut().find(|f| f.profile_id == profile_id) {
@@ -1861,6 +1868,18 @@ impl MagnetiteApp {
                 });
                 self.push_state(engine);
                 self.tell_settings_pages(engine);
+                return Ok(json!({ "id": id }));
+            }
+            UiCommand::CopyDataDir => {
+                let copied = engine.copy_text(&self.data_dir.to_string_lossy());
+                return Ok(json!({ "ok": copied }));
+            }
+            UiCommand::OpenDataDir => {
+                // A folder given relative to where Magnetite was started.
+                let folder = std::path::absolute(&self.data_dir)
+                    .map_err(|_| "The data folder could not be opened.".to_string())?;
+                downloads::open(&folder, false)
+                    .map_err(|_| "The data folder could not be opened.".to_string())?;
             }
             UiCommand::PinnedToBookmarks { space, remove } => {
                 if self.with_state(|s| s.space(&space).is_none() || s.is_private_space(&space)) {

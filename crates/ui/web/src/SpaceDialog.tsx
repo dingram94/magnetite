@@ -147,7 +147,7 @@ function Form({ space, appearance: opened }: { space: Space; appearance: Appeara
         <div className="hint">Or a picture of your own, such as a PNG or an SVG. It syncs with the space, so it is kept small.</div>
       </Row>
 
-      <Row label="Colour">
+      <Row label="Color">
         <div className="flex min-h-8 items-center">
           <ColourSwatches
             value={accent}
@@ -159,11 +159,11 @@ function Form({ space, appearance: opened }: { space: Space; appearance: Appeara
         </div>
       </Row>
 
-      <Row label="Strength" hint="How much of the colour the window takes.">
+      <Row label="Strength" hint="How much of the color the window takes.">
         <Slider value={look.tint} min={0} max={30} step={1} unit="%" reset={8} onChange={(v, now) => changeLook({ tint: v }, now)} />
       </Row>
 
-      <Row label="Background" hint="An effect in the space colour across the window, or a picture of your own under the sidebar's rows.">
+      <Row label="Background" hint="An effect in the space color across the window, or a picture of your own under the sidebar's rows.">
         <div className="seg sm mb-2">
           {EFFECTS.map(([label, effect]) => (
             <button key={effect} type="button" data-on={look.sidebar_effect === effect || undefined} onClick={() => changeLook({ sidebar_effect: effect }, true)}>{label}</button>

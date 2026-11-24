@@ -836,14 +836,22 @@ button.wel-space-icon:hover:not(:disabled) { background: color-mix(in srgb, var(
 /* Settings → Spaces: a space as a line that opens its page, with the buttons that move it. */
 .set-space { display: flex; align-items: center; gap: 10px; padding-top: 8px; padding-bottom: 8px; }
 .set-space[data-sortable] { cursor: grab; user-select: none; -webkit-user-select: none; }
+.set-space[data-sortable] input, .set-space[data-sortable] .set-space-private { cursor: auto; }
+.set-space[data-sortable] input { user-select: text; -webkit-user-select: text; }
+/* A path to select and copy: it breaks anywhere rather than run out of its card. */
+.set-path { display: block; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; cursor: text; }
 /* The row being dragged follows the pointer, above the others. */
 .set-space[data-dragged], .set-space[data-dragged]:hover, .set-fav[data-dragged] { position: relative; z-index: 2; border-top-color: transparent; background: var(--surface); box-shadow: 0 0 0 1px var(--line), 0 8px 24px rgba(0,0,0,0.35); }
 /* The other rows glide aside to make room where it would land. */
 html[data-sorting] [data-sort-row]:not([data-dragged]) { transition: transform 140ms ease; }
 /* While a row is dragged, the hand stays closed wherever the pointer is. */
 html[data-sorting], html[data-sorting] * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
-/* A favorite: handle, icon, name and its choices in a row that wraps when narrow. */
-.set-fav { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding-top: 10px; padding-bottom: 10px; }
+/* A favorite: handle, icon, name and its choices in columns, which their names head. */
+.set-fav { display: grid; grid-template-columns: 14px 16px minmax(120px, 1fr) 170px 170px 88px; align-items: center; gap: 8px 10px; padding-top: 10px; padding-bottom: 10px; }
+.set-fav > .btn { padding: 0 6px; }
+.set-fav-cols { padding-bottom: 2px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.set-fav-cols + .set-fav, .set-fav-cols + .set-fav-head { border-top: 0; }
+.set-fav-cols + .set-fav-head { padding-top: 6px; }
 /* The profile a list of favorites belongs to, above its first one. */
 .set-fav-head { padding-top: 12px; padding-bottom: 2px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
 .set-fav-head + .set-fav { border-top: 0; }
@@ -873,11 +881,18 @@ html[data-sorting], html[data-sorting] * { cursor: grabbing !important; user-sel
 .set-grip { user-select: none; -webkit-user-select: none; touch-action: none; display: grid; place-items: center; width: 20px; height: 30px; flex: none; margin-left: -6px; border-radius: 6px; color: var(--muted); cursor: grab; }
 .set-grip:hover:not([aria-disabled]), .set-space:hover .set-grip:not([aria-disabled]) { color: var(--fg); }
 .set-grip[aria-disabled] { opacity: 0.25; cursor: default; }
-.set-space-open { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; padding: 6px 8px; margin: 0 -8px 0 0; border-radius: 9px; text-align: left; }
+/* A space's name, to change in place; what is known of it beside, which opens its page as the arrow does. */
+.set-space-name { flex: 0 1 220px; min-width: 120px; }
+.set-space-open { flex: 1; min-width: 0; align-self: stretch; padding: 6px 4px; text-align: left; }
+.set-space-private { display: flex; align-items: center; gap: 8px; flex: none; font-size: 12.5px; color: var(--secondary); cursor: default; }
+.set-space-private > button { margin-top: 0; }
+.set-space-go { display: grid; place-items: center; flex: none; width: 30px; height: 30px; margin-right: -8px; border-radius: 8px; color: var(--muted); }
+.set-space-go:hover, .set-space-go:focus-visible { background: rgba(255,255,255,0.1); color: var(--fg); }
 /* The whole row lights up as one: handle and space together. */
-.set-space:hover, .set-space:has(.set-space-open:focus-visible) { background: var(--row-hover); }
+.set-space:hover, .set-space:has(.set-space-go:focus-visible) { background: var(--row-hover); }
 /* Settings → Profiles: a profile, the spaces that use it and the favorites that do, side by side. */
-.set-profile { display: grid; grid-template-columns: 180px minmax(0, 1fr) minmax(0, 1fr) auto; align-items: center; gap: 8px 14px; padding-top: 10px; padding-bottom: 10px; }
+.set-profile { display: grid; grid-template-columns: 180px minmax(0, 1fr) minmax(0, 1fr) 104px; align-items: center; gap: 8px 14px; padding-top: 10px; padding-bottom: 10px; }
+.set-profile > :last-child { justify-self: end; }
 .set-profile-head { padding-bottom: 6px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
 .set-profile-head + .set-profile { border-top: 0; padding-top: 4px; }
 .set-profile-cap { display: none; }
@@ -889,6 +904,11 @@ html[data-sorting], html[data-sorting] * { cursor: grabbing !important; user-sel
   .set-profile-head { display: none; }
   .set-profile-head + .set-profile { border-top: 0; padding-top: 10px; }
   .set-profile-cap { display: inline; font-weight: 600; }
+  /* Nor for the columns of the favorites: a favorite wraps, and its fields say what they are. */
+  .set-fav { display: flex; flex-wrap: wrap; }
+  .set-fav > input.field { flex: 1 1 140px; }
+  .set-fav-cols { display: none; }
+  .set-fav-cols + .set-fav, .set-fav-cols + .set-fav-head { border-top: 0; }
 }
 .set-space-icon { display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 9px; background: rgba(255,255,255,0.06); }
 /* The icons to choose from for a space. */

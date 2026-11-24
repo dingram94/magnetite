@@ -77,7 +77,7 @@ export function EmulationPanel({ emulation, onClose }: { emulation: Emulation; o
       <div className="panel-group" style={{ borderTop: 0 }}>
         <div className="panel-label">Show the page as</div>
         <div className="panel-row">
-          <span className="flex-1">Colours</span>
+          <span className="flex-1">Colors</span>
           <div className="seg sm">
             {([[null, "System"], ["light", "Light"], ["dark", "Dark"]] as const).map(([v, label]) => (
               <button key={label} data-on={emulation.color_scheme === v || undefined} onClick={() => set({ color_scheme: v })}>{label}</button>
