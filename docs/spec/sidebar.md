@@ -145,15 +145,19 @@ the row turns the icon into a back arrow that takes the page back.
   which does nothing without a loaded page (such an item snoozes instead).
   It does nothing on a row while it is being renamed or a snooze time is
   being picked.
-- The context menu has the actions that fit the tab, among them Reload,
-  Share…, Copy link, Pin tab, Unpin tab, Add to favorites, Remove from
-  favorites, Open in split view, Duplicate tab, Rename, Move to another
-  space, and Archive (Today) or Close. Close is there only while a
-  favorite's or pinned tab's page is loaded, or while a favorite is away
-  from its pinned page (Close takes it back), since otherwise it would do
-  nothing; a pinned tab also has "Remove from pinned tabs", loaded or not,
-  except an item a smart folder got from its source, which the next
-  refresh would bring back. "Duplicate tab" opens the tab's
+- The context menu has the actions that fit the tab, in the groups and
+  the order of every menu ("Context menus"): Reload, Share…, Copy link;
+  Pin tab or Unpin tab, Back to pinned page, Add to or Remove from
+  favorites, Add to bookmarks, Move to another space; Open in split view,
+  Open as panel, Mobile view, Keep active; Rename, Duplicate tab; and
+  Archive (Today) or Close. What has nothing to do right now is greyed out
+  and says why on hover: Reload, and Close on a favorite or pinned tab,
+  without a loaded page (Close stays for a favorite away from its pinned
+  page, which it takes back there); Back to pinned page on a pinned tab
+  that is there; Open in split view while the split is full; Mobile view
+  on a tab that is no panel. A pinned tab also has "Remove from pinned
+  tabs", loaded or not, except an item a smart folder got from its
+  source, which the next refresh would bring back. "Duplicate tab" opens the tab's
   address as a new Today tab; a favorite has "Duplicate favorite" instead.
 - With one other space, the row names it ("Move to Work"). With more,
   "Move to another space" shows them as a list in the menu's place, below a
@@ -266,15 +270,16 @@ Code: `crates/engine/src/tabshare.rs`, `tabshare_hook.js`;
 - "Add to favorites" puts a tab into the list of the profile it runs in. A
   tab dropped among the tiles joins the list of the tile it lands beside,
   and its profile.
-- The context menu's "Profile: …" entries move a favorite to another
-  profile's list, and "New profile for this favorite…" makes a profile and
-  a list for it. "Duplicate favorite" plus another profile gives two
+- The context menu's "Profile" row names the favorite's profile and opens
+  the list of profiles, each with its colour: choosing another moves the
+  favorite to that profile's list, and "New profile…" at its end makes a
+  profile and a list for it. "Duplicate favorite" plus another profile gives two
   accounts of one site, each in its list.
 - The favorites of one split show as one tile with an icon per page
   (`split-view.md`).
 - A favorite shows in every space, or only in the spaces it names. The
-  context menu has "Show in every space" and "Show only in <the current
-  space>"; Settings → Favorites lists every favorite with its name and,
+  context menu's "Shows in" row says which, and its list has "Show in
+  every space" and "Show only in <the current space>"; Settings → Favorites lists every favorite with its name and,
   beside it, the address it goes to, deletes one from its row (a second
   click confirms, as for every deletion there; its page moves to the
   archive), and has a page per favorite (as
@@ -313,6 +318,42 @@ Code: `crates/engine/src/tabshare.rs`, `tabshare_hook.js`;
 - A folder can fill itself from a service (`smart-folders.md`).
 - "Copy link to share" in the context menu makes a link that carries the
   folder (`sharing.md`).
+
+## Context menus
+
+- A menu opens at the pointer and stays inside the sidebar. It closes on a
+  pick, on a click beside it, on Esc and when the sidebar loses the
+  keyboard.
+- A row with a list of its own (Move to another space, Profile, Shows in)
+  has an arrow at its right edge. A click on it opens the list in the
+  menu's place, below a row that names it and leads back: a menu in the
+  sidebar has no room beside it for one that flies out. A list never
+  opens by itself. It opens where the menu stands, and a long one scrolls.
+- Every menu is built from the same groups, in this order, with a line
+  between two that have rows: the page (reload, share, copy link, a smart
+  folder's refresh and settings); where the item is kept (pinned,
+  favorites, bookmarks, its space); how it shows (split view, panel, kept
+  active, a folder folded); the item itself (name, icon, a copy, a folder
+  inside); what it belongs to (its profile, the spaces it shows in); and
+  what takes it away (archive, close, delete), always last.
+- A row that belongs to the item but has nothing to do right now stays in
+  its place, greyed out, and a hover says why. It cannot be picked, and
+  the keyboard skips it. A row that does not fit the item at all is left
+  out.
+- In the menu of the tab in front, Reload, Pin or Unpin and Archive or
+  Close show the keys that do the same at the right edge; the keys act on
+  the tab in front, so no other tab's menu shows them. The private
+  space's menu shows the keys for hiding and closing it.
+- A row that is on or off (Keep active, Open as panel) has a check mark
+  while it is on, and of the rows to choose one from (the profiles) the one
+  chosen has a dot. Both stand in a column of their own before the labels,
+  so the labels are in line.
+- Keyboard: the up and down arrows go through the rows, around the ends,
+  and through an open list's rows; Home and End go to the first and the
+  last. Enter or Space picks the row. On a row with a list, Enter, Space
+  or the right arrow opens it and goes to its first row; the left arrow,
+  or the row that leads back, returns to the menu, onto that row. Any other key closes the menu.
+  The pointer and the keyboard move the same mark, so one row is lit.
 
 ## Hiding and resizing
 

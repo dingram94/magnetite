@@ -27,11 +27,12 @@
     "new_folder": "New folder",
     "new_profile": "New profile for this space…",
     "delete": "Delete space…",
-    "delete_confirm": "Click again to delete space"
+    "delete_confirm": "Click again to delete space",
+    "why_last": "The only space cannot be deleted"
   },
   "profile": {
-    "item": "Profile: {name}",
-    "fallback": "Profile"
+    "fallback": "Profile",
+    "new": "New profile…"
   },
   "today": {
     "clear_title": "Archive all Today tabs",
@@ -81,7 +82,16 @@
     "move_to": "Move to {space}",
     "move_to_space": "Move to another space",
     "archive": "Archive",
-    "remove_from_pinned": "Remove from pinned tabs"
+    "remove_from_pinned": "Remove from pinned tabs",
+    "profile": "Profile",
+    "shows_in": "Shows in",
+    "every_space": "every space",
+    "why": {
+      "no_page": "No page is loaded",
+      "at_pinned_page": "It is at its pinned page",
+      "split_full": "Split view holds up to four pages",
+      "no_panel": "Only for a tab that opens as a panel"
+    }
   },
   "tab_row": {
     "back_to_home": "Back to {host} (the pinned page)",

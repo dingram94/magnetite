@@ -27,11 +27,12 @@
     "new_folder": "Neuer Ordner",
     "new_profile": "Neues Profil für diesen Space …",
     "delete": "Space löschen …",
-    "delete_confirm": "Zum Löschen erneut klicken"
+    "delete_confirm": "Zum Löschen erneut klicken",
+    "why_last": "Der einzige Space kann nicht gelöscht werden"
   },
   "profile": {
-    "item": "Profil: {name}",
-    "fallback": "Profil"
+    "fallback": "Profil",
+    "new": "Neues Profil …"
   },
   "today": {
     "clear_title": "Alle Heute-Tabs archivieren",
@@ -81,7 +82,16 @@
     "move_to": "In {space} verschieben",
     "move_to_space": "In Space verschieben",
     "archive": "Archivieren",
-    "remove_from_pinned": "Aus angehefteten Tabs entfernen"
+    "remove_from_pinned": "Aus angehefteten Tabs entfernen",
+    "profile": "Profil",
+    "shows_in": "Erscheint in",
+    "every_space": "jedem Space",
+    "why": {
+      "no_page": "Es ist keine Seite geladen",
+      "at_pinned_page": "Der Tab ist auf seiner angehefteten Seite",
+      "split_full": "Die geteilte Ansicht fasst höchstens vier Seiten",
+      "no_panel": "Nur für einen Tab, der als Panel geöffnet wird"
+    }
   },
   "tab_row": {
     "back_to_home": "Zurück zu {host}, der angehefteten Seite",

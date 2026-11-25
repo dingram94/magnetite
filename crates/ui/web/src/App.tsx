@@ -5,7 +5,8 @@ import { DownloadsView } from "./DownloadsView";
 import { HistoryView } from "./HistoryView";
 import { LibraryButton } from "./LibraryButton";
 import { SidebarResizer } from "./SidebarResizer";
-import { ContextMenu, SEPARATOR, type MenuItem } from "./ContextMenu";
+import { ContextMenu, type MenuItem } from "./ContextMenu";
+import { menuOf, profileRow } from "./menus";
 import { Back, ChevronDown, Close, Dots, FolderIcon, Forward, Plus, MaskIcon, PrivateIcon, Reload, SidebarIcon, SmartFolderIcon, SpacePlus, SplitIcon, TabPlus } from "./Icons";
 import { AddressRow } from "./AddressRow";
 import { CaptureToast } from "./CaptureToast";
@@ -192,28 +193,25 @@ export function App() {
       run();
     };
     if (target.id === state.private_space) {
-      return openMenu(x, y, [
-        { label: t("sidebar.space.hide_private"), onClick: () => send({ cmd: "hide_private_space" }) },
-        { label: t("sidebar.space.close_private"), danger: true, onClick: () => send({ cmd: "close_private_space" }) },
-      ]);
+      return openMenu(x, y, menuOf({
+        view: [{ label: t("sidebar.space.hide_private"), hint: keysLabel(state.keys.hide_private_space) || undefined, onClick: () => send({ cmd: "hide_private_space" }) }],
+        remove: [{ label: t("sidebar.space.close_private"), hint: keysLabel(state.keys.close_private_space) || undefined, danger: true, onClick: () => send({ cmd: "close_private_space" }) }],
+      }));
     }
-    openMenu(x, y, [
-      // Name, icon, colour and background; switches first, so the changes show.
-      { label: t("sidebar.space_menu.settings"), onClick: there(() => send({ cmd: "space_dialog", id: target.id })) },
-      { label: t("sidebar.space_menu.new_folder"), onClick: there(() => send({ cmd: "new_folder", title: "" })) },
-      SEPARATOR,
-      ...state.sidebar.profiles.map((p) => ({
-        label: `${p.id === target.profile_id ? "● " : "○ "}${t("sidebar.profile.item", { name: p.name })}`,
-        onClick: () => p.id !== target.profile_id && send({ cmd: "set_space_profile", id: target.id, profile: p.id }),
-      })),
-      { label: t("sidebar.space_menu.new_profile"), onClick: there(() => send({ cmd: "open_palette", mode: "new_profile" })) },
-      ...(state.sidebar.spaces.length > 1
-        ? [
-            SEPARATOR,
-            { label: t("sidebar.space_menu.delete"), confirm: t("sidebar.space_menu.delete_confirm"), danger: true, onClick: () => send({ cmd: "delete_space", id: target.id }) },
-          ]
-        : []),
-    ]);
+    const alone = state.sidebar.spaces.length < 2;
+    openMenu(x, y, menuOf({
+      edit: [
+        // Name, icon, colour and background; switches first, so the changes show.
+        { label: t("sidebar.space_menu.settings"), onClick: there(() => send({ cmd: "space_dialog", id: target.id })) },
+        { label: t("sidebar.space_menu.new_folder"), onClick: there(() => send({ cmd: "new_folder", title: "" })) },
+      ],
+      belongs: [
+        profileRow(state.sidebar.profiles, target.profile_id, (p) => send({ cmd: "set_space_profile", id: target.id, profile: p.id }), { title: t("sidebar.space_menu.new_profile"), run: there(() => send({ cmd: "open_palette", mode: "new_profile" })) }),
+      ],
+      remove: [
+        { label: t("sidebar.space_menu.delete"), confirm: t("sidebar.space_menu.delete_confirm"), danger: true, disabled: alone, title: alone ? t("sidebar.space_menu.why_last") : undefined, onClick: () => send({ cmd: "delete_space", id: target.id }) },
+      ],
+    }));
   };
 
 

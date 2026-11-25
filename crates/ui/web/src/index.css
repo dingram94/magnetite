@@ -368,20 +368,35 @@ button.panel-row:disabled { opacity: 0.45; }
 .sp[data-after]::after { right: -2px; }
 
 /* menus */
-.menu { position: fixed; z-index: 50; min-width: 200px; max-width: 208px; max-height: var(--menu-room, none); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px; box-shadow: 0 12px 32px rgba(0,0,0,0.45); }
+.menu { position: fixed; z-index: 50; min-width: 200px; max-width: 224px; max-height: var(--menu-room, none); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px; box-shadow: 0 12px 32px rgba(0,0,0,0.45); }
 .menu button { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; height: 28px; padding: 0 10px; border-radius: 6px; }
 /* One line per entry: the menu's height is counted in 28 px rows (ContextMenu.tsx). */
 .menu button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The tag gives way first, down to a stub, so the label keeps its words; a hover shows both whole. */
 .menu button span:has(+ .tag) { flex-shrink: 0; max-width: calc(100% - 50px); }
 .menu button .tag { flex: 0 1 auto; min-width: 44px; margin-left: -2px; padding: 0 5px; text-align: center; border-radius: 4px; background: rgba(255,255,255,0.1); color: var(--secondary); font-size: 12px; line-height: 18px; }
-.menu button .hint { margin-left: auto; flex: none; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.menu button:hover { background: rgba(255,255,255,0.1); }
-.menu button[data-danger] { color: var(--danger); }
-.menu button[data-danger]:hover { background: rgba(255, 90, 90, 0.14); }
-.menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+/* `margin-top`: the hint under a setting (`.hint`) has one, which would push this one off the line. */
+.menu button .hint { margin-left: auto; margin-top: 0; flex: none; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+/* The row the keyboard is on is lit as the one under the pointer is; the pointer moves it, so there is one. */
+.menu button[data-at] { background: rgba(255,255,255,0.1); }
+.menu button:focus-visible { outline: none; }
+/* The room for a check mark or the dot of the one chosen, in a list where a row has one. */
+.menu button .mark { flex: none; width: 14px; height: 14px; margin-right: -2px; display: grid; place-items: center; overflow: visible; color: var(--secondary); }
+.menu button .mark .chosen { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.menu button .dot { flex: none; width: 10px; height: 10px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25); }
+.menu button .dot[data-plain] { box-shadow: inset 0 0 0 1.5px var(--muted); }
+/* A row with a list of its own: an arrow at its right edge. */
+.menu button .chevron { flex: none; margin-left: auto; margin-right: -3px; color: var(--muted); }
+.menu button .hint + .chevron { margin-left: 0; }
+.menu button[aria-haspopup] .hint { flex: 0 1 auto; min-width: 0; max-width: 45%; }
 /* The row back from a list opened in the menu's place. */
 .menu .menu-back { color: var(--muted); }
+.menu .menu-back svg { flex: none; margin-left: -3px; }
+.menu button[data-danger] { color: var(--danger); }
+/* Nothing to do right now: it keeps its place, and a hover says why. */
+.menu button[aria-disabled] { color: var(--muted); opacity: 0.55; cursor: default; }
+.menu button[data-danger][data-at] { background: rgba(255, 90, 90, 0.14); }
+.menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
 
 /* backdrop behind sidebar pop-ups: a click on it closes them */
 .cmdbar-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.16); z-index: 40; }
