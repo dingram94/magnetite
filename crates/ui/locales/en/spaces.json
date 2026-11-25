@@ -154,7 +154,9 @@
       "profile_hint": "Its page uses the logins of this profile, whichever space is in front.",
       "remove": "Remove from the favorites",
       "address_hint": "Where the favorite goes, and where it returns to. Its page loads a new address at once.",
-      "address_label": "Address of the favorite {name}"
+      "address_label": "Address of the favorite {name}",
+      "address_keys": "Not saved yet. Enter saves the new address, Esc discards it.",
+      "address_discard": "Discard"
     }
   }
 }

@@ -154,7 +154,9 @@
       "profile_hint": "Seine Seite nutzt die Anmeldungen dieses Profils, egal welcher Space gerade angezeigt wird.",
       "remove": "Aus den Favoriten entfernen",
       "address_hint": "Wohin der Favorit führt und wohin er zurückkehrt. Eine neue Adresse lädt seine Seite sofort.",
-      "address_label": "Adresse des Favoriten {name}"
+      "address_label": "Adresse des Favoriten {name}",
+      "address_keys": "Noch nicht gespeichert. Enter speichert die neue Adresse, Esc verwirft sie.",
+      "address_discard": "Verwerfen"
     }
   }
 }

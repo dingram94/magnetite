@@ -535,6 +535,16 @@ function FavoritePage({ info, favorite: f, reload, open }: { info: Info; favorit
   // end a newer one.
   // Why the address typed was not taken (it is none of a website).
   const [refused, setRefused] = useState<string>();
+  // The address field holds another address than the favorite's: not saved yet.
+  const [changed, setChanged] = useState(false);
+  const addressField = useRef<HTMLInputElement>(null);
+  const discardButton = useRef<HTMLButtonElement>(null);
+  /** The favorite's address back in its field, and what was typed forgotten. */
+  const discard = () => {
+    if (addressField.current) addressField.current.value = addressOf(f);
+    setChanged(false);
+    setRefused(undefined);
+  };
   const [picked, setPicked] = useState<{ spaces: string[]; turn: number }>();
   const turns = useRef(0);
   const choose = (spaces: string[]) => {
@@ -562,9 +572,10 @@ function FavoritePage({ info, favorite: f, reload, open }: { info: Info; favorit
           />
         </Field>
         <Field label={t("spaces.favorites.page.address")} hint={t("spaces.favorites.page.address_hint")}>
-          {/* Whole, in a field as wide as the card. Saved on Enter or on leaving it; Esc puts the old one back. */}
+          {/* Whole, in a field as wide as the card. Saved on Enter or on leaving it; Esc puts the old one back, as the button does that shows once it is changed. */}
           <input
             key={addressOf(f)}
+            ref={addressField}
             className="field w-full"
             defaultValue={addressOf(f)}
             spellCheck={false}
@@ -572,23 +583,34 @@ function FavoritePage({ info, favorite: f, reload, open }: { info: Info; favorit
             autoCorrect="off"
             aria-label={t("spaces.favorites.page.address_label", { name })}
             aria-invalid={refused !== undefined || undefined}
+            aria-describedby={changed ? "set-fav-address-keys" : undefined}
+            onChange={(e) => setChanged(e.target.value.trim() !== addressOf(f))}
             onBlur={(e) => {
-              const field = e.currentTarget;
-              const to = field.value.trim();
-              if (!to) field.value = addressOf(f);
-              if (!to || to === addressOf(f)) return setRefused(undefined);
+              // Leaving it for the button that throws the change away saves nothing.
+              if (e.relatedTarget === discardButton.current) return;
+              const to = e.currentTarget.value.trim();
+              if (!to || to === addressOf(f)) return discard();
               send({ cmd: "set_favorite_address", id: f.id, url: to }).then(
-                () => setRefused(undefined),
+                // The address as the app keeps it may be the one typed, spelled out: nothing is changed then.
+                () => (setRefused(undefined), setChanged(false)),
                 (err: unknown) => setRefused(err instanceof Error ? err.message : String(err)),
               ).then(reload).catch(() => undefined);
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter") e.currentTarget.blur();
               if (e.key !== "Escape") return;
-              e.currentTarget.value = addressOf(f);
+              // Esc here is for the field alone.
+              e.stopPropagation();
+              discard();
               e.currentTarget.blur();
             }}
           />
+          {changed && (
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <span id="set-fav-address-keys" className="set-hint min-w-0 flex-1" style={{ marginTop: 0 }}>{t("spaces.favorites.page.address_keys")}</span>
+              <button ref={discardButton} className="btn" onClick={discard}>{t("spaces.favorites.page.address_discard")}</button>
+            </div>
+          )}
           {refused && <p className="set-hint" role="alert" style={{ color: "var(--danger)" }}>{refused}</p>}
         </Field>
       </Group>
