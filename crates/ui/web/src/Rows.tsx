@@ -104,9 +104,9 @@ export function profileColor(profiles: Snapshot["profiles"], id: string): string
 
 /**
  * The favorites above the space list, the same in every space: one grid of
- * tiles, profile after profile. With favorites of more than one profile, or
- * of another than the default one, a tile of another profile than the
- * default one carries its profile's colour (`profileColor`).
+ * tiles, profile after profile. A tile carries its profile's colour
+ * (`profileColor`); with favorites of more than one profile, or of another
+ * than the default one, its label names the profile too.
  */
 export function FavoriteLists({ ctx, lists }: { ctx: RowContext; lists: FavoriteList[] }) {
   const { profiles } = ctx.state.sidebar;
@@ -148,7 +148,7 @@ export function FavoriteLists({ ctx, lists }: { ctx: RowContext; lists: Favorite
   return (
     <div ref={box} className="favs-flow shrink-0 px-2 pt-3" onMouseLeave={noTip}>
       {lists.map((list) => (
-        <Favorites key={list.profile_id} ctx={ctx} list={list} flow={flow} color={mixed ? profileColor(profiles, list.profile_id) : undefined} profile={mixed ? (profile(list.profile_id)?.name ?? t("sidebar.profile.fallback")) : undefined} />
+        <Favorites key={list.profile_id} ctx={ctx} list={list} flow={flow} color={profileColor(profiles, list.profile_id)} profile={mixed ? (profile(list.profile_id)?.name ?? t("sidebar.profile.fallback")) : undefined} />
       ))}
       {tipped && (
         <div ref={label} className="fav-tip" style={{ top: tipped.y }} aria-hidden>
@@ -894,14 +894,17 @@ export function countTabs(nodes: SidebarNode[]): number {
   return nodes.reduce((n, x) => n + (x.kind === "tab" ? 1 : countTabs(x.children)), 0);
 }
 
+/** What is being dragged goes to place `index` of `nodes`: the pinned items of space `spaceId`, or of its folder `folderId`. */
+export function dropAmongPinned(spaceId: string, nodes: SidebarNode[], folderId: string | undefined, index: number) {
+  const d = dragging();
+  if (!d) return;
+  const at = indexAfterTaking(nodes, movedIds(d), index);
+  if (d.kind === "tab") send({ cmd: "move_tab", id: d.id, space: spaceId, section: "pinned", index: at, folder: folderId, split: d.pair });
+  else send({ cmd: "move_folder", id: d.id, index: at, folder: folderId });
+}
+
 export function NodeList({ ctx, nodes, depth, folderId }: { ctx: RowContext; nodes: SidebarNode[]; depth: number; folderId?: string }) {
-  const dropTab = (index: number) => {
-    const d = dragging();
-    if (!d) return;
-    const at = indexAfterTaking(nodes, movedIds(d), index);
-    if (d.kind === "tab") send({ cmd: "move_tab", id: d.id, space: ctx.spaceId, section: "pinned", index: at, folder: folderId, split: d.pair });
-    else send({ cmd: "move_folder", id: d.id, index: at, folder: folderId });
-  };
+  const dropTab = (index: number) => dropAmongPinned(ctx.spaceId, nodes, folderId, index);
   return (
     <>
       {nodes.map((n, i) =>
