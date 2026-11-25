@@ -158,6 +158,10 @@
       "address_discard": "Discard",
       "address_discard_title": "Puts the saved address back (Esc)",
       "address_save_title": "Saves the new address (Enter)"
+    },
+    "columns": {
+      "name": "Name",
+      "address": "Address"
     }
   }
 }

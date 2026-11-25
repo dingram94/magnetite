@@ -866,6 +866,13 @@ html[data-sorting], html[data-sorting] * { cursor: grabbing !important; user-sel
 /* The profile a list of favorites belongs to, above its first one. */
 .set-fav-head { padding-top: 12px; padding-bottom: 2px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
 .set-fav-head + .set-space { border-top: 0; }
+/* The names of a favorite's columns, above the list: each over its column (the handle and the icon come first). */
+.set-fav-cols { display: flex; gap: 10px; padding-top: 10px; padding-bottom: 2px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.set-fav-cols-lead { flex: none; width: 54px; }
+.set-fav-cols > .set-space-name { padding-left: 9px; }
+.set-fav-cols > :last-child { padding-left: 4px; }
+.set-fav-cols + .set-space, .set-fav-cols + .set-fav-head { border-top: 0; }
+.set-fav-cols + .set-fav-head { padding-top: 6px; }
 /* A choice from a list of Magnetite's own (`Pick`): a button that says what is chosen, the list under it. */
 .set-pick { position: relative; display: inline-block; flex: none; max-width: 100%; vertical-align: top; }
 .set-pick-button { display: flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; text-align: left; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 14px) 13px, calc(100% - 9px) 13px; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 26px; }

@@ -706,6 +706,14 @@ function FavoriteList({ info, reload, open }: { info: Info; reload: () => Promis
   };
   return (
     <Group title={t("spaces.favorites.title")} hint={t("spaces.favorites.hint")}>
+      {/* What the two columns of a row are, as the list of profiles heads its own. */}
+      {info.favorites.length > 0 && (
+        <div className="set-row set-fav-cols" aria-hidden="true">
+          <span className="set-fav-cols-lead" />
+          <span className="set-space-name">{t("spaces.favorites.columns.name")}</span>
+          <span className="min-w-0 flex-1">{t("spaces.favorites.columns.address")}</span>
+        </div>
+      )}
       {info.favorites.map((f, i) => {
         const name = favoriteName(f);
         const address = addressOf(f);

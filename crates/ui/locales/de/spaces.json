@@ -158,6 +158,10 @@
       "address_discard": "Verwerfen",
       "address_discard_title": "Stellt die gespeicherte Adresse wieder her (Esc)",
       "address_save_title": "Speichert die neue Adresse (Enter)"
+    },
+    "columns": {
+      "name": "Name",
+      "address": "Adresse"
     }
   }
 }
