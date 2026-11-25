@@ -572,18 +572,17 @@ function FavoritePage({ info, favorite: f, reload, open }: { info: Info; favorit
           />
         </Field>
         <Field label={t("spaces.favorites.page.address")} hint={t("spaces.favorites.page.address_hint")}>
-          {/* Whole, in a field as wide as the card. Saved on Enter or on leaving it; Esc puts the old one back, as the button does that shows once it is changed. */}
+          {/* Whole, in a field as wide as the card. Saved on Enter or on leaving it; Esc puts the old one back, as does the button at the field's end that shows once it is changed. */}
+          <span className="set-field-end" data-invalid={refused !== undefined || undefined}>
           <input
             key={addressOf(f)}
             ref={addressField}
-            className="field w-full"
             defaultValue={addressOf(f)}
             spellCheck={false}
             autoCapitalize="off"
             autoCorrect="off"
             aria-label={t("spaces.favorites.page.address_label", { name })}
             aria-invalid={refused !== undefined || undefined}
-            aria-describedby={changed ? "set-fav-address-keys" : undefined}
             onChange={(e) => setChanged(e.target.value.trim() !== addressOf(f))}
             onBlur={(e) => {
               // Leaving it for the button that throws the change away saves nothing.
@@ -605,12 +604,8 @@ function FavoritePage({ info, favorite: f, reload, open }: { info: Info; favorit
               e.currentTarget.blur();
             }}
           />
-          {changed && (
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
-              <span id="set-fav-address-keys" className="set-hint min-w-0 flex-1" style={{ marginTop: 0 }}>{t("spaces.favorites.page.address_keys")}</span>
-              <button ref={discardButton} className="btn" onClick={discard}>{t("spaces.favorites.page.address_discard")}</button>
-            </div>
-          )}
+          {changed && <button ref={discardButton} className="btn sm ghost" title={t("spaces.favorites.page.address_discard_title")} onClick={discard}>{t("spaces.favorites.page.address_discard")}</button>}
+          </span>
           {refused && <p className="set-hint" role="alert" style={{ color: "var(--danger)" }}>{refused}</p>}
         </Field>
       </Group>

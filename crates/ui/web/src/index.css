@@ -403,6 +403,12 @@ button.panel-row:disabled { opacity: 0.45; }
 .field { width: 100%; height: 32px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 0 8px; color: var(--fg); font: inherit; outline: none; }
 .field:focus { border-color: var(--accent); }
 .field[aria-invalid="true"] { border-color: var(--danger); }
+/* A field with a button at its end, inside its frame: the frame is the field's, the text field within has none. */
+.set-field-end { display: flex; align-items: center; gap: 4px; width: 100%; height: 32px; padding: 0 3px 0 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.set-field-end:focus-within { border-color: var(--accent); }
+.set-field-end[data-invalid] { border-color: var(--danger); }
+.set-field-end > input { flex: 1; min-width: 0; height: 100%; background: none; border: 0; padding: 0; color: var(--fg); font: inherit; outline: none; }
+.set-field-end > .btn { flex: none; height: 24px; border-radius: 6px; }
 /* Settings → Isolation rows */
 .iso-list { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .iso-row { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
