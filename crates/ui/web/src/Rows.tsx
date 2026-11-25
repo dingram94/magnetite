@@ -1,11 +1,11 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Favicon } from "./Favicon";
-import { ChevronDown, Close, FolderIcon, HomeArrow, KeepActiveIcon, Minus, PhoneIcon, ScreenShareIcon, SmartFolderIcon, SnoozeIcon, Speaker, SpeakerOff, WakeIcon, WarningIcon } from "./Icons";
+import { Close, FolderIcon, HomeArrow, KeepActiveIcon, Minus, PhoneIcon, ScreenShareIcon, SmartFolderIcon, SnoozeIcon, Speaker, SpeakerOff, WakeIcon, WarningIcon } from "./Icons";
 import { ago, findFolder, localInputValue, snoozeChoices, wakeLabel } from "./smart";
 import { Glyph, glyphFor, SpaceIcon } from "./Glyphs";
 import { dragging, dropIndex, endDrag, indexAfterTaking, movedIds, overRowMiddle, rowZone, sideOf, splittable, startDrag } from "./dnd";
 import { errorCount } from "./DevBar";
-import { findTab, hostOf, IS_MAC, send, splitGroup, splitIds, type DeviceTab, type FavoriteList, type Folder, type SidebarNode, type Side, type Snoozed, type Space, type SplitNode, type TabItem, type TabRuntime, type UiState } from "./bridge";
+import { accentCss, findTab, hostOf, IS_MAC, send, splitGroup, splitIds, type DeviceTab, type FavoriteList, type Folder, type SidebarNode, type Side, type Snapshot, type Snoozed, type Space, type SplitNode, type TabItem, type TabRuntime, type UiState } from "./bridge";
 import { SEPARATOR, type MenuItem } from "./ContextMenu";
 import { language, t } from "./i18n";
 
@@ -174,18 +174,90 @@ export function tabMenu(ctx: RowContext, tab: TabItem, section: Section, at: { x
   return items;
 }
 
+/** How long the pointer rests on a tile before its label shows; from tile to tile it follows at once. */
+const FAV_TIP_MS = 150;
+
+/** The label of the favorite under the pointer: its name and its profile, below tile `x` (its middle) and `y` in the lists' box. */
+interface FavTip {
+  id: string;
+  name: string;
+  profile?: string;
+  color?: string;
+  notes: string[];
+  x: number;
+  y: number;
+}
+
+/** What a list of favorites needs from the lists as a whole. */
+interface FavFlow {
+  /** Show the label of favorite `tab` below `tile`, or take the label away. */
+  tip: (tab: TabItem, tile: HTMLElement, profile: string | undefined, color: string | undefined, notes: string[]) => void;
+  noTip: () => void;
+}
+
+/** The colour of profile `id` for CSS: none for a profile without one (the default profile, unless it was given one). */
+export function profileColor(profiles: Snapshot["profiles"], id: string): string | undefined {
+  const color = profiles.find((p) => p.id === id)?.color;
+  return color && accentCss(color);
+}
+
 /**
- * The favorites above the space list: one list per profile that has some,
- * the same in every space. The lists get a title when there is more than one
- * or the only one is not the default profile's; a titled list collapses.
+ * The favorites above the space list, the same in every space: one grid of
+ * tiles, profile after profile. With favorites of more than one profile, or
+ * of another than the default one, a tile of another profile than the
+ * default one carries its profile's colour (`profileColor`).
  */
 export function FavoriteLists({ ctx, lists }: { ctx: RowContext; lists: FavoriteList[] }) {
   const { profiles } = ctx.state.sidebar;
   const profile = (id: string) => profiles.find((p) => p.id === id);
-  const titled = lists.length > 1 || lists.some((l) => !profile(l.profile_id)?.is_default);
-  return lists.map((list) => (
-    <Favorites key={list.profile_id} ctx={ctx} list={list} title={titled ? (profile(list.profile_id)?.name ?? t("sidebar.profile.fallback")) : undefined} />
-  ));
+  const mixed = lists.length > 1 || lists.some((l) => !profile(l.profile_id)?.is_default);
+  const box = useRef<HTMLDivElement>(null);
+  const label = useRef<HTMLDivElement>(null);
+  const [tip, setTip] = useState<FavTip | null>(null);
+  const timer = useRef(0);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  // Centred below its tile, but never past the sidebar's edges.
+  useLayoutEffect(() => {
+    const el = label.current;
+    const within = box.current;
+    if (!el || !within || !tip) return;
+    const left = Math.max(6, Math.min(tip.x - el.offsetWidth / 2, within.clientWidth - el.offsetWidth - 6));
+    el.style.left = `${left}px`;
+  }, [tip]);
+  const noTip = () => {
+    window.clearTimeout(timer.current);
+    setTip(null);
+  };
+  const flow: FavFlow = {
+    noTip,
+    tip: (tab, tile, name, color, notes) => {
+      const within = box.current?.getBoundingClientRect();
+      if (!within) return;
+      const r = tile.getBoundingClientRect();
+      const next: FavTip = { id: tab.id, name: tab.title || hostOf(tab.url), profile: name, color, notes, x: r.left + r.width / 2 - within.left, y: r.bottom - within.top + 5 };
+      window.clearTimeout(timer.current);
+      // The label is up already: it goes along. Else the pointer has to rest first.
+      if (tip) setTip(next);
+      else timer.current = window.setTimeout(() => setTip(next), FAV_TIP_MS);
+    },
+  };
+  // The favorite the label is for can go away under it.
+  const tipped = tip && lists.some((l) => l.items.some((t) => t.id === tip.id)) && !dragging() ? tip : null;
+  if (lists.length === 0) return null;
+  return (
+    <div ref={box} className="favs-flow shrink-0 px-2 pt-3" onMouseLeave={noTip}>
+      {lists.map((list) => (
+        <Favorites key={list.profile_id} ctx={ctx} list={list} flow={flow} color={mixed ? profileColor(profiles, list.profile_id) : undefined} profile={mixed ? (profile(list.profile_id)?.name ?? t("sidebar.profile.fallback")) : undefined} />
+      ))}
+      {tipped && (
+        <div ref={label} className="fav-tip" style={{ top: tipped.y }} aria-hidden>
+          <span className="truncate">{tipped.name}</span>
+          {tipped.profile && <span className="fav-tip-profile" style={tipped.color ? { background: tipped.color } : undefined}>{tipped.profile}</span>}
+          {tipped.notes.map((note) => <span key={note} className="fav-tip-note">{note}</span>)}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /** What one tile of the favorites shows: a favorite, or the favorites of one split. */
@@ -217,21 +289,14 @@ function asTile(tabs: TabItem[]): Tile[] {
 }
 
 /**
- * The favorites of one profile: an icon per favorite. A tab dragged over the
- * list joins the tile it is on in a split, or goes between two tiles, where
- * a line marks its place. Dropped on the title (also while the list is
- * collapsed) it is added at the end.
+ * The favorites of one profile: an icon per favorite, in the grid all
+ * profiles share. A tab dragged over the list joins the tile it is on in a
+ * split, or goes between two tiles, where a line marks its place; it takes
+ * this list's profile. `profile` is the profile's name where the tiles say
+ * which one they are of, `color` its colour on each tile.
  */
-function Favorites({ ctx, list, title }: { ctx: RowContext; list: FavoriteList; title?: string }) {
+function Favorites({ ctx, list, flow, profile, color }: { ctx: RowContext; list: FavoriteList; flow: FavFlow; profile?: string; color?: string }) {
   const { state } = ctx;
-  const key = "favorites:" + list.profile_id;
-  const [open, setOpen] = useState(() => localStorage.getItem(key) !== "closed");
-  const toggle = () => {
-    setOpen((o) => {
-      localStorage.setItem(key, o ? "closed" : "open");
-      return !o;
-    });
-  };
   /** The tab or split being carried over this list (`id` stands for it) and where it would go: before tile `index` of the others. */
   const [place, setPlace] = useState<{ id: string; index: number } | null>(null);
   /** The tab `id` carried over a tile: dropped, it joins page `cell` of tile `tile` in a split, on `side`. */
@@ -262,9 +327,9 @@ function Favorites({ ctx, list, title }: { ctx: RowContext; list: FavoriteList; 
   const mark = before === null || before === own ? null : others[before] ? { tile: others[before][0].id, side: "left" } : { tile: others.at(-1)?.[0].id, side: "right" };
   // A tile has no room for its name: it is edited in a row under the tiles.
   const renamed = list.items.find((t) => t.id === ctx.renaming);
-  return (
+  return (<>
     <div
-      className="shrink-0 px-2 pt-3"
+      className="favs-group"
       onDragOver={(e) => {
         const d = dragging();
         if (!takes(d)) return;
@@ -286,10 +351,10 @@ function Favorites({ ctx, list, title }: { ctx: RowContext; list: FavoriteList; 
           return setJoin((j) => (j && j.id === next.id && j.cell === next.cell && j.side === next.side ? j : next));
         }
         setJoin(null);
-        // Over the title: the end. Over the carried tile itself: where it
-        // is. Over a gap: where the edge passed on the way there said.
+        // Over the carried tile itself: where it is. Over a gap: where the
+        // edge passed on the way there said.
         const own = tiles.findIndex((tile) => tile[0].id === overTile?.dataset.fav);
-        const next = overTile && onto ? (sideOf(e, overTile) === "left" ? k : k + 1) : target.closest(".favs-title") ? rest.length : overTile && own >= 0 ? own : null;
+        const next = overTile && onto ? (sideOf(e, overTile) === "left" ? k : k + 1) : overTile && own >= 0 ? own : null;
         if (next !== null) setPlace((p) => (p?.id === d.id && p.index === next ? p : { id: d.id, index: next }));
       }}
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) { setPlace(null); setJoin(null); } }}
@@ -316,30 +381,27 @@ function Favorites({ ctx, list, title }: { ctx: RowContext; list: FavoriteList; 
         endDrag();
       }}
     >
-      {title && (
-        <button className="favs-title no-drag" aria-expanded={open} onClick={toggle} title={open ? t("sidebar.favorites.collapse") : t("sidebar.favorites.expand")}>
-          <ChevronDown width={12} height={12} className="chevron" />
-          <span className="truncate">{title}</span>
-          {!open && <span className="count">{list.items.length}</span>}
-        </button>
-      )}
-      {(open || !title) && (
-        <div className="favs">
           {tiles.map((tile) => {
             const page = (fav: TabItem) => {
               const rt = state.runtime[fav.id];
+              const notes = [fav.panel && t("sidebar.favorites.panel"), rt?.shared && t("sidebar.favorites.shared")].filter((note): note is string => !!note);
               return {
                 "data-active": state.active_tab === fav.id || state.web_panel === fav.id || undefined,
                 "data-unloaded": !rt?.loaded || undefined,
                 "data-shared": rt?.shared || undefined,
                 onClick: () => send(fav.panel ? { cmd: "toggle_web_panel", id: fav.id } : { cmd: "activate_tab", id: fav.id }),
-                onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); ctx.openMenu(e.clientX, e.clientY, tabMenu(ctx, fav, "favorites", { x: e.screenX, y: e.screenY })); },
-                title: [fav.title, title, fav.panel && t("sidebar.favorites.panel"), rt?.shared && t("sidebar.favorites.shared")].filter(Boolean).join(" · "),
-                children: <Favicon url={fav.url} src={rt?.favicon} loading={rt?.loading} />,
+                onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); flow.noTip(); ctx.openMenu(e.clientX, e.clientY, tabMenu(ctx, fav, "favorites", { x: e.screenX, y: e.screenY })); },
+                // The name and the profile show in a label of the lists' own, sooner than the system's would.
+                onMouseEnter: (e: React.MouseEvent<HTMLElement>) => flow.tip(fav, e.currentTarget, profile, color, notes),
+                onMouseLeave: flow.noTip,
+                "aria-label": [fav.title || hostOf(fav.url), profile, ...notes].filter(Boolean).join(" · "),
+                children: <><Favicon url={fav.url} src={rt?.favicon} loading={rt?.loading} /></>,
               };
             };
             const [lead] = tile;
             const drag = {
+              "data-profile": color ? true : undefined,
+              style: color ? { ["--profile" as string]: color } : undefined,
               "data-fav": lead.id,
               "data-carried": moved.includes(lead.id) || undefined,
               draggable: true,
@@ -351,7 +413,7 @@ function Favorites({ ctx, list, title }: { ctx: RowContext; list: FavoriteList; 
             const line = mark?.tile === lead.id && <span className="fav-insert" data-side={mark.side} />;
             if (tile.length === 1 && !joined) {
               const { children, ...props } = page(lead);
-              return <button key={lead.id} className="fav no-drag" data-panel={lead.panel || undefined} {...drag} onDragStart={(e) => startDrag(e, { kind: "tab", id: lead.id })} {...props}>{children}{line}</button>;
+              return <button key={lead.id} className="fav no-drag" data-panel={lead.panel || undefined} {...drag} onDragStart={(e) => { flow.noTip(); startDrag(e, { kind: "tab", id: lead.id }); }} {...props}>{children}{line}</button>;
             }
             // A split: one tile with a half per page. It drags as one item.
             const ids = tile.map((x) => x.id);
@@ -362,7 +424,7 @@ function Favorites({ ctx, list, title }: { ctx: RowContext; list: FavoriteList; 
                 data-on-screen={ids.includes(state.active_tab ?? "") || undefined}
                 data-wide={tile.length > 2 || undefined}
                 {...drag}
-                onDragStart={(e) => startDrag(e, tile.length === 1 ? { kind: "tab", id: lead.id } : { kind: "tab", id: lead.id, pair: true, group: ids })}
+                onDragStart={(e) => { flow.noTip(); startDrag(e, tile.length === 1 ? { kind: "tab", id: lead.id } : { kind: "tab", id: lead.id, pair: true, group: ids }); }}
               >
                 {tile.map((x) => {
                   const own = <button key={x.id} className="fav-page" data-page={x.id} {...page(x)} />;
@@ -374,8 +436,7 @@ function Favorites({ ctx, list, title }: { ctx: RowContext; list: FavoriteList; 
               </div>
             );
           })}
-        </div>
-      )}
+    </div>
       {renamed && (
         <div className="row fav-rename">
           <Favicon url={renamed.url} src={state.runtime[renamed.id]?.favicon} />
@@ -391,8 +452,7 @@ function Favorites({ ctx, list, title }: { ctx: RowContext; list: FavoriteList; 
           />
         </div>
       )}
-    </div>
-  );
+  </>);
 }
 
 export function TabRow({ ctx, tab, section, index, folderId, onDropAt }: {
@@ -462,9 +522,9 @@ const TabRowInner = memo(
       ctx.openMenu(r.left, r.bottom + 4, snoozeMenu(tab, () => setPickingTime(true)));
     };
     const awayFromHome = section !== "today" && !!tab.home_url && tab.home_url !== tab.url;
-    // A pinned tab without a page, at its pinned page, has nothing to close:
-    // closing removes it (not a smart item, which only snoozes). One away
-    // from that page goes back to it first.
+    // A pinned tab without a page, at its pinned page, has nothing to unload:
+    // its button is a × that removes it (not a smart item, which only
+    // snoozes). One away from that page goes back to it first.
     const removable = section === "pinned" && !rt?.loaded && !awayFromHome && !justClosed && !snoozable;
     // The row's close (its button, a middle click): unloads a page, archives
     // a Today tab, or removes a pinned tab without a page.
@@ -635,12 +695,24 @@ const TabRowInner = memo(
               </button>
             )
           ) : removable ? (
-            // Its own key: a focused × must not turn into this button in place.
+            // × takes the row away, as on a Today tab. Its own key: a focused
+            // minus must not turn into this button in place.
             <button
               key="remove"
               className="close"
               title={t("sidebar.tab_menu.remove_from_pinned")}
               aria-label={t("sidebar.tab_menu.remove_from_pinned")}
+              onClick={(e) => { e.stopPropagation(); close(e); }}
+            >
+              <Close width={14} height={14} />
+            </button>
+          ) : section === "pinned" ? (
+            // A minus: the page is unloaded and the row stays.
+            <button
+              key="unload"
+              className="close"
+              title={t("sidebar.tab_row.unload")}
+              aria-label={t("sidebar.tab_row.unload")}
               onClick={(e) => { e.stopPropagation(); close(e); }}
             >
               <Minus width={14} height={14} />
@@ -925,7 +997,7 @@ export function FolderRow({ ctx, folder, index, depth, parentId, onDropAt }: { c
   );
 }
 
-function countTabs(nodes: SidebarNode[]): number {
+export function countTabs(nodes: SidebarNode[]): number {
   return nodes.reduce((n, x) => n + (x.kind === "tab" ? 1 : countTabs(x.children)), 0);
 }
 
