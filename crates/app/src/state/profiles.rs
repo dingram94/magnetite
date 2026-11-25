@@ -218,6 +218,26 @@ impl AppState {
         id
     }
 
+    /// Put profile `id` at place `index` of the lasting profiles, counted
+    /// without it (past the end: last of them). Private profiles are not
+    /// sorted: they are on no list. The lists of favorites follow, which
+    /// stand in the order of the profiles.
+    pub fn move_profile(&mut self, id: &str, index: usize) {
+        let profiles = &mut self.sidebar.profiles;
+        let Some(from) = profiles.iter().position(|p| p.id == id && !p.ephemeral) else {
+            return;
+        };
+        let profile = profiles.remove(from);
+        let lasting = |p: &magnetite_core::Profile| !p.ephemeral;
+        let at = (profiles.iter().enumerate())
+            .filter(|(_, p)| lasting(p))
+            .map(|(at, _)| at)
+            .nth(index)
+            .unwrap_or_else(|| profiles.iter().rposition(lasting).map_or(0, |at| at + 1));
+        profiles.insert(at, profile);
+        self.normalise_favorites();
+    }
+
     /// Id of the default profile.
     pub fn default_profile_id(&self) -> Id {
         let profiles = &self.sidebar.profiles;
@@ -548,6 +568,48 @@ mod tests {
         assert_eq!(s.profile_for_tab("chat").as_deref(), Some("work"));
         assert_eq!(s.find_tab("chat").unwrap().1.profile_id, None);
         assert!(s.profile_in_use("work"));
+    }
+
+    #[test]
+    fn profiles_are_sorted_among_the_lasting_ones_and_the_favorites_follow() {
+        let mut s = state();
+        let default = s.default_profile_id();
+        let profile = |id: &str, ephemeral| Profile {
+            id: id.into(),
+            name: id.into(),
+            is_default: false,
+            ephemeral,
+        };
+        s.sidebar.profiles.push(profile("secret", true));
+        s.sidebar.profiles.push(profile("work", false));
+        s.sidebar.profiles.push(profile("club", false));
+        s.sidebar.favorites[0].items.push(tab("mail"));
+        s.sidebar.favorites[0].items.push(TabItem {
+            profile_id: Some("club".into()),
+            ..tab("chat")
+        });
+        s.normalise_favorites();
+        let lasting = |s: &crate::state::AppState| -> Vec<String> {
+            let profiles = s.sidebar.profiles.iter().filter(|p| !p.ephemeral);
+            profiles.map(|p| p.id.clone()).collect()
+        };
+        // Places count the lasting profiles only, without the one that moves.
+        s.move_profile("club", 0);
+        assert_eq!(lasting(&s), ["club", default.as_str(), "work"]);
+        let lists: Vec<&str> = (s.sidebar.favorites.iter())
+            .map(|f| f.profile_id.as_str())
+            .collect();
+        assert_eq!(lists, ["club", default.as_str()], "the lists follow");
+        s.move_profile(&default, 9);
+        assert_eq!(lasting(&s), ["club", "work", default.as_str()]);
+        assert_eq!(s.default_profile_id(), default, "still the default one");
+        s.move_profile("club", 1);
+        assert_eq!(lasting(&s), ["work", "club", default.as_str()]);
+        // A private profile is on no list, and an unknown one is nothing.
+        let before = s.sidebar.profiles.clone();
+        s.move_profile("secret", 0);
+        s.move_profile("gone", 0);
+        assert_eq!(s.sidebar.profiles, before);
     }
 
     #[test]

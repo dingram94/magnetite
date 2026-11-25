@@ -12,7 +12,8 @@ export interface Info {
   /** `keys`: the keys that go to the space (Settings → Shortcuts), null without. `shortcut`: the keys saved for it, which may not count here (fixed on this system, or something else has them). */
   spaces: { id: string; title: string; icon?: string; icon_image?: string | null; accent?: Color | null; profile_id: string; bookmarks: number; bookmark_tree: boolean; pinned: number; synced: boolean; keys: string | null; shortcut: string | null }[];
   active_space: string;
-  favorites: { id: string; title: string; url: string; profile_id?: string | null; only_in: string[] }[];
+  /** `url`: the page a favorite shows now; `home`: the address it is a favorite of. */
+  favorites: { id: string; title: string; url: string; home?: string | null; profile_id?: string | null; only_in: string[] }[];
   archive_count: number;
   history_count: number;
   /** Whether Magnetite opens links from other apps ("unknown": not on this system). */

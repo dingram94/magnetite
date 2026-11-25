@@ -3,7 +3,7 @@
 // icon, look, profile, what stays on this device, keys). Settings →
 // Profiles: the profiles, each with the spaces and the favorites that share
 // its logins. Settings → Favorites: the favorites.
-import { Fragment, useEffect, useState, useRef } from "react";
+import { Fragment, useEffect, useLayoutEffect, useState, useRef, type ReactNode } from "react";
 import { Favicon } from "../Favicon";
 import { iconUrl, storeIcon } from "../backgrounds";
 import { Glyph, GLYPH_NAMES, glyphFor, SpaceIcon } from "../Glyphs";
@@ -339,7 +339,9 @@ function SpaceList({ info, reload, open }: { info: Info; reload: () => Promise<u
 /**
  * Settings → Profiles: every lasting profile with the spaces and the
  * favorites that use it, each in a column of its own (a space and a
- * favorite may have the same name), to add, rename and delete.
+ * favorite may have the same name), to sort, add, rename and delete. Their
+ * order is the order of every list of profiles, and of the lists of
+ * favorites in the sidebar.
  */
 export function ProfilesSection({ info, reload, open }: { info: Info; reload: () => Promise<unknown>; open: (section: string, item?: string) => void }) {
   const { armed, arm } = useArmed();
@@ -362,22 +364,52 @@ export function ProfilesSection({ info, reload, open }: { info: Info; reload: ()
   const spacesOf = (id: string) => info.spaces.filter((s) => s.profile_id === id);
   // A favorite without a profile of its own is in the main one.
   const favoritesOf = (id: string) => info.favorites.filter((f) => (f.profile_id ?? main) === id).map((f) => f.title || hostOf(f.url));
+  const move = (id: string, index: number) => send({ cmd: "move_profile", id, index }).then(reload);
+  // Dragging by the handle sorts: the other profiles make room where it would land.
+  /** Where the dragged profile ends up when dropped on the row of `target`, or null when it would not move. */
+  const landing = (dragged: string, target: string, below: boolean) => {
+    const from = kept.findIndex((p) => p.id === dragged);
+    const i = kept.findIndex((p) => p.id === target);
+    if (from < 0 || i < 0) return null;
+    let to = below ? i + 1 : i;
+    if (from < to) to -= 1;
+    return to === from ? null : to;
+  };
+  const sorting = useSorting(landing, move);
   return (
     <>
       <Group title={t("spaces.profiles.title")} hint={t("spaces.profiles.hint")}>
         <div className="set-row set-profile set-profile-head" aria-hidden="true">
+          <span />
           <span>{t("spaces.profile_label")}</span>
           <span>{t("spaces.profiles.used_by_spaces")}</span>
           <span>{t("spaces.profiles.used_by_favorites")}</span>
           <span />
         </div>
-        {kept.map((p) => {
+        {kept.map((p, i) => {
           const spaces = spacesOf(p.id);
           const favorites = favoritesOf(p.id);
           return (
-            <div key={p.id} className="set-row set-profile" data-search-row>
+            <div key={p.id} className="set-row set-profile" data-search-row {...sorting.row(p.id)}>
+              <span
+                className="set-grip"
+                role="button"
+                tabIndex={kept.length > 1 ? 0 : -1}
+                aria-disabled={kept.length < 2 || undefined}
+                {...sorting.handle(p.id, kept.length > 1)}
+                title={kept.length > 1 ? t("spaces.sort.title") : t("spaces.sort.profile_alone")}
+                aria-label={t("spaces.sort.profile", { name: profileName(p), position: i + 1, total: kept.length })}
+                onKeyDown={(e) => {
+                  const to = e.key === "ArrowUp" ? i - 1 : e.key === "ArrowDown" ? i + 1 : -1;
+                  if (to < 0 || to >= kept.length) return;
+                  e.preventDefault();
+                  void move(p.id, to);
+                }}
+              >
+                <Grip />
+              </span>
               {p.is_default ? (
-                <span className="set-label" data-search-name>{t("spaces.profile_name.main")}</span>
+                <span className="set-label set-profile-text" data-search-name>{t("spaces.profile_name.main")}</span>
               ) : (
                 <span>
                   <span className="sr-only" data-search-name>{t("spaces.profiles.search_name", { name: p.name })}</span>
@@ -394,8 +426,9 @@ export function ProfilesSection({ info, reload, open }: { info: Info; reload: ()
                   />
                 </span>
               )}
-              <span className="set-hint min-w-0" style={{ marginTop: 0 }} data-search-name>
+              <Clamped count={spaces.length} of={t("spaces.profiles.all_spaces_of", { count: spaces.length, name: profileName(p) })}>
                 <span className="set-profile-cap">{t("spaces.profiles.used_by_spaces_caption")} </span>
+                {!p.synced && `${t("spaces.list.only_device")} · `}
                 {spaces.length > 0
                   ? spaces.map((sp, i) => (
                       <span key={sp.id}>
@@ -404,12 +437,11 @@ export function ProfilesSection({ info, reload, open }: { info: Info; reload: ()
                       </span>
                     ))
                   : t("common.none")}
-                {!p.synced && ` · ${t("spaces.list.only_device")}`}
-              </span>
-              <span className="set-hint min-w-0" style={{ marginTop: 0 }} data-search-name>
+              </Clamped>
+              <Clamped count={favorites.length} of={t("spaces.profiles.all_favorites_of", { count: favorites.length, name: profileName(p) })}>
                 <span className="set-profile-cap">{t("spaces.profiles.used_by_favorites_caption")} </span>
                 {favorites.length > 0 ? favorites.join(", ") : t("common.none")}
-              </span>
+              </Clamped>
               <span>
                 {!p.is_default && spaces.length === 0 && favorites.length === 0 && (
                   <button className="btn" data-danger={armed === p.id || undefined} title={t("spaces.profiles.delete_title")} onClick={() => arm(p.id, () => void deleteProfile(p.id))}>
@@ -437,6 +469,41 @@ export function ProfilesSection({ info, reload, open }: { info: Info; reload: ()
   );
 }
 
+/**
+ * The names that use a profile: two lines of them at most, and a button
+ * that shows the rest when there are more (`count` names; `of` names the
+ * button for those who do not see whose row it is in). A profile with many spaces or favorites
+ * stays a row as tall as the others, to read down and to drag.
+ */
+function Clamped({ count, of, children }: { count: number; of: string; children: ReactNode }) {
+  const names = useRef<HTMLSpanElement>(null);
+  const [open, setOpen] = useState(false);
+  // More names than two lines hold, at the width the column has now.
+  const [long, setLong] = useState(false);
+  useLayoutEffect(() => {
+    const el = names.current;
+    if (!el || open) return;
+    const measure = () => setLong(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    const resized = new ResizeObserver(measure);
+    resized.observe(el);
+    return () => resized.disconnect();
+  }, [open, count]);
+  return (
+    <span className="set-hint set-profile-text min-w-0" style={{ marginTop: 0 }} data-search-name>
+      <span ref={names} className="set-profile-names" data-open={open || undefined}>{children}</span>
+      {(long || open) && (
+        <button className="set-profile-more" aria-expanded={open} aria-label={open ? undefined : of} onClick={() => setOpen(!open)}>
+          {open ? t("spaces.profiles.less") : t("spaces.profiles.more", { count })}
+        </button>
+      )}
+    </span>
+  );
+}
+
+/** A favorite's address as its row shows it: without the "https://" every address has, and without the slash of a bare site. */
+const shortAddress = (url: string) => url.replace(/^https:\/\//, "").replace(/^([^/?#]+)\/$/, "$1");
+
 /** The six dots a row is dragged by. */
 function Grip() {
   return (
@@ -449,9 +516,9 @@ function Grip() {
 type Favorite = Info["favorites"][number];
 
 /**
- * Settings → Favorites: the favorites, to sort (inside the list of their profile, as in the
- * sidebar), name, show in every space or in some, give a profile, remove,
- * and add by address.
+ * Settings → Favorites: the favorites, each with its address, to sort
+ * (inside the list of their profile, as in the sidebar), name, show in
+ * every space or in some, give a profile, remove, and add by address.
  */
 export function FavoritesSection({ info, reload }: { info: Info; reload: () => Promise<unknown> }) {
   const { armed, arm } = useArmed(4000);
@@ -537,6 +604,8 @@ export function FavoritesSection({ info, reload }: { info: Info; reload: () => P
       )}
       {info.favorites.map((f, i) => {
         const name = f.title || hostOf(f.url);
+        // The address it is a favorite of, not the page it happens to show.
+        const address = f.home || f.url;
         const list = listOf(f);
         const place = list.indexOf(f);
         const shows = picked[f.id]?.spaces ?? f.only_in;
@@ -568,20 +637,23 @@ export function FavoritesSection({ info, reload }: { info: Info; reload: () => P
               <Grip />
             </span>
             <Favicon url={f.url} />
-            <span className="sr-only" data-search-name>{name} {hostOf(f.url)}</span>
-            <input
-              key={f.title}
-              className="field min-w-0"
-              defaultValue={f.title}
-              placeholder={hostOf(f.url)}
-              title={f.url}
-              aria-label={t("spaces.favorites.name_label", { name })}
-              onBlur={(e) => {
-                const to = e.target.value.trim();
-                if (to !== f.title) void send({ cmd: "rename_tab", id: f.id, title: to }).then(reload);
-              }}
-              onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-            />
+            <span className="sr-only" data-search-name>{name} {hostOf(address)}</span>
+            <span className="set-fav-name">
+              <input
+                key={f.title}
+                className="field"
+                defaultValue={f.title}
+                placeholder={hostOf(address)}
+                aria-label={t("spaces.favorites.name_label", { name })}
+                onBlur={(e) => {
+                  const to = e.target.value.trim();
+                  if (to !== f.title) void send({ cmd: "rename_tab", id: f.id, title: to }).then(reload);
+                }}
+                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+              />
+              {/* A name says nothing of where the favorite goes: its address does, whole in the tooltip. */}
+              <span className="set-fav-url" title={address}>{shortAddress(address)}</span>
+            </span>
             <PickList several none={t("spaces.favorites.every_space")} options={spaceOptions(info.spaces)} chosen={shows} label={t("spaces.favorites.shows_label", { name })} onChoose={(spaces) => choose(f.id, spaces)} />
             <span>
               <ProfileChoice info={info} current={profileOf(f)} name={name} label={t("spaces.profile_of", { name })} assign={(to) => send({ cmd: "set_tab_profile", id: f.id, profile: to === main ? null : to }).then(reload)} />

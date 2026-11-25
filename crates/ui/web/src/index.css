@@ -852,7 +852,7 @@ button.wel-space-icon:hover:not(:disabled) { background: color-mix(in srgb, var(
 /* A path to select and copy: it breaks anywhere rather than run out of its card. */
 .set-path { display: block; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; cursor: text; }
 /* The row being dragged follows the pointer, above the others. */
-.set-space[data-dragged], .set-space[data-dragged]:hover, .set-fav[data-dragged] { position: relative; z-index: 2; border-top-color: transparent; background: var(--surface); box-shadow: 0 0 0 1px var(--line), 0 8px 24px rgba(0,0,0,0.35); }
+.set-space[data-dragged], .set-space[data-dragged]:hover, .set-fav[data-dragged], .set-profile[data-dragged] { position: relative; z-index: 2; border-top-color: transparent; background: var(--surface); box-shadow: 0 0 0 1px var(--line), 0 8px 24px rgba(0,0,0,0.35); }
 /* The other rows glide aside to make room where it would land. */
 html[data-sorting] [data-sort-row]:not([data-dragged]) { transition: transform 140ms ease; }
 /* While a row is dragged, the hand stays closed wherever the pointer is. */
@@ -860,6 +860,10 @@ html[data-sorting], html[data-sorting] * { cursor: grabbing !important; user-sel
 /* A favorite: handle, icon, name and its choices in columns, which their names head. */
 .set-fav { display: grid; grid-template-columns: 14px 16px minmax(120px, 1fr) 170px 170px 88px; align-items: center; gap: 8px 10px; padding-top: 10px; padding-bottom: 10px; }
 .set-fav > .btn { padding: 0 6px; }
+/* Its name to change, and under it the address it goes to. */
+.set-fav-name { display: grid; gap: 3px; min-width: 0; }
+.set-fav-name > .field { min-width: 0; width: 100%; }
+.set-fav-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 9px; font-size: 11.5px; line-height: 15px; color: var(--muted); user-select: text; -webkit-user-select: text; cursor: text; }
 .set-fav-cols { padding-bottom: 2px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
 .set-fav-cols + .set-fav, .set-fav-cols + .set-fav-head { border-top: 0; }
 .set-fav-cols + .set-fav-head { padding-top: 6px; }
@@ -902,22 +906,35 @@ html[data-sorting], html[data-sorting] * { cursor: grabbing !important; user-sel
 /* The whole row lights up as one: handle and space together. */
 .set-space:hover, .set-space:has(.set-space-go:focus-visible) { background: var(--row-hover); }
 /* Settings → Profiles: a profile, the spaces that use it and the favorites that do, side by side. */
-.set-profile { display: grid; grid-template-columns: 180px minmax(0, 1fr) minmax(0, 1fr) 104px; align-items: center; gap: 8px 14px; padding-top: 10px; padding-bottom: 10px; }
+.set-profile { display: grid; grid-template-columns: 14px 180px minmax(0, 1fr) minmax(0, 1fr) 104px; align-items: start; gap: 8px 14px; padding-top: 10px; padding-bottom: 10px; }
+.set-profile > .set-grip { margin-left: -3px; }
+.set-profile:hover .set-grip:not([aria-disabled]) { color: var(--fg); }
+/* Text beside a field stands on the line of the field's text, however many lines follow. */
+.set-profile-text { padding-top: 6px; }
+/* Two lines of names; the button under them shows the rest. */
+.set-profile-names { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+.set-profile-names[data-open] { display: block; }
+.set-profile-more { display: block; margin-top: 2px; font-size: 12px; font-weight: 500; color: var(--secondary); }
+.set-profile-more:hover, .set-profile-more:focus-visible { color: var(--fg); text-decoration: underline; }
 .set-profile > :last-child { justify-self: end; }
 .set-profile-head { padding-bottom: 6px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.set-profile-head > span { padding-top: 0; }
 .set-profile-head + .set-profile { border-top: 0; padding-top: 4px; }
 .set-profile-cap { display: none; }
 .set-profile-link { color: inherit; text-align: left; }
 .set-profile-link:hover { color: var(--fg); text-decoration: underline; }
 @container (max-width: 720px) {
   /* No room for columns: each profile says what its two lines are. */
-  .set-profile { grid-template-columns: minmax(0, 1fr); }
+  .set-profile { grid-template-columns: 14px minmax(0, 1fr); }
+  .set-profile > * { grid-column: 2; }
+  .set-profile > .set-grip { grid-column: 1; grid-row: 1; }
+  .set-profile-text { padding-top: 0; }
   .set-profile-head { display: none; }
   .set-profile-head + .set-profile { border-top: 0; padding-top: 10px; }
   .set-profile-cap { display: inline; font-weight: 600; }
   /* Nor for the columns of the favorites: a favorite wraps, and its fields say what they are. */
   .set-fav { display: flex; flex-wrap: wrap; }
-  .set-fav > input.field { flex: 1 1 140px; }
+  .set-fav > .set-fav-name { flex: 1 1 140px; }
   .set-fav-cols { display: none; }
   .set-fav-cols + .set-fav, .set-fav-cols + .set-fav-head { border-top: 0; }
 }

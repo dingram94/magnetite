@@ -610,6 +610,12 @@ pub(super) enum UiCommand {
         id: String,
         name: String,
     },
+    /// Reorder the profiles: put `id` at place `index` of the lasting ones,
+    /// counted without it (Settings → Profiles).
+    MoveProfile {
+        id: String,
+        index: usize,
+    },
     /// Only unused, non-default profiles; their data is deleted at next start.
     DeleteProfile {
         id: String,
@@ -1788,6 +1794,11 @@ impl MagnetiteApp {
                 });
                 self.push_state(engine);
             }
+            UiCommand::MoveProfile { id, index } => {
+                self.with_state(|s| s.move_profile(&id, index));
+                self.push_state(engine);
+                self.tell_settings_pages(engine);
+            }
             UiCommand::DeleteProfile { id } => {
                 if !self.with_state(|s| s.delete_profile(&id)) {
                     return Err("profile is in use or the default".into());
@@ -2054,7 +2065,7 @@ impl MagnetiteApp {
                         }).collect::<Vec<_>>(),
                         "spaces": s.sidebar.spaces.iter().filter(|sp| !s.is_private_space(&sp.id)).map(|sp| json!({"id": sp.id, "title": sp.title, "icon": sp.icon, "icon_image": sp.icon_image, "accent": sp.accent, "profile_id": sp.profile_id, "bookmarks": sp.bookmarks.iter().flat_map(SidebarNode::tabs).count(), "bookmark_tree": !sp.bookmarks.is_empty(), "pinned": s.plain_pinned(&sp.id).len(), "synced": !s.unsynced_spaces.contains(&sp.id), "keys": space_keys.iter().find_map(|(own, keys)| (own.id == sp.id).then(|| keys.to_string())), "shortcut": sp.shortcut})).collect::<Vec<_>>(),
                         "active_space": s.active_space,
-                        "favorites": s.sidebar.favorites.iter().flat_map(|f| f.items.iter()).map(|t| json!({"id": t.id, "title": t.title, "url": t.url, "profile_id": s.profile_for_tab(&t.id), "only_in": t.only_in.iter().filter(|sp| s.space(sp).is_some()).collect::<Vec<_>>()})).collect::<Vec<_>>(),
+                        "favorites": s.sidebar.favorites.iter().flat_map(|f| f.items.iter()).map(|t| json!({"id": t.id, "title": t.title, "url": t.url, "home": t.home_url, "profile_id": s.profile_for_tab(&t.id), "only_in": t.only_in.iter().filter(|sp| s.space(sp).is_some()).collect::<Vec<_>>()})).collect::<Vec<_>>(),
                         "archive_count": s.archive.len(),
                         "history_count": s.history.len(),
                         "default_browser": default_browser,

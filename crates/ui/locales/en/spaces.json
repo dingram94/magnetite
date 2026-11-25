@@ -19,7 +19,9 @@
     "title": "Drag to sort, or press the up and down arrow keys",
     "space": "Sort {name}: space {position} of {total}. The up and down arrow keys move it.",
     "favorite": "Sort {name}: favorite {position} of {total}. The up and down arrow keys move it.",
-    "favorite_alone": "The only favorite of its profile: there is nothing to sort"
+    "favorite_alone": "The only favorite of its profile: there is nothing to sort",
+    "profile": "Sort {name}: profile {position} of {total}. The up and down arrow keys move it.",
+    "profile_alone": "The only profile: there is nothing to sort"
   },
   "page": {
     "name_icon": {
@@ -96,7 +98,7 @@
   },
   "profiles": {
     "title": "Profiles",
-    "hint": "A profile is a set of logins of its own: cookies, site data and extensions. What uses the same profile is signed in to the same accounts; a second profile is how to use a second account of one site. A private profile is not listed: it is forgotten when Magnetite quits.",
+    "hint": "A profile is a set of logins of its own: cookies, site data and extensions. What uses the same profile is signed in to the same accounts; a second profile is how to use a second account of one site. A private profile is not listed: it is forgotten when Magnetite quits. The order here is the order of every list of profiles, and of the lists of favorites in the sidebar.",
     "used_by_spaces": "Used by spaces",
     "used_by_favorites": "Used by favorites",
     "used_by_spaces_caption": "Used by spaces:",
@@ -119,7 +121,11 @@
       "label": "Give a favorite a profile",
       "label_hint": "In Favorites, each favorite has a list to choose its profile from.",
       "open": "Open Favorites"
-    }
+    },
+    "more": "Show all {count}",
+    "all_spaces_of": "Show all {count} spaces that use {name}",
+    "all_favorites_of": "Show all {count} favorites that use {name}",
+    "less": "Show fewer"
   },
   "favorites": {
     "title": "Favorites",

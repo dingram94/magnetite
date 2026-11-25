@@ -166,7 +166,15 @@ Favorites) choose one of:
 Settings → Profiles lists every lasting profile with the spaces that use
 it and the favorites that do, each in a column of their own, so what
 shares logins shows in one place. A profile needs no space: one that only
-favorites use keeps their logins apart from every space's.
+favorites use keeps their logins apart from every space's. A profile with
+more spaces or favorites than two lines hold shows two lines of them and a
+button for the rest, so every row stays about as tall as the others.
+
+The profiles are sorted there by dragging a row's handle, or with the up
+and down arrow keys on it; the main profile is sorted like any other. Their
+order is the order of every list of profiles and of the lists of favorites
+in the sidebar (`sidebar.md`), and it syncs with the sidebar. Private
+profiles are on no list and are not sorted.
 
 A private profile keeps its browsing off the disk: its Today tabs are not
 saved, synced or archived, its pinned tabs and favorites are saved with

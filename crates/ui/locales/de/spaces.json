@@ -19,7 +19,9 @@
     "title": "Ziehen oder mit den Pfeiltasten nach oben und unten sortieren",
     "space": "{name} sortieren: Space {position} von {total}. Mit den Pfeiltasten nach oben und unten verschieben.",
     "favorite": "{name} sortieren: Favorit {position} von {total}. Mit den Pfeiltasten nach oben und unten verschieben.",
-    "favorite_alone": "Der einzige Favorit in seinem Profil – es gibt nichts zu sortieren"
+    "favorite_alone": "Der einzige Favorit in seinem Profil – es gibt nichts zu sortieren",
+    "profile": "{name} sortieren: Profil {position} von {total}. Mit den Pfeiltasten nach oben und unten verschieben.",
+    "profile_alone": "Das einzige Profil – es gibt nichts zu sortieren"
   },
   "page": {
     "name_icon": {
@@ -96,7 +98,7 @@
   },
   "profiles": {
     "title": "Profile",
-    "hint": "Ein Profil hat eigene Cookies, Websitedaten und Erweiterungen und damit eigene Anmeldungen. Alles, was dasselbe Profil nutzt, ist bei denselben Konten angemeldet. Mit einem zweiten Profil kannst du ein zweites Konto derselben Website nutzen. Private Profile stehen nicht in der Liste, da sie beim Beenden von Magnetite vergessen werden.",
+    "hint": "Ein Profil hat eigene Cookies, Websitedaten und Erweiterungen und damit eigene Anmeldungen. Alles, was dasselbe Profil nutzt, ist bei denselben Konten angemeldet. Mit einem zweiten Profil kannst du ein zweites Konto derselben Website nutzen. Private Profile stehen nicht in der Liste, da sie beim Beenden von Magnetite vergessen werden. Die Reihenfolge hier gilt für jede Liste von Profilen und für die Favoritenlisten in der Seitenleiste.",
     "used_by_spaces": "Genutzt von Spaces",
     "used_by_favorites": "Genutzt von Favoriten",
     "used_by_spaces_caption": "Genutzt von Spaces:",
@@ -119,7 +121,11 @@
       "label": "Einem Favoriten ein Profil geben",
       "label_hint": "Unter „Favoriten“ kannst du für jeden Favoriten ein Profil aus einer Liste wählen.",
       "open": "Favoriten öffnen"
-    }
+    },
+    "more": "Alle {count} anzeigen",
+    "all_spaces_of": "Alle {count} Spaces anzeigen, die {name} nutzen",
+    "all_favorites_of": "Alle {count} Favoriten anzeigen, die {name} nutzen",
+    "less": "Weniger anzeigen"
   },
   "favorites": {
     "title": "Favoriten",

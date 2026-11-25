@@ -663,6 +663,8 @@ export type Command =
   | { cmd: "sync_delete_chain" }
   | { cmd: "new_profile"; name: string; ephemeral?: boolean }
   | { cmd: "rename_profile"; id: Id; name: string }
+  /** Profile `id` to place `index` of the lasting profiles, counted without it. */
+  | { cmd: "move_profile"; id: Id; index: number }
   | { cmd: "delete_profile"; id: Id }
   /** `synced` false keeps the space on this device alone. */
   | { cmd: "set_space_synced"; id: Id; synced: boolean }
