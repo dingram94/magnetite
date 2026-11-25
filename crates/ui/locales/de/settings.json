@@ -15,7 +15,9 @@
     "back_to_results": "Zurück zu allen Suchergebnissen",
     "everything_for": "Alles zu „{query}“",
     "open_section": "{section} öffnen",
-    "no_match": "Keine Einstellungen zu „{query}“ gefunden."
+    "no_match": "Keine Einstellungen zu „{query}“ gefunden.",
+    "all_favorites": "Alle Favoriten",
+    "favorite_intro": "Die Einstellungen nur dieses Favoriten: sein Name, wo er erscheint und sein Profil. „Alle Favoriten“ führt zurück zur Liste."
   },
   "groups": {
     "browsing": "Surfen",

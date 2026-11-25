@@ -129,7 +129,7 @@
   },
   "favorites": {
     "title": "Favorites",
-    "hint": "The sites at the top of the sidebar. A favorite shows in every space, or only in the spaces you choose. Each runs in a profile; a copy in another profile (right-click → Duplicate favorite) is a second account of the same site. As in the sidebar, every profile has a list of its own, and a favorite is sorted inside its list.",
+    "hint": "The sites at the top of the sidebar, each with its address. A favorite shows in every space, or only in the spaces you choose, and runs in a profile: its own page has both. A copy in another profile (right-click → Duplicate favorite) is a second account of the same site. As in the sidebar, every profile has a list of its own, and a favorite is sorted inside its list.",
     "name_label": "Name of the favorite {name}",
     "every_space": "Every space",
     "shows_label": "Where {name} shows",
@@ -142,12 +142,17 @@
       "add": "Add favorite",
       "profile_label": "Profile of the new favorite"
     },
-    "columns": {
+    "only_in": "only in {spaces}",
+    "page": {
+      "name_address": "Name and address",
       "name": "Name",
+      "name_hint": "Without a name of its own it goes by its site's.",
       "address": "Address",
+      "where": "Where it shows",
       "shows": "Shows in",
-      "profile": "Profile"
-    },
-    "remove_label": "Remove {name} from the favorites"
+      "shows_hint": "Every space, or only the spaces chosen here.",
+      "profile_hint": "Its page uses the logins of this profile, whichever space is in front.",
+      "remove": "Remove from the favorites"
+    }
   }
 }

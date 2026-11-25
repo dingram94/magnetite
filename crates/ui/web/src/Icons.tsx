@@ -24,8 +24,6 @@ export const Reload = icon(L.RotateCw);
 export const Reset = icon(L.RotateCcw);
 export const SidebarIcon = icon(L.PanelLeft);
 export const Close = icon(L.X);
-/** Take something off a list where a word has no room (Settings → Favorites). */
-export const Remove = icon(L.Trash2);
 /** The bar before a docked web panel (Empty.tsx): put the panel away. */
 /** The private space. */
 export const MaskIcon = icon(L.VenetianMask);

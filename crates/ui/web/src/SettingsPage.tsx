@@ -22,7 +22,8 @@ import { PermissionsSection } from "./settings/PermissionsSection";
 import { SearchedSection, SearchResults } from "./settings/SearchResults";
 import { ShortcutsSection } from "./settings/ShortcutsSection";
 import { SiteCodeSection } from "./settings/SiteCodeSection";
-import { FavoritesSection, ProfilePick, ProfilesSection, spaceOptions, SpacesSection } from "./settings/SpacesSection";
+import { Favicon } from "./Favicon";
+import { favoriteName, FavoritesSection, ProfilePick, ProfilesSection, spaceOptions, SpacesSection } from "./settings/SpacesSection";
 import { SmartFoldersSection } from "./settings/SmartFoldersSection";
 import { SyncSection, type SyncJob } from "./settings/SyncSection";
 import type { Info, SettingsPatch } from "./settings/types";
@@ -217,6 +218,7 @@ export function SettingsPage() {
   const section = SECTIONS.find((s) => s.id === sectionId) ?? SECTIONS[0]!;
   // A space's own page is headed by the space.
   const ownSpace = sectionId === "spaces" && place.item ? info.spaces.find((sp) => sp.id === place.item) : undefined;
+  const ownFavorite = sectionId === "favorites" && place.item ? info.favorites.find((f) => f.id === place.item) : undefined;
   // One section is on the page: always, but for the list of what a search found.
   const shown = !searching || picked;
   // Ctrl+Tab is the Control key on a Mac too; elsewhere that key has its name in the page's language.
@@ -349,7 +351,7 @@ export function SettingsPage() {
       {sectionId === "permissions" && <PermissionsSection info={info} />}
       {sectionId === "spaces" && <SpacesSection info={info} update={update} reload={reload} item={place.item} open={openSection} />}
       {sectionId === "profiles" && <ProfilesSection info={info} reload={reload} open={openSection} />}
-      {sectionId === "favorites" && <FavoritesSection info={info} reload={reload} />}
+      {sectionId === "favorites" && <FavoritesSection info={info} reload={reload} item={place.item} open={openSection} />}
       {sectionId === "bookmarks" && <BookmarksSection key={place.id === "bookmarks" ? place.item : undefined} info={info} reload={reload} item={place.id === "bookmarks" ? place.item : undefined} />}
       {sectionId === "developer" && (
         <>
@@ -476,15 +478,23 @@ export function SettingsPage() {
                   {t("settings.page.all_spaces")}
                 </button>
               )}
+              {ownFavorite && (
+                <button className="set-found" onClick={() => openSection("favorites")}>
+                  <Back width={15} height={15} />
+                  {t("settings.page.all_favorites")}
+                </button>
+              )}
               <header className="mb-6 flex items-start gap-4">
-                {ownSpace ? (
+                {ownFavorite ? (
+                  <span className="set-icon"><Favicon url={ownFavorite.url} /></span>
+                ) : ownSpace ? (
                   <span className="set-icon" style={{ color: accentCss(ownSpace.accent ?? undefined) }}><SpaceIcon space={ownSpace} size={22} /></span>
                 ) : (
                   <span className="set-icon"><section.Icon width={22} height={22} /></span>
                 )}
                 <div>
-                  <h1 ref={heading} tabIndex={-1} className="text-[22px] font-semibold tracking-[-0.01em] outline-none">{ownSpace?.title ?? section.title}</h1>
-                  <p className="mt-1 max-w-[560px] text-[14px] leading-5 text-[var(--muted)]">{ownSpace ? t("settings.page.space_intro") : section.intro}</p>
+                  <h1 ref={heading} tabIndex={-1} className="text-[22px] font-semibold tracking-[-0.01em] outline-none">{ownSpace?.title ?? (ownFavorite ? favoriteName(ownFavorite) : section.title)}</h1>
+                  <p className="mt-1 max-w-[560px] text-[14px] leading-5 text-[var(--muted)]">{ownSpace ? t("settings.page.space_intro") : ownFavorite ? t("settings.page.favorite_intro") : section.intro}</p>
                 </div>
               </header>
               {searching && (

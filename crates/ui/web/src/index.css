@@ -852,25 +852,14 @@ button.wel-space-icon:hover:not(:disabled) { background: color-mix(in srgb, var(
 /* A path to select and copy: it breaks anywhere rather than run out of its card. */
 .set-path { display: block; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; cursor: text; }
 /* The row being dragged follows the pointer, above the others. */
-.set-space[data-dragged], .set-space[data-dragged]:hover, .set-fav[data-dragged], .set-profile[data-dragged] { position: relative; z-index: 2; border-top-color: transparent; background: var(--surface); box-shadow: 0 0 0 1px var(--line), 0 8px 24px rgba(0,0,0,0.35); }
+.set-space[data-dragged], .set-space[data-dragged]:hover, .set-profile[data-dragged] { position: relative; z-index: 2; border-top-color: transparent; background: var(--surface); box-shadow: 0 0 0 1px var(--line), 0 8px 24px rgba(0,0,0,0.35); }
 /* The other rows glide aside to make room where it would land. */
 html[data-sorting] [data-sort-row]:not([data-dragged]) { transition: transform 140ms ease; }
 /* While a row is dragged, the hand stays closed wherever the pointer is. */
 html[data-sorting], html[data-sorting] * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
-/* A favorite: handle, icon, name and its choices in columns, which their names head. */
-.set-fav { display: grid; grid-template-columns: 14px 16px minmax(100px, 2fr) minmax(0, 3fr) 140px 140px 30px; align-items: center; gap: 8px 10px; padding-top: 10px; padding-bottom: 10px; }
-.set-fav-remove { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; color: var(--muted); }
-.set-fav-remove:hover, .set-fav-remove:focus-visible { background: rgba(255,255,255,0.1); color: var(--fg); }
-.set-fav-remove[data-danger], .set-fav-remove[data-danger]:hover { background: rgba(255,90,90,0.18); color: #f3a0a0; }
-/* The address it goes to, beside its name: as much of it as the column holds. */
-.set-fav-url { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--muted); user-select: text; -webkit-user-select: text; cursor: text; }
-.set-fav-cols { padding-bottom: 2px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
-.set-fav-cols + .set-fav, .set-fav-cols + .set-fav-head { border-top: 0; }
-.set-fav-cols + .set-fav-head { padding-top: 6px; }
 /* The profile a list of favorites belongs to, above its first one. */
 .set-fav-head { padding-top: 12px; padding-bottom: 2px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
-.set-fav-head + .set-fav { border-top: 0; }
-.set-fav:hover .set-grip:not([aria-disabled]) { color: var(--fg); }
+.set-fav-head + .set-space { border-top: 0; }
 /* A choice from a list of Magnetite's own (`Pick`): a button that says what is chosen, the list under it. */
 .set-pick { position: relative; display: inline-block; flex: none; max-width: 100%; vertical-align: top; }
 .set-pick-button { display: flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; text-align: left; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 14px) 13px, calc(100% - 9px) 13px; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 26px; }
@@ -932,11 +921,6 @@ html[data-sorting], html[data-sorting] * { cursor: grabbing !important; user-sel
   .set-profile-head { display: none; }
   .set-profile-head + .set-profile { border-top: 0; padding-top: 10px; }
   .set-profile-cap { display: inline; font-weight: 600; }
-  /* Nor for the columns of the favorites: a favorite wraps, and its fields say what they are. */
-  .set-fav { display: flex; flex-wrap: wrap; }
-  .set-fav > input.field, .set-fav > .set-fav-url { flex: 1 1 140px; }
-  .set-fav-cols { display: none; }
-  .set-fav-cols + .set-fav, .set-fav-cols + .set-fav-head { border-top: 0; }
 }
 .set-space-icon { display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 9px; background: rgba(255,255,255,0.06); }
 /* The icons to choose from for a space. */

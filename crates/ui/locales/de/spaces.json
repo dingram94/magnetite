@@ -129,7 +129,7 @@
   },
   "favorites": {
     "title": "Favoriten",
-    "hint": "Die Websites oben in der Seitenleiste. Ein Favorit erscheint in jedem Space oder nur in den Spaces, die du auswählst. Jeder Favorit läuft in einem Profil; mit einer Kopie in einem anderen Profil (Rechtsklick → „Favorit duplizieren“) nutzt du ein zweites Konto derselben Website. Wie in der Seitenleiste hat jedes Profil seine eigene Liste, und Favoriten werden innerhalb ihrer Liste sortiert.",
+    "hint": "Die Websites oben in der Seitenleiste, jede mit ihrer Adresse. Ein Favorit erscheint in jedem Space oder nur in den Spaces, die du auswählst, und läuft in einem Profil – beides steht auf seiner eigenen Seite. Mit einer Kopie in einem anderen Profil (Rechtsklick → „Favorit duplizieren“) nutzt du ein zweites Konto derselben Website. Wie in der Seitenleiste hat jedes Profil seine eigene Liste, und Favoriten werden innerhalb ihrer Liste sortiert.",
     "name_label": "Name des Favoriten {name}",
     "every_space": "Alle Spaces",
     "shows_label": "Wo {name} erscheint",
@@ -142,12 +142,17 @@
       "add": "Favorit hinzufügen",
       "profile_label": "Profil des neuen Favoriten"
     },
-    "columns": {
+    "only_in": "nur in {spaces}",
+    "page": {
+      "name_address": "Name und Adresse",
       "name": "Name",
+      "name_hint": "Ohne eigenen Namen heißt er wie seine Website.",
       "address": "Adresse",
+      "where": "Wo er erscheint",
       "shows": "Erscheint in",
-      "profile": "Profil"
-    },
-    "remove_label": "{name} aus den Favoriten entfernen"
+      "shows_hint": "In jedem Space oder nur in den hier gewählten.",
+      "profile_hint": "Seine Seite nutzt die Anmeldungen dieses Profils, egal welcher Space gerade angezeigt wird.",
+      "remove": "Aus den Favoriten entfernen"
+    }
   }
 }
