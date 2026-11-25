@@ -13,7 +13,7 @@ import { record } from "./recorder";
 import { MediaBar, type MediaEntry } from "./MediaBar";
 import { NewMenu } from "./NewMenu";
 import { ExtensionBar, PinnedExtensions } from "./PinnedExtensions";
-import { DeviceTabRow, FavoriteLists, NodeList, RenameInput, SplitRow, TabRow, countTabs, movedUnder, profileColor, type RowContext } from "./Rows";
+import { DeviceTabRow, FavoriteLists, NodeList, RenameInput, SplitRow, TabRow, countTabs, dropAmongPinned, movedUnder, profileColor, type RowContext } from "./Rows";
 import { windowBackground } from "./backgrounds";
 import { IS_MAC, accentCss, applyAppearance, dockedSide, favoriteShows, keyLabel, lookOf, findTab, findTabInSpace, hostOf, onNotice, onOpenArchive, onOpenBookmarks, onOpenDownloads, onOpenHistory, onRecord, send, splitIds, subscribe, type LibraryView, type SidebarNode, type Space, type SplitNode, type TabItem, type UiState } from "./bridge";
 import { IconPicker, SpaceIcon } from "./Glyphs";
@@ -31,10 +31,10 @@ import { reportMediaDevices } from "./mediaDevices";
  */
 const FLOAT = new URLSearchParams(location.search).has("float");
 
-/** Pinned tab `id` among `nodes`, with the folder it is in. */
-function pinnedTab(nodes: SidebarNode[], id: string, folderId?: string): { tab: TabItem; folderId?: string } | null {
-  for (const n of nodes) {
-    const found = n.kind === "tab" ? (n.id === id ? { tab: n, folderId } : null) : pinnedTab(n.children, id, n.id);
+/** Pinned tab `id` among `nodes`, with its place: the list it is in (`among`, of folder `folderId`) and where. */
+function pinnedTab(nodes: SidebarNode[], id: string, folderId?: string): { tab: TabItem; among: SidebarNode[]; index: number; folderId?: string } | null {
+  for (const [index, n] of nodes.entries()) {
+    const found = n.kind === "tab" ? (n.id === id ? { tab: n, among: nodes, index, folderId } : null) : pinnedTab(n.children, id, n.id);
     if (found) return found;
   }
   return null;
@@ -131,7 +131,7 @@ export function App() {
   const ctx: RowContext = { state, spaceId: space.id, openMenu, renaming, setRenaming, newProfileFor, splitAt, inSplit, pickIcon };
   // The space's profile shows beside its name once there is more than one to tell apart.
   const spaceProfile = state.sidebar.profiles.filter((p) => !p.ephemeral).length > 1 ? state.sidebar.profiles.find((p) => p.id === space.profile_id) : undefined;
-  // The pinned tabs can be hidden, space by space. The tab in front stays: its row (a split's: the row of the split) is the one left.
+  // The pinned tabs can be hidden, space by space. The tab in front stays: its row (a split's: the row of the split) is the one left, at its own place for what is dropped on it.
   const pinnedCount = isPrivate ? 0 : countTabs(space.pinned);
   const pinnedKey = "pinned:" + space.id;
   const pinnedOpen = pinnedCount === 0 || localStorage.getItem(pinnedKey) !== "closed";
@@ -277,7 +277,7 @@ export function App() {
 
         {/* Pinned tabs and folders, then one divider, then Today. No labels: position says it. The private space has only Today. */}
         {!isPrivate && <div onDragOver={(e) => dragging() && e.preventDefault()} onDrop={(e) => { if ((e.target as HTMLElement).closest(".row")) return; e.preventDefault(); const d = dragging(); if (d?.kind === "tab") send({ cmd: "move_tab", id: d.id, space: space.id, section: "pinned", index: indexAfterTaking(space.pinned, movedIds(d), space.pinned.length), split: d.pair }); else if (d) send({ cmd: "move_folder", id: d.id, index: indexAfterTaking(space.pinned, movedIds(d), space.pinned.length) }); endDrag(); }}>
-          {pinnedOpen ? <NodeList ctx={ctx} nodes={space.pinned} depth={0} /> : frontPinned && <TabRow ctx={ctx} tab={frontPinned.tab} section="pinned" index={0} folderId={frontPinned.folderId} onDropAt={() => {}} />}
+          {pinnedOpen ? <NodeList ctx={ctx} nodes={space.pinned} depth={0} /> : frontPinned && <TabRow ctx={ctx} tab={frontPinned.tab} section="pinned" index={frontPinned.index} folderId={frontPinned.folderId} onDropAt={(index) => dropAmongPinned(space.id, frontPinned.among, frontPinned.folderId, index)} />}
         </div>}
 
         <div className="divider">
