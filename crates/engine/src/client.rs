@@ -313,6 +313,8 @@ wrap_life_span_handler! {
                     && Engine::global().expect_extension_tab(browser.as_deref(), url, background);
                 return i32::from(!taken);
             }
+            // What was expected of an earlier popup that never came.
+            Engine::global().forget_pending_tab();
             if page_asks_for_app(self.kind, frame.as_deref(), target_url) {
                 return 1;
             }
@@ -323,8 +325,16 @@ wrap_life_span_handler! {
             if self.kind == Kind::Content && target_disposition == WindowOpenDisposition::NEW_POPUP {
                 return 0;
             }
-            // Never let Chromium open its own windows: route to the app as a tab.
             let url = target_url.map(CefString::to_string).unwrap_or_default();
+            // A tab the page opens in front is the page's own popup, shown
+            // as a tab: the page gets its window (`expect_page_tab`).
+            if self.kind == Kind::Content
+                && target_disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB
+                && Engine::global().expect_page_tab(browser.as_deref(), &url)
+            {
+                return 0;
+            }
+            // Never let Chromium open its own windows: route to the app as a tab.
             if !url.is_empty() {
                 Engine::global().request_open(
                     browser.as_deref(),
@@ -336,6 +346,11 @@ wrap_life_span_handler! {
                 );
             }
             1
+        }
+
+        fn on_before_popup_aborted(&self, _browser: Option<&mut Browser>, _popup_id: ::std::os::raw::c_int) {
+            // The popup a tab was expected of (`expect_page_tab`) is not made.
+            Engine::global().forget_pending_tab();
         }
 
         fn on_after_created(&self, browser: Option<&mut Browser>) {

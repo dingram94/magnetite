@@ -84,8 +84,13 @@ cache like any tab. The choice for links from other apps is
 
 ## Limits
 
-A page opened as a peek or as a new tab loads in a window of its own. It
-has no script connection (`window.opener`) to the page that asked for it.
+A page opened as a peek loads in a window of its own. It has no script
+connection (`window.opener`) to the page that asked for it, and that page
+gets no window back. The same goes for a tab opened in the background, and
+for a page of the system's engine. A tab that a page opens in front
+(`window.open`, a link with a target) is the page's own: the page gets its
+window, so a site that goes to the address itself when its window was
+blocked (the ads in Google's results) does not open it twice.
 A page's popup window (`window.open` with window features, such as "Sign
 in with Google") therefore does not become a peek: it opens as a small
 window of its own, as in other browsers, so it can talk back to the page.

@@ -729,10 +729,11 @@ impl MagnetiteApp {
         Some(id)
     }
 
-    /// An extension opened a tab (`chrome.tabs.create`) and the engine has
-    /// its page already, `page`, loading `url` in the profile of context
-    /// `context`: a Today tab for that page, placed as `open_url_from`
-    /// places a page's new tab, and nothing loads a second time. An
+    /// An extension opened a tab (`chrome.tabs.create`), or the page `from`
+    /// did, and the engine has its page already, `page`, loading `url` in
+    /// the profile of context `context`: a Today tab for that page, placed
+    /// as `open_url_below` places a page's new tab, and nothing loads a
+    /// second time. An
     /// address the policy refuses, or a tab with no place (its private
     /// space closed), closes the page.
     pub(super) fn keep_extension_tab(
@@ -741,13 +742,22 @@ impl MagnetiteApp {
         page: ContentId,
         url: &str,
         mut background: bool,
+        from: Option<ContentId>,
         context: &str,
     ) {
-        let tab = url_policy::allowed(url, url_policy::Source::Chromium)
+        let source = match from {
+            Some(_) => url_policy::Source::Page,
+            None => url_policy::Source::Chromium,
+        };
+        let tab = url_policy::allowed(url, source)
             .then(|| {
                 self.with_state(|s| {
                     let opener = s.profile_for_context(context);
                     let id = s.open_tab_from(opener.as_deref(), url, url)?;
+                    let below = from.and_then(|c| s.content_to_tab.get(&c).cloned());
+                    if let Some(below) = below {
+                        s.place_below_opener(&id, &below);
+                    }
                     let (space, _) = s.find_tab(&id)?;
                     background |= space.is_some_and(|sp| s.is_hidden_space(&sp.id));
                     if let Some(t) = s.find_tab_mut(&id) {
@@ -762,7 +772,7 @@ impl MagnetiteApp {
             })
             .flatten();
         let Some(tab) = tab else {
-            trace(|| "an extension's tab has no place here: closed".to_string());
+            trace(|| "a tab opened for us has no place here: closed".to_string());
             engine.close_content(page);
             return;
         };

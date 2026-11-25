@@ -374,7 +374,8 @@ pub enum EngineEvent {
         source: UrlSource,
         context: Option<String>,
     },
-    /// An extension opened a tab (`chrome.tabs.create`) and its page exists
+    /// An extension opened a tab (`chrome.tabs.create`), or the page `from`
+    /// did (`window.open`, a link with a target), and its page exists
     /// already: content `id`, loading `url` in the profile `context` (`""`:
     /// the default context) of the page the tab was opened from. The
     /// delegate makes a tab for it, or closes the content.
@@ -382,6 +383,8 @@ pub enum EngineEvent {
         id: ContentId,
         url: String,
         background: bool,
+        /// The page that opened the tab itself; none: an extension did.
+        from: Option<ContentId>,
         context: String,
     },
     Shortcut {

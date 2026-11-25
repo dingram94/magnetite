@@ -84,12 +84,15 @@ pub(crate) struct QueuedContent {
 /// No popup of a page has it.
 pub(crate) const EXTENSION_TAB_POPUP: i32 = -1;
 
-/// A tab an extension asked for, between CEF's question (`on_before_popup`)
-/// and the view of its page, which CEF makes within the same call
-/// (`on_popup_browser_view_created`).
+/// A tab an extension or a page asked for, between CEF's question
+/// (`on_before_popup`) and the view of its page
+/// (`on_popup_browser_view_created`), which CEF makes within the same call
+/// for an extension's tab and right after it for a page's.
 pub(crate) struct PendingTab {
     pub url: String,
     pub background: bool,
+    /// The page that asked; none: an extension did.
+    pub page: Option<ContentId>,
 }
 
 /// Space between split pages (and around docked `DevTools`).
@@ -327,12 +330,48 @@ impl Engine {
         if crate::stray::opens_nothing(opener, &url) || ours.is_none() {
             return false;
         }
-        self.lock().pending_tab = Some(PendingTab { url, background });
+        self.lock().pending_tab = Some(PendingTab {
+            url,
+            background,
+            page: None,
+        });
         true
     }
 
-    /// CEF made `view` for the tab an extension opened from the page in
-    /// `source`: it becomes a page of ours in a window of its own (hidden),
+    /// Whether the tab the page in `opener` asks for, in front and showing
+    /// `url`, comes to us as the page's own popup (`adopt_extension_tab`
+    /// takes its view) and not as an address to open. The page then gets a
+    /// window back, as in other browsers: one that gets none takes its
+    /// popup for blocked, and some then go to the address themselves, so it
+    /// opened twice (the ads in Google's results). Not for a page locked to
+    /// its site, whose links open as a peek, for a mini window, whose tabs
+    /// open in the main window, or for a window without an address.
+    pub(crate) fn expect_page_tab(&self, opener: Option<&Browser>, url: &str) -> bool {
+        let Some(id) = self.content_id_for(opener) else {
+            return false;
+        };
+        if crate::stray::opens_nothing(opener, url)
+            || self.content_lock(id).is_some()
+            || self.is_mini(id)
+        {
+            return false;
+        }
+        self.lock().pending_tab = Some(PendingTab {
+            url: url.to_string(),
+            background: false,
+            page: Some(id),
+        });
+        true
+    }
+
+    /// No tab is expected any more: the popup asked about last was given
+    /// up, or another one is asked about.
+    pub(crate) fn forget_pending_tab(&self) {
+        self.lock().pending_tab = None;
+    }
+
+    /// CEF made `view` for the tab an extension or the page itself opened
+    /// from the page in `source`: it becomes a page of ours in a window of its own (hidden),
     /// in `source`'s profile, as `build_content` makes one. The extension
     /// holds this very tab, so nothing is loaded a second time and the id
     /// it got stays good. CEF needs the view in a window before this
@@ -357,7 +396,7 @@ impl Engine {
         let Some((profile, ephemeral)) = opener else {
             return false;
         };
-        crate::trace(&format!("extension tab: content #{id}"));
+        crate::trace(&format!("adopted tab: content #{id}"));
         let serial = self.next_serial();
         self.lock().contents.insert(
             id,
@@ -384,6 +423,7 @@ impl Engine {
             id,
             url: tab.url,
             background: tab.background,
+            from: tab.page,
             context: profile,
         });
         true
@@ -1580,8 +1620,8 @@ wrap_browser_view_delegate! {
             if is_devtools != 0 {
                 return Some(crate::devdock::DevToolsViewDelegate::new());
             }
-            // An extension's tab becomes a page like this one; a page's
-            // popup window keeps CEF's default view.
+            // An extension's tab, or a page's, becomes a page like this
+            // one; a page's popup window keeps CEF's default view.
             let engine = Engine::global();
             let tab = engine.lock().pending_tab.is_some();
             tab.then(|| ContentViewDelegate::new(engine.chrome_toolbar()))
@@ -1593,7 +1633,7 @@ wrap_browser_view_delegate! {
             is_devtools: ::std::os::raw::c_int,
         ) -> ::std::os::raw::c_int {
             // DevTools dock beside the page unless the user wants Chromium's
-            // own window. An extension's tab becomes a page of ours. A
+            // own window. An extension's tab, or a page's, becomes a page of ours. A
             // page's popup window (the only other popup that gets here, see
             // on_before_popup) gets CEF's default window.
             match (is_devtools != 0, browser_view, popup_browser_view) {
