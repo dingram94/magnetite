@@ -156,7 +156,8 @@
       "address_hint": "Where the favorite goes, and where it returns to. Its page loads a new address at once.",
       "address_label": "Address of the favorite {name}",
       "address_discard": "Discard",
-      "address_discard_title": "Puts the saved address back (Esc)"
+      "address_discard_title": "Puts the saved address back (Esc)",
+      "address_save_title": "Saves the new address (Enter)"
     }
   }
 }

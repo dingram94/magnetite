@@ -156,7 +156,8 @@
       "address_hint": "Wohin der Favorit führt und wohin er zurückkehrt. Eine neue Adresse lädt seine Seite sofort.",
       "address_label": "Adresse des Favoriten {name}",
       "address_discard": "Verwerfen",
-      "address_discard_title": "Stellt die gespeicherte Adresse wieder her (Esc)"
+      "address_discard_title": "Stellt die gespeicherte Adresse wieder her (Esc)",
+      "address_save_title": "Speichert die neue Adresse (Enter)"
     }
   }
 }

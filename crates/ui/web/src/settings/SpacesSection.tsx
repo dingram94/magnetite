@@ -529,6 +529,16 @@ function FavoritePage({ info, favorite: f, reload, open }: { info: Info; favorit
   // front, but never the private one (it is not among `info.spaces`),
   // which takes no tab of another profile.
   const leaveTo = (info.spaces.find((sp) => sp.id === info.active_space) ?? info.spaces[0])?.id ?? info.active_space;
+  /** What the field holds becomes the favorite's address; nothing typed, or the same address, changes nothing. */
+  const saveAddress = () => {
+    const to = addressField.current?.value.trim();
+    if (!to || to === addressOf(f)) return discard();
+    send({ cmd: "set_favorite_address", id: f.id, url: to }).then(
+      // The address as the app keeps it may be the one typed, spelled out: nothing is changed then.
+      () => (setRefused(undefined), setChanged(false)),
+      (err: unknown) => setRefused(err instanceof Error ? err.message : String(err)),
+    ).then(reload).catch(() => undefined);
+  };
   // The spaces just chosen, until their save is done and the page has read
   // the answer: two quick clicks both count, the second on top of the
   // first. Each choice has a number, so the answer to an older one does not
@@ -538,7 +548,6 @@ function FavoritePage({ info, favorite: f, reload, open }: { info: Info; favorit
   // The address field holds another address than the favorite's: not saved yet.
   const [changed, setChanged] = useState(false);
   const addressField = useRef<HTMLInputElement>(null);
-  const discardButton = useRef<HTMLButtonElement>(null);
   /** The favorite's address back in its field, and what was typed forgotten. */
   const discard = () => {
     if (addressField.current) addressField.current.value = addressOf(f);
@@ -572,7 +581,7 @@ function FavoritePage({ info, favorite: f, reload, open }: { info: Info; favorit
           />
         </Field>
         <Field label={t("spaces.favorites.page.address")} hint={t("spaces.favorites.page.address_hint")}>
-          {/* Whole, in a field as wide as the card. Saved on Enter or on leaving it; Esc puts the old one back, as does the button at the field's end that shows once it is changed. */}
+          {/* Whole, in a field as wide as the card. Saved on Enter or on leaving it; Esc puts the old one back. Once it is changed, the field's end has a button for each of the two. */}
           <span className="set-field-end" data-invalid={refused !== undefined || undefined}>
           <input
             key={addressOf(f)}
@@ -585,15 +594,9 @@ function FavoritePage({ info, favorite: f, reload, open }: { info: Info; favorit
             aria-invalid={refused !== undefined || undefined}
             onChange={(e) => setChanged(e.target.value.trim() !== addressOf(f))}
             onBlur={(e) => {
-              // Leaving it for the button that throws the change away saves nothing.
-              if (e.relatedTarget === discardButton.current) return;
-              const to = e.currentTarget.value.trim();
-              if (!to || to === addressOf(f)) return discard();
-              send({ cmd: "set_favorite_address", id: f.id, url: to }).then(
-                // The address as the app keeps it may be the one typed, spelled out: nothing is changed then.
-                () => (setRefused(undefined), setChanged(false)),
-                (err: unknown) => setRefused(err instanceof Error ? err.message : String(err)),
-              ).then(reload).catch(() => undefined);
+              // Leaving it for one of its two buttons leaves the rest to that button.
+              if (e.relatedTarget && e.relatedTarget !== e.currentTarget && e.currentTarget.parentElement?.contains(e.relatedTarget)) return;
+              saveAddress();
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter") e.currentTarget.blur();
@@ -604,7 +607,8 @@ function FavoritePage({ info, favorite: f, reload, open }: { info: Info; favorit
               e.currentTarget.blur();
             }}
           />
-          {changed && <button ref={discardButton} className="btn sm ghost" title={t("spaces.favorites.page.address_discard_title")} onClick={discard}>{t("spaces.favorites.page.address_discard")}</button>}
+          {changed && <button className="btn sm ghost" title={t("spaces.favorites.page.address_discard_title")} onClick={discard}>{t("spaces.favorites.page.address_discard")}</button>}
+          {changed && <button className="btn sm primary" title={t("spaces.favorites.page.address_save_title")} onClick={saveAddress}>{t("common.save")}</button>}
           </span>
           {refused && <p className="set-hint" role="alert" style={{ color: "var(--danger)" }}>{refused}</p>}
         </Field>
