@@ -597,6 +597,7 @@ export function FavoritesSection({ info, reload }: { info: Info; reload: () => P
           <span />
           <span />
           <span>{t("spaces.favorites.columns.name")}</span>
+          <span>{t("spaces.favorites.columns.address")}</span>
           <span>{t("spaces.favorites.columns.shows")}</span>
           <span>{t("spaces.favorites.columns.profile")}</span>
           <span />
@@ -638,25 +639,23 @@ export function FavoritesSection({ info, reload }: { info: Info; reload: () => P
             </span>
             <Favicon url={f.url} />
             <span className="sr-only" data-search-name>{name} {hostOf(address)}</span>
-            <span className="set-fav-name">
-              <input
-                key={f.title}
-                className="field"
-                defaultValue={f.title}
-                placeholder={hostOf(address)}
-                aria-label={t("spaces.favorites.name_label", { name })}
-                onBlur={(e) => {
-                  const to = e.target.value.trim();
-                  if (to !== f.title) void send({ cmd: "rename_tab", id: f.id, title: to }).then(reload);
-                }}
-                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-              />
-              {/* A name says nothing of where the favorite goes: its address does, whole in the tooltip. */}
-              <span className="set-fav-url" title={address}>{shortAddress(address)}</span>
-            </span>
-            <PickList several none={t("spaces.favorites.every_space")} options={spaceOptions(info.spaces)} chosen={shows} label={t("spaces.favorites.shows_label", { name })} onChoose={(spaces) => choose(f.id, spaces)} />
+            <input
+              key={f.title}
+              className="field min-w-0"
+              defaultValue={f.title}
+              placeholder={hostOf(address)}
+              aria-label={t("spaces.favorites.name_label", { name })}
+              onBlur={(e) => {
+                const to = e.target.value.trim();
+                if (to !== f.title) void send({ cmd: "rename_tab", id: f.id, title: to }).then(reload);
+              }}
+              onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+            />
+            {/* A name says nothing of where the favorite goes: its address does, in a column of its own, whole in the tooltip. */}
+            <span className="set-fav-url" title={address}>{shortAddress(address)}</span>
+            <PickList several none={t("spaces.favorites.every_space")} options={spaceOptions(info.spaces)} chosen={shows} label={t("spaces.favorites.shows_label", { name })} width={150} onChoose={(spaces) => choose(f.id, spaces)} />
             <span>
-              <ProfileChoice info={info} current={profileOf(f)} name={name} label={t("spaces.profile_of", { name })} assign={(to) => send({ cmd: "set_tab_profile", id: f.id, profile: to === main ? null : to }).then(reload)} />
+              <ProfileChoice info={info} current={profileOf(f)} name={name} label={t("spaces.profile_of", { name })} width={150} assign={(to) => send({ cmd: "set_tab_profile", id: f.id, profile: to === main ? null : to }).then(reload)} />
             </span>
             <button
               className="btn"

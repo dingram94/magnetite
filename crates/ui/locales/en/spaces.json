@@ -144,6 +144,7 @@
     },
     "columns": {
       "name": "Name",
+      "address": "Address",
       "shows": "Shows in",
       "profile": "Profile"
     }

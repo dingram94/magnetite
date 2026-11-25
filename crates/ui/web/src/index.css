@@ -858,12 +858,10 @@ html[data-sorting] [data-sort-row]:not([data-dragged]) { transition: transform 1
 /* While a row is dragged, the hand stays closed wherever the pointer is. */
 html[data-sorting], html[data-sorting] * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
 /* A favorite: handle, icon, name and its choices in columns, which their names head. */
-.set-fav { display: grid; grid-template-columns: 14px 16px minmax(120px, 1fr) 170px 170px 88px; align-items: center; gap: 8px 10px; padding-top: 10px; padding-bottom: 10px; }
+.set-fav { display: grid; grid-template-columns: 14px 16px minmax(110px, 1fr) minmax(90px, 1fr) 150px 150px 88px; align-items: center; gap: 8px 10px; padding-top: 10px; padding-bottom: 10px; }
 .set-fav > .btn { padding: 0 6px; }
-/* Its name to change, and under it the address it goes to. */
-.set-fav-name { display: grid; gap: 3px; min-width: 0; }
-.set-fav-name > .field { min-width: 0; width: 100%; }
-.set-fav-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 9px; font-size: 11.5px; line-height: 15px; color: var(--muted); user-select: text; -webkit-user-select: text; cursor: text; }
+/* The address it goes to, beside its name: as much of it as the column holds. */
+.set-fav-url { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--muted); user-select: text; -webkit-user-select: text; cursor: text; }
 .set-fav-cols { padding-bottom: 2px; font-size: 11.5px; font-weight: 600; color: var(--muted); }
 .set-fav-cols + .set-fav, .set-fav-cols + .set-fav-head { border-top: 0; }
 .set-fav-cols + .set-fav-head { padding-top: 6px; }
@@ -934,7 +932,7 @@ html[data-sorting], html[data-sorting] * { cursor: grabbing !important; user-sel
   .set-profile-cap { display: inline; font-weight: 600; }
   /* Nor for the columns of the favorites: a favorite wraps, and its fields say what they are. */
   .set-fav { display: flex; flex-wrap: wrap; }
-  .set-fav > .set-fav-name { flex: 1 1 140px; }
+  .set-fav > input.field, .set-fav > .set-fav-url { flex: 1 1 140px; }
   .set-fav-cols { display: none; }
   .set-fav-cols + .set-fav, .set-fav-cols + .set-fav-head { border-top: 0; }
 }
