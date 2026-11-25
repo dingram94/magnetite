@@ -1891,9 +1891,9 @@ impl MagnetiteApp {
             }
             UiCommand::AddFavorite { url, profile } => {
                 let url = self.normalise_url(&url);
-                if url.starts_with("magnetite://")
-                    || !url_policy::allowed(&url, url_policy::Source::User)
-                {
+                // Stricter than what may be typed into the palette: no
+                // internal or local page.
+                if !url_policy::is_website(&url) {
                     return Err(t!("app.errors.no_web_address").into());
                 }
                 // Named by its site until its page says what it is called.
@@ -1906,9 +1906,7 @@ impl MagnetiteApp {
             }
             UiCommand::SetFavoriteAddress { id, url } => {
                 let url = self.normalise_url(&url);
-                if url.starts_with("magnetite://")
-                    || !url_policy::allowed(&url, url_policy::Source::User)
-                {
+                if !url_policy::is_website(&url) {
                     return Err(t!("app.errors.no_web_address").into());
                 }
                 let site = url.split_once("://").map_or(url.as_str(), |(_, rest)| rest);

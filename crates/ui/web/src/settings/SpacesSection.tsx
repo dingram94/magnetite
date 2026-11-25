@@ -540,10 +540,12 @@ function FavoritePage({ info, favorite: f, reload, open }: { info: Info; favorit
   const saveAddress = () => {
     const to = addressField.current?.value.trim();
     if (!to || to === addressOf(f)) return discard();
+    // The answer is for what was sent: an address typed since stays as it is, not saved yet.
+    const still = () => addressField.current?.value.trim() === to;
     send({ cmd: "set_favorite_address", id: f.id, url: to }).then(
       // The address as the app keeps it may be the one typed, spelled out: nothing is changed then.
-      () => (setRefused(undefined), setChanged(false)),
-      (err: unknown) => setRefused(err instanceof Error ? err.message : String(err)),
+      () => (setRefused(undefined), still() && setChanged(false)),
+      (err: unknown) => still() && setRefused(err instanceof Error ? err.message : String(err)),
     ).then(reload).catch(() => undefined);
   };
   // The spaces just chosen, until their save is done and the page has read
@@ -555,6 +557,13 @@ function FavoritePage({ info, favorite: f, reload, open }: { info: Info; favorit
   // The address field holds another address than the favorite's: not saved yet.
   const [changed, setChanged] = useState(false);
   const addressField = useRef<HTMLInputElement>(null);
+  // The field follows the favorite's address, but for one typed and not saved.
+  const address = addressOf(f);
+  useLayoutEffect(() => {
+    if (!changed && addressField.current) addressField.current.value = address;
+    // Only a new address moves the field, not the end of a draft (Discard does that itself).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address]);
   /** The favorite's address back in its field, and what was typed forgotten. */
   const discard = () => {
     if (addressField.current) addressField.current.value = addressOf(f);
@@ -591,7 +600,6 @@ function FavoritePage({ info, favorite: f, reload, open }: { info: Info; favorit
           {/* Whole, in a field as wide as the card. Saved on Enter or on leaving it; Esc puts the old one back. Once it is changed, the field's end has a button for each of the two. */}
           <span className="set-field-end" data-invalid={refused !== undefined || undefined}>
           <input
-            key={addressOf(f)}
             ref={addressField}
             defaultValue={addressOf(f)}
             spellCheck={false}

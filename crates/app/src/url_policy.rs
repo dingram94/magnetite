@@ -50,10 +50,39 @@ pub fn allowed(url: &str, source: Source) -> bool {
     }
 }
 
+/// Whether `url` is the address of a website: `http` or `https`, nothing
+/// internal or local. What a favorite may be given as its address in Settings.
+pub fn is_website(url: &str) -> bool {
+    url.split_once(':').is_some_and(|(scheme, rest)| {
+        (scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https"))
+            && rest.starts_with("//")
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::Source::{Chromium, OtherApp, Page, Stored, User};
-    use super::allowed;
+    use super::{allowed, is_website};
+
+    #[test]
+    fn only_http_and_https_are_websites() {
+        assert!(is_website("https://example.org/a"));
+        assert!(is_website("HTTP://localhost:3000"));
+        for other in [
+            "chrome://settings/passwords",
+            "chrome-extension://abc/popup.html",
+            "file:///etc/passwd",
+            "view-source:https://example.org",
+            "blob:https://example.org/uuid",
+            "magnetite://ui/settings",
+            "about:blank",
+            "javascript:alert(1)//https://example.org",
+            "https:example.org",
+            "no scheme at all",
+        ] {
+            assert!(!is_website(other), "{other}");
+        }
+    }
 
     #[test]
     fn web_addresses_open_from_anywhere_script_and_data_from_nowhere() {

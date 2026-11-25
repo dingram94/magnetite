@@ -223,7 +223,7 @@ export function SettingsPage() {
   const shown = !searching || picked;
   // Ctrl+Tab is the Control key on a Mac too; elsewhere that key has its name in the page's language.
   const ctrl = IS_MAC ? "Ctrl" : t("settings.keys.ctrl");
-  /** The settings of one section. */
+  /** The settings of one section. Among the results of a search, Favorites is its list, not the page of the favorite that was open: every favorite is found. */
   const body = (sectionId: string) => (
     <>
       {sectionId === "general" && (
@@ -351,7 +351,7 @@ export function SettingsPage() {
       {sectionId === "permissions" && <PermissionsSection info={info} />}
       {sectionId === "spaces" && <SpacesSection info={info} update={update} reload={reload} item={place.item} open={openSection} />}
       {sectionId === "profiles" && <ProfilesSection info={info} reload={reload} open={openSection} />}
-      {sectionId === "favorites" && <FavoritesSection info={info} reload={reload} item={place.item} open={openSection} />}
+      {sectionId === "favorites" && <FavoritesSection info={info} reload={reload} item={searching && !picked ? undefined : place.item} open={openSection} />}
       {sectionId === "bookmarks" && <BookmarksSection key={place.id === "bookmarks" ? place.item : undefined} info={info} reload={reload} item={place.id === "bookmarks" ? place.item : undefined} />}
       {sectionId === "developer" && (
         <>
