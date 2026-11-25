@@ -8,7 +8,7 @@ use magnetite_engine::{ContentId, MemoryPressure};
 
 use super::history::page_of;
 use super::settings::{MAX_ARCHIVE_DAYS, NEVER_ARCHIVE};
-use super::{AppState, ArchivedTab, ChosenProfile, Peek, TabRuntime, new_id, now};
+use super::{AppState, ArchivedTab, ChosenProfile, NewTabPlace, Peek, TabRuntime, new_id, now};
 
 pub(super) fn find_in_tree_mut<'a>(
     nodes: &'a mut [SidebarNode],
@@ -227,6 +227,49 @@ impl AppState {
             t.profile_id = Some(p.to_string());
         }
         Some(id)
+    }
+
+    /// Tab `id`, just opened at the top of Today by the page of tab
+    /// `opener`, goes below that tab if Settings → Links says so and both
+    /// are in the Today list of one space (a pinned tab's or a favorite's
+    /// new tab stays at the top, as does one that went to another space).
+    /// Tabs the same page opened before stay between them, so several
+    /// links opened one after the other read from the top down, and a
+    /// split the opener is in stays whole: the tab goes below its row.
+    pub fn place_below_opener(&mut self, id: &str, opener: &str) {
+        if self.settings.new_tab_place != NewTabPlace::Below || id == opener {
+            return;
+        }
+        let split = self
+            .splits
+            .iter()
+            .find(|sp| sp.contains(&opener.to_string()));
+        let opened_before: HashSet<&Id> = (self.runtime.iter())
+            .filter(|(_, rt)| rt.opener.as_deref() == Some(opener))
+            .map(|(tab, _)| tab)
+            .collect();
+        let has = |sp: &Space, tab: &str| sp.today.iter().any(|t| t.id == tab);
+        let Some(space) =
+            (self.sidebar.spaces.iter()).position(|sp| has(sp, id) && has(sp, opener))
+        else {
+            return;
+        };
+        let today = &self.sidebar.spaces[space].today;
+        let at = |tab: &str| today.iter().position(|t| t.id == tab);
+        // Below the opener, or the last page of its split's row.
+        let mut to = (today.iter().enumerate())
+            .filter(|(_, t)| t.id == opener || split.is_some_and(|sp| sp.contains(&t.id)))
+            .map(|(i, _)| i + 1)
+            .max()
+            .unwrap_or(0);
+        while today.get(to).is_some_and(|t| opened_before.contains(&t.id)) {
+            to += 1;
+        }
+        let Some(from) = at(id) else { return };
+        let today = &mut self.sidebar.spaces[space].today;
+        let tab = today.remove(from);
+        today.insert(if from < to { to - 1 } else { to }, tab);
+        self.runtime.entry(id.to_string()).or_default().opener = Some(opener.to_string());
     }
 
     /// Page `p` becomes a Today tab at the top of space `space`: its window
@@ -838,6 +881,66 @@ mod tests {
         s.active_tab.insert(space, "z".into());
         assert_eq!(s.cycle_tab(true).as_deref(), Some("a"), "on from z, past w");
         assert_eq!(s.cycle_tab(false).as_deref(), Some("x"), "back from z");
+    }
+
+    #[test]
+    fn a_pages_new_tab_goes_below_its_tab_when_the_setting_says_so() {
+        let mut s = state();
+        let space = s.active_space.clone();
+        let today = |s: &AppState| -> Vec<String> {
+            let tabs = s.active_space().today.iter();
+            tabs.map(|t| t.title.clone()).collect()
+        };
+        let open = |s: &mut AppState, title: &str, opener: &str| {
+            let id = s.new_today_tab(&space, "https://example.org/", title);
+            s.place_below_opener(&id, opener);
+            id
+        };
+        // As built: at the top, whichever tab opened it.
+        open(&mut s, "top", "b");
+        assert_eq!(today(&s), ["top", "a", "b", "c"]);
+        s.settings.new_tab_place = crate::state::NewTabPlace::Below;
+        // Below its tab, and what the same page opens next after it.
+        let one = open(&mut s, "b1", "b");
+        open(&mut s, "b2", "b");
+        assert_eq!(today(&s), ["top", "a", "b", "b1", "b2", "c"]);
+        // A tab opened from one of those is below that one.
+        open(&mut s, "b1x", &one);
+        assert_eq!(today(&s), ["top", "a", "b", "b1", "b1x", "b2", "c"]);
+        // The last tab's goes to the end, the first one's stays second.
+        open(&mut s, "c1", "c");
+        let first = s.active_space().today[0].id.clone();
+        open(&mut s, "top1", &first);
+        assert_eq!(
+            today(&s),
+            ["top", "top1", "a", "b", "b1", "b1x", "b2", "c", "c1"]
+        );
+        // A pinned tab is not in Today: its new tab is at the top.
+        open(&mut s, "p1", "p");
+        assert_eq!(today(&s)[0], "p1");
+        // A tab that went to another space than its opener's (a private
+        // page's, a link rule's) is at the top there.
+        s.sidebar.spaces.push(Space {
+            id: "two".into(),
+            pinned: vec![],
+            today: vec![tab("t")],
+            ..s.sidebar.spaces[0].clone()
+        });
+        let elsewhere = s.new_today_tab("two", "https://example.org/", "far");
+        s.place_below_opener(&elsewhere, "c");
+        assert_eq!(s.space("two").unwrap().today[0].id, elsewhere);
+        // A split stays one row: the tab goes below its last page.
+        let mut split = magnetite_core::split::SplitNode::pane("a".to_string());
+        split.insert(
+            &"a".to_string(),
+            "b".to_string(),
+            magnetite_core::split::Side::Right,
+        );
+        s.splits.push(split);
+        open(&mut s, "a1", "a");
+        let now = today(&s);
+        let at = |title: &str| now.iter().position(|t| t == title).unwrap();
+        assert_eq!(at("a1"), at("b") + 1, "below the row of a and b");
     }
 
     #[test]

@@ -51,6 +51,9 @@ pub struct Settings {
     /// What a link a page opens in a new tab (Open Link in New Tab,
     /// ⌘-click, middle click) does. This device's own choice, never synced.
     pub new_tab_links: NewTabLinks,
+    /// Where the tab of such a link goes in Today: at the top, or below the
+    /// tab whose page opened it. This device's own choice, never synced.
+    pub new_tab_place: NewTabPlace,
     /// Links from other apps: "mini" (a mini window, the default), "tab" or
     /// "peek". Synced: a version that does not know a value takes the
     /// default (`sanitised`).
@@ -555,6 +558,20 @@ pub enum NewTabLinks {
     Inactive,
 }
 
+/// Where a tab that a page opens goes in Today (Settings → Links). A value
+/// this version does not know reads as the default, as for `NewTabLinks`.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum NewTabPlace {
+    /// Below the tab whose page opened it, after the tabs that page opened
+    /// before (`AppState::place_below_opener`).
+    Below,
+    /// At the top of Today, as every new tab. Last: `serde(other)` has to be.
+    #[default]
+    #[serde(other)]
+    Top,
+}
+
 /// A view behind the sidebar's archive and downloads button. While something
 /// downloads, a click opens Downloads whatever the setting says.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -945,6 +962,7 @@ impl Default for Settings {
             search_template: "https://duckduckgo.com/?q=%s".into(),
             site_searches: builtin_site_searches(),
             new_tab_links: NewTabLinks::Inactive,
+            new_tab_place: NewTabPlace::Top,
             external_links: "mini".into(),
             link_rules: Vec::new(),
             site_code: Vec::new(),
@@ -1288,6 +1306,12 @@ mod tests {
         assert_eq!(later.new_tab_links, NewTabLinks::Inactive);
         let load: Settings = serde_json::from_str(r#"{"new_tab_links":"load"}"#).unwrap();
         assert_eq!(load.new_tab_links, NewTabLinks::Load);
+        // So is where the new tab goes: at the top unless asked otherwise.
+        assert_eq!(later.new_tab_place, NewTabPlace::Top);
+        let odd: Settings = serde_json::from_str(r#"{"new_tab_place":"left"}"#).unwrap();
+        assert_eq!(odd.new_tab_place, NewTabPlace::Top);
+        let below: Settings = serde_json::from_str(r#"{"new_tab_place":"below"}"#).unwrap();
+        assert_eq!(below.new_tab_place, NewTabPlace::Below);
     }
 
     /// Appearance saved before the top bar existed keeps its values and

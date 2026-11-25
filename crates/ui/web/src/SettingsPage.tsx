@@ -271,6 +271,12 @@ export function SettingsPage() {
               <option value="switch">{t("settings.links.pages.new_tab.switch")}</option>
             </select>
           </Field>
+          <Field side label={t("settings.links.pages.place.label")} hint={t("settings.links.pages.place.hint")}>
+            <select className="field" value={settings.new_tab_place} onChange={(e) => update({ new_tab_place: e.target.value as Settings["new_tab_place"] })}>
+              <option value="top">{t("settings.links.pages.place.top")}</option>
+              <option value="below">{t("settings.links.pages.place.below")}</option>
+            </select>
+          </Field>
           </Group>
           <Group title={t("settings.links.copied.title")}>
           <Toggle label={t("settings.links.copied.strip_trackers.label")} hint={t("settings.links.copied.strip_trackers.hint")} checked={settings.strip_trackers} onChange={(v) => update({ strip_trackers: v })} />

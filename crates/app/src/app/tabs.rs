@@ -647,9 +647,24 @@ impl MagnetiteApp {
         &self,
         engine: &Engine,
         url: &str,
+        background: bool,
+        source: url_policy::Source,
+        context: Option<&str>,
+    ) -> Option<String> {
+        self.open_url_below(engine, url, background, source, context, None)
+    }
+
+    /// As `open_url_from`, for a tab that the page of tab `below` opened:
+    /// the new tab goes below that one where Settings → Links says so
+    /// (`AppState::place_below_opener`).
+    fn open_url_below(
+        &self,
+        engine: &Engine,
+        url: &str,
         mut background: bool,
         source: url_policy::Source,
         context: Option<&str>,
+        below: Option<&str>,
     ) -> Option<String> {
         // Only typed input becomes a search; anything else is taken as given.
         let url = if source == url_policy::Source::User {
@@ -690,6 +705,9 @@ impl MagnetiteApp {
             }
             let opener = context.and_then(|c| s.profile_for_context(c));
             let id = s.open_tab_from(opener.as_deref(), &url, &title)?;
+            if let Some(below) = below {
+                s.place_below_opener(&id, below);
+            }
             // What a page of the hidden private space opens stays out of
             // sight with it: a tab in the background.
             let (space, _) = s.find_tab(&id)?;
@@ -757,7 +775,8 @@ impl MagnetiteApp {
 
     /// Open `url` as a new Today tab the way `opens` says: in front
     /// (`Switch`), or behind the current tab, its page loading at once with
-    /// `Load`. The rest as `open_url_from`.
+    /// `Load`. `below`: the tab whose page opened it, if one did. The rest
+    /// as `open_url_below`.
     pub(super) fn open_new_tab(
         &self,
         engine: &Engine,
@@ -765,9 +784,10 @@ impl MagnetiteApp {
         opens: NewTabLinks,
         source: url_policy::Source,
         context: Option<&str>,
+        below: Option<&str>,
     ) -> Option<String> {
         let background = opens != NewTabLinks::Switch;
-        let tab = self.open_url_from(engine, url, background, source, context)?;
+        let tab = self.open_url_below(engine, url, background, source, context, below)?;
         if opens == NewTabLinks::Load {
             self.load_out_of_sight(engine, &tab);
         }
@@ -786,13 +806,17 @@ impl MagnetiteApp {
             return;
         };
         let context = engine.content_context(c);
-        let opens = self.with_state(|s| s.settings.new_tab_links);
+        let (opens, tab) = self.with_state(|s| {
+            let tab = s.content_to_tab.get(&c).cloned();
+            (s.settings.new_tab_links, tab)
+        });
         self.open_new_tab(
             engine,
             &url,
             opens,
             url_policy::Source::Page,
             context.as_deref(),
+            tab.as_deref(),
         );
     }
 

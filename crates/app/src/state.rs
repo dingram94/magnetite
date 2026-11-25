@@ -36,8 +36,8 @@ pub use history::{History, Visit};
 pub use private::ShowIn;
 pub use profiles::ChosenProfile;
 pub use settings::{
-    AdblockSettings, Appearance, NewTabLinks, PROTECTED_VIDEO_SITES, Settings, SidebarEffect,
-    SiteSearch, SyncSettings, SystemEngine, TabOrder, typed_site,
+    AdblockSettings, Appearance, NewTabLinks, NewTabPlace, PROTECTED_VIDEO_SITES, Settings,
+    SidebarEffect, SiteSearch, SyncSettings, SystemEngine, TabOrder, typed_site,
 };
 pub use share::read_link as read_shared;
 pub use tabs::TabSwitch;
@@ -162,6 +162,10 @@ pub struct TabRuntime {
     /// what it is shown as (`dev.rs`).
     #[serde(default)]
     pub dev: crate::dev::DevState,
+    /// The tab whose page opened this one and under which it was placed
+    /// (`AppState::place_below_opener`). In memory only.
+    #[serde(skip)]
+    pub opener: Option<Id>,
 }
 
 impl TabRuntime {

@@ -218,6 +218,12 @@
         "inactive": "erst beim Öffnen laden",
         "load": "im Hintergrund laden",
         "switch": "zum neuen Tab wechseln"
+      },
+      "place": {
+        "label": "Wo der neue Tab erscheint",
+        "hint": "Mit „unter dem Tab“ bleibt ein Tab bei der Seite, die ihn geöffnet hat; mehrere Links von einer Seite folgen in der Reihenfolge, in der sie geöffnet wurden. Ein eigener neuer Tab (Befehlsleiste) steht immer oben in „Heute“.",
+        "top": "oben in „Heute“",
+        "below": "unter dem Tab, von dem er kommt"
       }
     },
     "copied": {

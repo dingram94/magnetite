@@ -218,6 +218,12 @@
         "inactive": "wait until opened",
         "load": "load in the background",
         "switch": "switch to the new tab"
+      },
+      "place": {
+        "label": "Where the new tab goes",
+        "hint": "Below keeps a tab next to the page that opened it; several links opened from one page follow in the order they were opened. A new tab of your own (the command bar) is always at the top of Today.",
+        "top": "at the top of Today",
+        "below": "below the tab it came from"
       }
     },
     "copied": {

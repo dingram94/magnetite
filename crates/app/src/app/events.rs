@@ -262,7 +262,7 @@ impl EngineDelegate for MagnetiteApp {
                 let ruled = (source == url_policy::Source::OtherApp)
                     .then(|| self.link_rule_space(&url))
                     .flatten();
-                let (target, opens, from_mini) = self.with_state(|s| {
+                let (target, opens, from_mini, from_tab) = self.with_state(|s| {
                     // A web panel counts as the peek does: narrow, and over
                     // the page, it is no place for a second page.
                     let from_peek = from.is_some()
@@ -279,7 +279,10 @@ impl EngineDelegate for MagnetiteApp {
                     };
                     let from_mini = from.is_some_and(|c| s.minis.iter().any(|m| m.content == c));
                     let target = ask.target(&s.settings.external_links);
-                    (target, ask.opens(s.settings.new_tab_links), from_mini)
+                    // The tab whose page asked, if it was a tab's page.
+                    let from_tab = from.and_then(|c| s.content_to_tab.get(&c).cloned());
+                    let opens = ask.opens(s.settings.new_tab_links);
+                    (target, opens, from_mini, from_tab)
                 });
                 let background = opens != NewTabLinks::Switch;
                 let context = context.as_deref();
@@ -298,7 +301,8 @@ impl EngineDelegate for MagnetiteApp {
                         {
                             self.activate_space(engine, space);
                         }
-                        let tab = self.open_new_tab(engine, &url, opens, source, context);
+                        let below = from_tab.as_deref();
+                        let tab = self.open_new_tab(engine, &url, opens, source, context, below);
                         // Asked for in front is not always shown: a tab of
                         // the hidden private space stays behind.
                         tab.is_some_and(|t| self.with_state(|s| s.active_tab_id() == Some(&t)))

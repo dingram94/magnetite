@@ -350,6 +350,8 @@ export interface Settings {
   site_searches: SiteSearch[];
   /** What a link a page opens in a new tab does: waits without a page until opened, loads out of sight, or comes to the front. This device's own. */
   new_tab_links: "inactive" | "load" | "switch";
+  /** Where the tab of such a link goes in Today: at the top, or below the tab whose page opened it. This device's own. */
+  new_tab_place: "top" | "below";
   external_links: "tab" | "peek" | "mini";
   /** Which space a link from another app opens in, by its site. */
   link_rules: LinkRule[];
