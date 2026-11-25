@@ -520,15 +520,22 @@ export const favoriteName = (f: Favorite) => f.title || hostOf(f.url);
 /** The address it is a favorite of, not the page it happens to show. */
 const addressOf = (f: Favorite) => f.home || f.url;
 
+/**
+ * Takes favorite `id` out of the favorites; its page is in the archive
+ * afterwards. It goes there by way of a space: the one in front, but never
+ * the private one (it is not among `info.spaces`), which takes no tab of
+ * another profile.
+ */
+function removeFavorite(info: Info, id: string) {
+  const leaveTo = (info.spaces.find((sp) => sp.id === info.active_space) ?? info.spaces[0])?.id ?? info.active_space;
+  return send({ cmd: "move_tab", id, space: leaveTo, section: "today", index: 0 }).then(() => send({ cmd: "close_tab", id }));
+}
+
 /** All of one favorite: its name and address, where it shows, its profile, and its removal. */
 function FavoritePage({ info, favorite: f, reload, open }: { info: Info; favorite: Favorite; reload: () => Promise<unknown>; open: (section: string, item?: string) => void }) {
   const { armed, arm } = useArmed(4000);
   const main = info.profiles.find((p) => p.is_default)?.id ?? "";
   const name = favoriteName(f);
-  // Where a removed favorite goes on its way to the archive: the space in
-  // front, but never the private one (it is not among `info.spaces`),
-  // which takes no tab of another profile.
-  const leaveTo = (info.spaces.find((sp) => sp.id === info.active_space) ?? info.spaces[0])?.id ?? info.active_space;
   /** What the field holds becomes the favorite's address; nothing typed, or the same address, changes nothing. */
   const saveAddress = () => {
     const to = addressField.current?.value.trim();
@@ -628,7 +635,7 @@ function FavoritePage({ info, favorite: f, reload, open }: { info: Info; favorit
           <button
             className="btn"
             data-danger={armed === f.id || undefined}
-            onClick={() => arm(f.id, () => void send({ cmd: "move_tab", id: f.id, space: leaveTo, section: "today", index: 0 }).then(() => send({ cmd: "close_tab", id: f.id })).then(reload).then(() => open("favorites")))}
+            onClick={() => arm(f.id, () => void removeFavorite(info, f.id).then(reload).then(() => open("favorites")))}
           >
             {armed === f.id ? t("spaces.favorites.remove_confirm") : t("common.remove")}
           </button>
@@ -652,6 +659,7 @@ export function FavoritesSection({ info, reload, item, open }: { info: Info; rel
 
 /** The list of favorites. */
 function FavoriteList({ info, reload, open }: { info: Info; reload: () => Promise<unknown>; open: (section: string, item?: string) => void }) {
+  const { armed, arm } = useArmed(4000);
   const main = info.profiles.find((p) => p.is_default)?.id ?? "";
   const profileOf = (f: Favorite) => f.profile_id ?? main;
   const listOf = (f: Favorite) => info.favorites.filter((x) => profileOf(x) === profileOf(f));
@@ -769,6 +777,15 @@ function FavoriteList({ info, reload, open }: { info: Info; reload: () => Promis
                 {shortAddress(address)}
                 {only.length > 0 && ` · ${t("spaces.favorites.only_in", { spaces: only.join(", ") })}`}
               </span>
+            </button>
+            {/* Removing is common enough to need no page: a first click arms it, as everywhere. */}
+            <button
+              className="btn"
+              data-danger={armed === f.id || undefined}
+              title={t("spaces.favorites.remove_title")}
+              onClick={() => arm(f.id, () => void removeFavorite(info, f.id).then(reload))}
+            >
+              {armed === f.id ? t("spaces.favorites.remove_confirm") : t("common.remove")}
             </button>
             <button className="set-space-go" onClick={() => open("favorites", f.id)} title={t("spaces.everything_about", { name })} aria-label={t("spaces.everything_about", { name })}>
               <Forward width={15} height={15} />
