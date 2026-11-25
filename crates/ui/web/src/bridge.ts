@@ -770,6 +770,8 @@ export type Command =
   | { cmd: "move_favorite"; id: Id; index: number }
   /** A new favorite, last in the list of `profile`; without it, of the main profile. */
   | { cmd: "add_favorite"; url: string; profile?: ChosenProfile }
+  /** Favorite `id` goes to `url` from now on; its page loads it. */
+  | { cmd: "set_favorite_address"; id: Id; url: string }
   /** The path of the data folder to the clipboard. */
   | { cmd: "copy_data_dir" }
   /** The data folder in the system's file manager. */

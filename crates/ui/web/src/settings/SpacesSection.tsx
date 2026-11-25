@@ -533,6 +533,8 @@ function FavoritePage({ info, favorite: f, reload, open }: { info: Info; favorit
   // the answer: two quick clicks both count, the second on top of the
   // first. Each choice has a number, so the answer to an older one does not
   // end a newer one.
+  // Why the address typed was not taken (it is none of a website).
+  const [refused, setRefused] = useState<string>();
   const [picked, setPicked] = useState<{ spaces: string[]; turn: number }>();
   const turns = useRef(0);
   const choose = (spaces: string[]) => {
@@ -559,11 +561,36 @@ function FavoritePage({ info, favorite: f, reload, open }: { info: Info; favorit
             onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
           />
         </Field>
-        <div className="set-row" data-search-row>
-          <span className="set-label block" data-search-name>{t("spaces.favorites.page.address")}</span>
-          {/* Whole, however long: it breaks rather than run out of its card. */}
-          <span className="set-hint set-path">{addressOf(f)}</span>
-        </div>
+        <Field label={t("spaces.favorites.page.address")} hint={t("spaces.favorites.page.address_hint")}>
+          {/* Whole, in a field as wide as the card. Saved on Enter or on leaving it; Esc puts the old one back. */}
+          <input
+            key={addressOf(f)}
+            className="field w-full"
+            defaultValue={addressOf(f)}
+            spellCheck={false}
+            autoCapitalize="off"
+            autoCorrect="off"
+            aria-label={t("spaces.favorites.page.address_label", { name })}
+            aria-invalid={refused !== undefined || undefined}
+            onBlur={(e) => {
+              const field = e.currentTarget;
+              const to = field.value.trim();
+              if (!to) field.value = addressOf(f);
+              if (!to || to === addressOf(f)) return setRefused(undefined);
+              send({ cmd: "set_favorite_address", id: f.id, url: to }).then(
+                () => setRefused(undefined),
+                (err: unknown) => setRefused(err instanceof Error ? err.message : String(err)),
+              ).then(reload).catch(() => undefined);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+              if (e.key !== "Escape") return;
+              e.currentTarget.value = addressOf(f);
+              e.currentTarget.blur();
+            }}
+          />
+          {refused && <p className="set-hint" role="alert" style={{ color: "var(--danger)" }}>{refused}</p>}
+        </Field>
       </Group>
       <Group title={t("spaces.favorites.page.where")}>
         <Field side label={t("spaces.favorites.page.shows")} hint={t("spaces.favorites.page.shows_hint")}>

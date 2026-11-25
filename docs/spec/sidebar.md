@@ -242,8 +242,10 @@ Code: `crates/engine/src/tabshare.rs`, `tabshare_hook.js`;
   context menu has "Show in every space" and "Show only in <the current
   space>"; Settings → Favorites lists every favorite with its name and,
   beside it, the address it goes to, and has a page per favorite (as
-  Settings → Spaces has per space) with its name, its whole address, its
-  profile, its removal and the choice for that favorite
+  Settings → Spaces has per space) with its name, its address to change (the
+  favorite goes there from then on, and its page loads it at once; what is
+  no address of a website is refused), its profile, its removal and the
+  choice for that favorite
   and any space, or several of them. So a space can have favorites of its own next to those
   all spaces share. A new favorite shows in every space. A favorite for
   one space only is left out of that space's Ctrl+Tab order and web panel

@@ -828,6 +828,12 @@ pub(super) enum UiCommand {
         #[serde(default)]
         profile: Option<ChosenProfile>,
     },
+    /// Favorite `id` goes to address `url` from now on, and shows it
+    /// (Settings → Favorites, the favorite's page).
+    SetFavoriteAddress {
+        id: String,
+        url: String,
+    },
     /// Put the path of the data folder on the clipboard (Settings → Data
     /// and privacy shows it).
     CopyDataDir,
@@ -1897,6 +1903,34 @@ impl MagnetiteApp {
                 self.push_state(engine);
                 self.tell_settings_pages(engine);
                 return Ok(json!({ "id": id, "profile": profile }));
+            }
+            UiCommand::SetFavoriteAddress { id, url } => {
+                let url = self.normalise_url(&url);
+                if url.starts_with("magnetite://")
+                    || !url_policy::allowed(&url, url_policy::Source::User)
+                {
+                    return Err(t!("app.errors.no_web_address").into());
+                }
+                let site = url.split_once("://").map_or(url.as_str(), |(_, rest)| rest);
+                let host = site.split(['/', '?', '#']).next().unwrap_or(site);
+                let loaded = self.with_state(|s| {
+                    if !s.set_favorite_address(&id, &url, host) {
+                        return None;
+                    }
+                    let loaded = s.runtime.get(&id).is_some_and(|r| r.content.is_some());
+                    // Not loaded: it opens at its new address when shown next.
+                    if !loaded && let Some(t) = s.find_tab_mut(&id) {
+                        t.url.clone_from(&url);
+                    }
+                    Some(loaded)
+                });
+                match loaded {
+                    None => return Err(t!("app.errors.favorite_gone").into()),
+                    Some(true) => self.load_in_tab(engine, &id, &url),
+                    Some(false) => {}
+                }
+                self.push_state(engine);
+                self.tell_settings_pages(engine);
             }
             UiCommand::CopyDataDir => {
                 let copied = engine.copy_text(&self.data_dir.to_string_lossy());

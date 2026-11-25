@@ -136,7 +136,8 @@
     "file_nothing_to_import": "In der Datei gibt es nichts zu importieren",
     "bookmarks_file_too_large": "Diese Datei ist zu groß für eine Lesezeichendatei.",
     "download_broke_off": "Der Download ist abgebrochen: {error}",
-    "data_dir_open": "Der Datenordner konnte nicht geöffnet werden."
+    "data_dir_open": "Der Datenordner konnte nicht geöffnet werden.",
+    "favorite_gone": "Diesen Favoriten gibt es nicht mehr."
   },
   "share": {
     "empty": "In diesem Ordner gibt es keine Tabs zum Teilen",

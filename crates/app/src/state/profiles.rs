@@ -81,6 +81,21 @@ impl AppState {
         Ok((id, profile_id))
     }
 
+    /// Give favorite `id` the address `url` (already checked) to go to and
+    /// to return to. One without a name of its own is named `host` until
+    /// its page says what it is called. False if `id` is no favorite.
+    pub fn set_favorite_address(&mut self, id: &str, url: &str, host: &str) -> bool {
+        let favorites = self.sidebar.favorites.iter_mut();
+        let Some(tab) = (favorites.flat_map(|f| f.items.iter_mut())).find(|t| t.id == id) else {
+            return false;
+        };
+        tab.home_url = Some(url.into());
+        if !tab.custom_title {
+            tab.title = host.strip_prefix("www.").unwrap_or(host).into();
+        }
+        true
+    }
+
     /// Engine context of the page in front: the one the active tab runs in
     /// (a favorite without a profile of its own runs in the default one, as
     /// `present` opens it), else the active space's. Extensions are per
@@ -381,6 +396,26 @@ mod tests {
         assert!(s.add_favorite(url, "www.example.org", gone).is_err());
         assert_eq!(s.sidebar.profiles.len(), profiles);
         assert_eq!(s.sidebar.favorites, favorites);
+    }
+
+    #[test]
+    fn a_favorite_takes_a_new_address_and_keeps_a_name_of_its_own() {
+        let mut s = state();
+        let (id, _) = s
+            .add_favorite("https://example.org/", "example.org", None)
+            .unwrap();
+        assert!(s.set_favorite_address(&id, "https://www.example.com/a", "www.example.com"));
+        let tab = s.find_tab(&id).unwrap().1;
+        assert_eq!(tab.home_url.as_deref(), Some("https://www.example.com/a"));
+        assert_eq!(tab.title, "example.com", "named after its new site");
+        let tab = s.find_tab_mut(&id).unwrap();
+        tab.custom_title = true;
+        tab.title = "Mail".into();
+        assert!(s.set_favorite_address(&id, "https://example.net/", "example.net"));
+        assert_eq!(s.find_tab(&id).unwrap().1.title, "Mail");
+        // A tab that is no favorite has no address to set here.
+        assert!(!s.set_favorite_address("a", "https://example.net/", "example.net"));
+        assert_eq!(s.find_tab("a").unwrap().1.home_url, None);
     }
 
     #[test]

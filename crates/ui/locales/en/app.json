@@ -136,7 +136,8 @@
     "file_nothing_to_import": "The file has nothing to import",
     "bookmarks_file_too_large": "That file is too large to be a bookmarks file.",
     "download_broke_off": "The download broke off: {error}",
-    "data_dir_open": "The data folder could not be opened."
+    "data_dir_open": "The data folder could not be opened.",
+    "favorite_gone": "That favorite is gone."
   },
   "share": {
     "empty": "This folder has no tabs to share",

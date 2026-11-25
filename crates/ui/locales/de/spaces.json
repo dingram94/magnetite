@@ -152,7 +152,9 @@
       "shows": "Erscheint in",
       "shows_hint": "In jedem Space oder nur in den hier gewählten.",
       "profile_hint": "Seine Seite nutzt die Anmeldungen dieses Profils, egal welcher Space gerade angezeigt wird.",
-      "remove": "Aus den Favoriten entfernen"
+      "remove": "Aus den Favoriten entfernen",
+      "address_hint": "Wohin der Favorit führt und wohin er zurückkehrt. Eine neue Adresse lädt seine Seite sofort.",
+      "address_label": "Adresse des Favoriten {name}"
     }
   }
 }
