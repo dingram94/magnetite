@@ -505,7 +505,7 @@ function Clamped({ count, of, children }: { count: number; of: string; children:
 const shortAddress = (url: string) => url.replace(/^https:\/\//, "").replace(/^([^/?#]+)\/$/, "$1");
 
 /** The six dots a row is dragged by. */
-function Grip() {
+export function Grip() {
   return (
     <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
       {[3, 8, 13].flatMap((y) => [2, 8].map((x) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.4" />))}
