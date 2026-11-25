@@ -147,6 +147,7 @@
       "address": "Adresse",
       "shows": "Erscheint in",
       "profile": "Profil"
-    }
+    },
+    "remove_label": "{name} aus den Favoriten entfernen"
   }
 }

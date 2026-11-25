@@ -7,7 +7,7 @@ import { Fragment, useEffect, useLayoutEffect, useState, useRef, type ReactNode 
 import { Favicon } from "../Favicon";
 import { iconUrl, storeIcon } from "../backgrounds";
 import { Glyph, GLYPH_NAMES, glyphFor, SpaceIcon } from "../Glyphs";
-import { Forward } from "../Icons";
+import { Forward, Remove } from "../Icons";
 import { accentCss, hostOf, send } from "../bridge";
 import { useArmed } from "../dismiss";
 import { t } from "../i18n";
@@ -653,17 +653,19 @@ export function FavoritesSection({ info, reload }: { info: Info; reload: () => P
             />
             {/* A name says nothing of where the favorite goes: its address does, in a column of its own, whole in the tooltip. */}
             <span className="set-fav-url" title={address}>{shortAddress(address)}</span>
-            <PickList several none={t("spaces.favorites.every_space")} options={spaceOptions(info.spaces)} chosen={shows} label={t("spaces.favorites.shows_label", { name })} width={150} onChoose={(spaces) => choose(f.id, spaces)} />
+            <PickList several none={t("spaces.favorites.every_space")} options={spaceOptions(info.spaces)} chosen={shows} label={t("spaces.favorites.shows_label", { name })} width={140} onChoose={(spaces) => choose(f.id, spaces)} />
             <span>
-              <ProfileChoice info={info} current={profileOf(f)} name={name} label={t("spaces.profile_of", { name })} width={150} assign={(to) => send({ cmd: "set_tab_profile", id: f.id, profile: to === main ? null : to }).then(reload)} />
+              <ProfileChoice info={info} current={profileOf(f)} name={name} label={t("spaces.profile_of", { name })} width={140} assign={(to) => send({ cmd: "set_tab_profile", id: f.id, profile: to === main ? null : to }).then(reload)} />
             </span>
+            {/* An icon, so the address has the room a word would take; a first click arms it. */}
             <button
-              className="btn"
+              className="set-fav-remove"
               data-danger={armed === f.id || undefined}
-              title={t("spaces.favorites.remove_title")}
+              title={armed === f.id ? t("spaces.favorites.remove_confirm") : t("spaces.favorites.remove_title")}
+              aria-label={armed === f.id ? t("spaces.favorites.remove_confirm") : t("spaces.favorites.remove_label", { name })}
               onClick={() => arm(f.id, () => void send({ cmd: "move_tab", id: f.id, space: leaveTo, section: "today", index: 0 }).then(() => send({ cmd: "close_tab", id: f.id })).then(reload))}
             >
-              {armed === f.id ? t("spaces.favorites.remove_confirm") : t("common.remove")}
+              <Remove width={15} height={15} />
             </button>
           </div>
           </Fragment>
