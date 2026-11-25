@@ -637,7 +637,7 @@ function FavoritePage({ info, favorite: f, reload, open }: { info: Info; favorit
             data-danger={armed === f.id || undefined}
             onClick={() => arm(f.id, () => void removeFavorite(info, f.id).then(reload).then(() => open("favorites")))}
           >
-            {armed === f.id ? t("spaces.favorites.remove_confirm") : t("common.remove")}
+            {armed === f.id ? t("spaces.favorites.remove_confirm") : t("common.delete")}
           </button>
         </Field>
       </Group>
@@ -785,7 +785,7 @@ function FavoriteList({ info, reload, open }: { info: Info; reload: () => Promis
               title={t("spaces.favorites.remove_title")}
               onClick={() => arm(f.id, () => void removeFavorite(info, f.id).then(reload))}
             >
-              {armed === f.id ? t("spaces.favorites.remove_confirm") : t("common.remove")}
+              {armed === f.id ? t("spaces.favorites.remove_confirm") : t("common.delete")}
             </button>
             <button className="set-space-go" onClick={() => open("favorites", f.id)} title={t("spaces.everything_about", { name })} aria-label={t("spaces.everything_about", { name })}>
               <Forward width={15} height={15} />

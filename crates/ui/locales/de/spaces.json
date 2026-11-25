@@ -133,7 +133,7 @@
     "name_label": "Name des Favoriten {name}",
     "every_space": "Alle Spaces",
     "shows_label": "Wo {name} erscheint",
-    "remove_title": "Entfernt ihn aus den Favoriten und archiviert seine Seite",
+    "remove_title": "Seine Seite wird archiviert.",
     "remove_confirm": "Erneut klicken",
     "new": {
       "label": "Neuer Favorit",
@@ -152,7 +152,7 @@
       "shows": "Erscheint in",
       "shows_hint": "In jedem Space oder nur in den hier gewählten.",
       "profile_hint": "Seine Seite nutzt die Anmeldungen dieses Profils, egal welcher Space gerade angezeigt wird.",
-      "remove": "Aus den Favoriten entfernen",
+      "remove": "Diesen Favoriten löschen",
       "address_hint": "Wohin der Favorit führt und wohin er zurückkehrt. Eine neue Adresse lädt seine Seite sofort.",
       "address_label": "Adresse des Favoriten {name}",
       "address_discard": "Verwerfen",
