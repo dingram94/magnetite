@@ -11,6 +11,9 @@ and is not synced.
   or Archive in the context menu.
 - **Clear** on the divider above Today, or the command "Archive all Today
   tabs": every Today tab of the current space.
+- "Archive other tabs" in the context menu of a Today tab: all other Today
+  tabs of the space, or those above or below it (`sidebar.md`). The command
+  "Close other Today tabs" does the first for the tab in front.
 - Auto-archive (below).
 - Deleting a space: its pinned and Today tabs. A pinned one comes back as a
   Today tab.
@@ -93,7 +96,7 @@ A typed number is saved on Enter or when the field is left. A shorter period
 deletes older records within a minute, and they cannot be brought back. The
 period is this device's and does not sync.
 
-Code: `crates/app/src/state/tabs.rs` (`archive_tab`, `delete_space`,
-`prune_archive`), `crates/app/src/app/tabs.rs` (`close_tab`, `housekeeping`,
-`reopen_closed`), `crates/ui/web/src/ArchiveView.tsx`,
+Code: `crates/app/src/state/tabs.rs` (`archive_tab`, `archive_today`,
+`delete_space`, `prune_archive`), `crates/app/src/app/tabs.rs` (`close_tab`,
+`archive_today`, `housekeeping`, `reopen_closed`), `crates/ui/web/src/ArchiveView.tsx`,
 `crates/ui/web/src/LibraryButton.tsx`.

@@ -82,6 +82,13 @@
     "move_to": "Move to {space}",
     "move_to_space": "Move to another space",
     "archive": "Archive",
+    "archive_others": "Archive other tabs",
+    "close_others": "Close other tabs",
+    "others": {
+      "all": "All others",
+      "above": "Tabs above",
+      "below": "Tabs below"
+    },
     "remove_from_pinned": "Remove from pinned tabs",
     "profile": "Profile",
     "shows_in": "Shows in",
@@ -90,7 +97,9 @@
       "no_page": "No page is loaded",
       "at_pinned_page": "It is at its pinned page",
       "split_full": "Split view holds up to four pages",
-      "no_panel": "Only for a tab that opens as a panel"
+      "no_panel": "Only for a tab that opens as a panel",
+      "none_above": "No Today tab is above this one",
+      "none_below": "No Today tab is below this one"
     }
   },
   "tab_row": {

@@ -4,7 +4,7 @@
 import { SEPARATOR, type MenuItem, type MenuLeaf } from "./ContextMenu";
 import { SpaceIcon } from "./Glyphs";
 import type { RowContext, Section } from "./Rows";
-import { accentCss, IS_MAC, keyLabel, send, type Snapshot, type Space, type TabItem } from "./bridge";
+import { accentCss, IS_MAC, keyLabel, send, splitIds, type Snapshot, type Space, type TabItem } from "./bridge";
 import { t } from "./i18n";
 import { keysLabel } from "./settings/shortcutKeys";
 
@@ -53,6 +53,24 @@ export function profileRow(profiles: Snapshot["profiles"], current: string | und
       { label: t("sidebar.profile.new"), title: fresh.title, onClick: fresh.run },
     ],
   };
+}
+
+/**
+ * The other Today tabs of the space of `ctx`, by where they stand to tab
+ * `id`: all of them, those in the rows above it and those in the rows below.
+ * A split is one row, where the first of its pages with a row in the space
+ * stands, so its pages go together; in a split whose row is not in Today (a
+ * pinned one, or the one above Today) a Today tab is neither above nor below.
+ */
+function othersInToday(ctx: RowContext, id: string): { all: string[]; above: string[]; below: string[] } {
+  const today = ctx.state.sidebar.spaces.find((sp) => sp.id === ctx.spaceId)?.today ?? [];
+  const index = (tab: string) => today.findIndex((t) => t.id === tab);
+  const splitRow = new Map<string, number>();
+  for (const [owner, split] of ctx.splitAt) for (const page of splitIds(split)) splitRow.set(page, index(owner));
+  const own = index(id);
+  const others = today.map((t, i) => ({ id: t.id, row: ctx.inSplit.has(t.id) ? (splitRow.get(t.id) ?? -1) : i })).filter((t) => t.id !== id);
+  const ids = (keep: (row: number) => boolean) => others.filter((t) => keep(t.row)).map((t) => t.id);
+  return { all: ids(() => true), above: ids((row) => row >= 0 && row < own), below: ids((row) => row > own) };
 }
 
 /**
@@ -109,6 +127,18 @@ export function tabMenu(ctx: RowContext, tab: TabItem, section: Section, at: { x
   const closes = section === "today" || loaded || (favorite && away);
   const full = state.panes.length >= MAX_PANES;
 
+  // The other Today tabs, archived together (closed, in the private space):
+  // all of them, or those on one side of this tab. Each row says how many.
+  const beside = section === "today" ? othersInToday(ctx, tab.id) : null;
+  const archiveRow = (label: string, ids: string[], none?: string): MenuLeaf => ({
+    label,
+    hint: ids.length > 0 ? String(ids.length) : undefined,
+    danger: true,
+    disabled: ids.length === 0,
+    title: ids.length === 0 ? none : undefined,
+    onClick: () => send({ cmd: "archive_tabs", ids }),
+  });
+
   return menuOf({
     page: [
       { label: t("sidebar.tab_menu.reload"), hint: keys(keyLabel("⌘R")), disabled: !loaded, title: loaded ? undefined : t("sidebar.tab_menu.why.no_page"), onClick: () => send({ cmd: "reload", id: tab.id }) },
@@ -164,6 +194,15 @@ export function tabMenu(ctx: RowContext, tab: TabItem, section: Section, at: { x
       section === "today"
         ? { label: inPrivate ? t("common.close") : t("sidebar.tab_menu.archive"), hint: keys(keysLabel(state.keys.close_tab)), danger: true, onClick: () => send({ cmd: "close_tab", id: tab.id }) }
         : { label: t("common.close"), hint: keys(keysLabel(state.keys.close_tab)), disabled: !closes, title: closes ? undefined : t("sidebar.tab_menu.why.no_page"), onClick: () => send({ cmd: "close_tab", id: tab.id }) },
+      // Left out where this is the only Today tab: a list of rows with nothing to do.
+      beside && beside.all.length > 0 && {
+        label: inPrivate ? t("sidebar.tab_menu.close_others") : t("sidebar.tab_menu.archive_others"),
+        items: [
+          archiveRow(t("sidebar.tab_menu.others.all"), beside.all),
+          archiveRow(t("sidebar.tab_menu.others.above"), beside.above, t("sidebar.tab_menu.why.none_above")),
+          archiveRow(t("sidebar.tab_menu.others.below"), beside.below, t("sidebar.tab_menu.why.none_below")),
+        ],
+      },
       // Not a smart item: its source would bring it back at the next refresh.
       section === "pinned" && !smart && { label: t("sidebar.tab_menu.remove_from_pinned"), danger: true, onClick: () => send({ cmd: "remove_pinned", id: tab.id }) },
     ],

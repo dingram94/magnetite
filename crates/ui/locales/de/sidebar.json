@@ -82,6 +82,13 @@
     "move_to": "In {space} verschieben",
     "move_to_space": "In Space verschieben",
     "archive": "Archivieren",
+    "archive_others": "Andere Tabs archivieren",
+    "close_others": "Andere Tabs schließen",
+    "others": {
+      "all": "Alle anderen",
+      "above": "Tabs darüber",
+      "below": "Tabs darunter"
+    },
     "remove_from_pinned": "Aus angehefteten Tabs entfernen",
     "profile": "Profil",
     "shows_in": "Erscheint in",
@@ -90,7 +97,9 @@
       "no_page": "Es ist keine Seite geladen",
       "at_pinned_page": "Der Tab ist auf seiner angehefteten Seite",
       "split_full": "Die geteilte Ansicht fasst höchstens vier Seiten",
-      "no_panel": "Nur für einen Tab, der als Panel geöffnet wird"
+      "no_panel": "Nur für einen Tab, der als Panel geöffnet wird",
+      "none_above": "Über diesem Tab ist kein Heute-Tab",
+      "none_below": "Unter diesem Tab ist kein Heute-Tab"
     }
   },
   "tab_row": {

@@ -150,7 +150,11 @@ the row turns the icon into a back arrow that takes the page back.
   Pin tab or Unpin tab, Back to pinned page, Add to or Remove from
   favorites, Add to bookmarks, Move to another space; Open in split view,
   Open as panel, Mobile view, Keep active; Rename, Duplicate tab; and
-  Archive (Today) or Close. What has nothing to do right now is greyed out
+  Archive (Today) or Close. A Today tab with other Today tabs in its space
+  also has "Archive other tabs" ("Close other tabs" in the private space),
+  a list of "All others", "Tabs above" and "Tabs below"; each says how many
+  tabs it takes, and one with none is greyed out. A split counts as one
+  row, so its pages go together. What has nothing to do right now is greyed out
   and says why on hover: Reload, and Close on a favorite or pinned tab,
   without a loaded page (Close stays for a favorite away from its pinned
   page, which it takes back there); Back to pinned page on a pinned tab

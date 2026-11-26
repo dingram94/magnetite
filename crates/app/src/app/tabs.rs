@@ -1230,6 +1230,20 @@ impl MagnetiteApp {
         }
     }
 
+    /// Archive the Today tabs of the current space that `pick` chooses; the
+    /// space then shows the tab it returns to.
+    pub(super) fn archive_today(&self, engine: &Engine, pick: impl Fn(&str) -> bool) {
+        let (space, contents) = self.with_state(|s| {
+            let space = s.active_space.clone();
+            let contents = s.archive_today(&space, pick);
+            (space, contents)
+        });
+        for c in contents {
+            engine.close_content(c);
+        }
+        self.activate_space(engine, &space);
+    }
+
     pub(super) fn reopen_closed(&self, engine: &Engine) {
         let restored = self.with_state(|s| {
             let last = s.archive.len().checked_sub(1)?;

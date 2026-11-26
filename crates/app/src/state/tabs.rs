@@ -710,6 +710,18 @@ impl AppState {
         self.forget_tab(id)
     }
 
+    /// Archive the Today tabs of `space` that `pick` chooses, top to bottom
+    /// ("Clear", and the menu's "Archive other tabs"). Returns their page
+    /// windows for the caller to close. Only Today: a tab pinned or made a
+    /// favorite since the menu opened stays.
+    pub fn archive_today(&mut self, space: &str, pick: impl Fn(&str) -> bool) -> Vec<ContentId> {
+        let ids: Vec<Id> = (self.space(space).into_iter())
+            .flat_map(|sp| sp.today.iter().map(|t| t.id.clone()))
+            .filter(|id| pick(id))
+            .collect();
+        ids.iter().filter_map(|id| self.archive_tab(id)).collect()
+    }
+
     /// Archive pinned tab `id` (`remove_pinned`) at the page it was pinned
     /// for, not at the one it was left on. Its own title names that page only
     /// while it is loaded there: closing a pinned tab takes it home and keeps
@@ -1378,6 +1390,25 @@ mod tests {
         s.archive_tab("w");
         assert!(s.find_tab("w").is_none());
         assert_eq!(s.archive.len(), 0);
+    }
+
+    #[test]
+    fn archive_today_takes_the_chosen_today_tabs_only() {
+        let mut s = state();
+        let space = s.active_space.clone();
+        // A pinned tab among the chosen stays: it was a Today tab when the
+        // menu opened, perhaps. One that is gone changes nothing.
+        let chosen = ["c", "p", "gone", "a"];
+        s.archive_today(&space, |id| chosen.contains(&id));
+        assert_eq!(s.visible_tab_ids(), vec!["p", "b"]);
+        // In the order of the sidebar, so the last one closed is the lowest.
+        let archived: Vec<&str> = s.archive.iter().map(|a| a.tab.id.as_str()).collect();
+        assert_eq!(archived, ["a", "c"]);
+        assert_eq!(s.active_tab_id(), Some("b"));
+
+        // Another space's Today is not this one's.
+        s.archive_today("no such space", |_| true);
+        assert_eq!(s.visible_tab_ids(), vec!["p", "b"]);
     }
 
     #[test]

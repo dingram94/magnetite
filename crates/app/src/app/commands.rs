@@ -423,6 +423,10 @@ pub(super) enum UiCommand {
         #[serde(default)]
         keep: Option<String>,
     },
+    /// Archive the Today tabs `ids` of the current space.
+    ArchiveTabs {
+        ids: Vec<String>,
+    },
     ReopenClosed,
     /// Take the tab `id` over from the device of the sync chain it is open
     /// on.
@@ -1594,25 +1598,10 @@ impl MagnetiteApp {
             }
             UiCommand::TakeDeviceTab { id } => self.take_device_tab_by_id(engine, &id),
             UiCommand::ArchiveToday { keep } => {
-                let contents = self.with_state(|s| {
-                    let space = s.active_space.clone();
-                    let ids: Vec<String> = s
-                        .space(&space)
-                        .map(|sp| sp.today.iter().map(|t| t.id.clone()).collect())
-                        .unwrap_or_default();
-                    let ids: Vec<String> = ids
-                        .into_iter()
-                        .filter(|id| Some(id) != keep.as_ref())
-                        .collect();
-                    ids.iter()
-                        .filter_map(|id| s.archive_tab(id))
-                        .collect::<Vec<_>>()
-                });
-                for c in contents {
-                    engine.close_content(c);
-                }
-                let space = self.with_state(|s| s.active_space.clone());
-                self.activate_space(engine, &space);
+                self.archive_today(engine, |id| Some(id) != keep.as_deref());
+            }
+            UiCommand::ArchiveTabs { ids } => {
+                self.archive_today(engine, |id| ids.iter().any(|x| x == id));
             }
             UiCommand::ReopenClosed => self.reopen_closed(engine),
             UiCommand::RestoreArchived { id } => {
