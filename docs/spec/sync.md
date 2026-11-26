@@ -124,11 +124,12 @@ The server never sees these names, only ids derived from the sync code.
 
 ## Tabs of other devices
 
-A phone reads the sidebar and does not write it: it knows only part of
-what a desktop keeps there, and what it wrote would be without the rest.
-What a phone has open travels in `devices` instead, where every device changes only its own entry and writes the
-collection as the version after the one it read; when another device wrote
-first, it reads again. Devices cannot overwrite each other there.
+The tabs open on a phone are no part of the sidebar: a phone's tabs are
+its own, and it shows the chain's Today tabs beside them. What a phone has
+open travels in `devices` instead, where every device changes only its own
+entry and writes the collection as the version after the one it read; when
+another device wrote first, it reads again. Devices cannot overwrite each
+other there.
 
 - A tab open on another device shows in the Today list of the space it is
   open in there (in the space in front if this device does not have that
@@ -160,16 +161,31 @@ first, it reads again. Devices cannot overwrite each other there.
 
 ### Changes from phones
 
-A phone cannot write the sidebar either, so what it changes there travels
-in `devices` too: it lists its changes in its entry, and a desktop makes
-them. The phone shows them at once, marked as waiting, until the sidebar it
-reads has them.
+A phone changes little in the sidebar, one item at a time, and keeps each
+change as such: it shows it at once, marked as waiting, and writes it into
+the chain itself. For that it reads the newest sidebar and archive, makes
+its waiting changes in them and writes them as the next versions; when
+another device wrote first, it reads again. A change is so made in what the
+chain holds at that moment, and takes nothing away that another device did
+meanwhile. Desktops take what a phone wrote like any sidebar that arrives,
+merged with their own changes.
 
 - A phone can pin a page in a space (last in its pinned tree), make a page
   a favorite of a space's profile (last in its list), add a space (after
   the others, with the default profile and colour, as "+" → New Space
   does), rename a space, folder, pinned tab or favorite, and remove a
-  pinned tab or favorite (it goes to the archive, as when closed here).
+  pinned tab or favorite, which goes to the chain's archive. In the archive
+  it can bring a tab back (a Today tab of its space again) and remove one
+  for good (`archive.md`).
+- A phone keeps the fields it does not know, like a desktop of an older
+  version, and does not write over a sidebar or archive in a newer format
+  ("Versions of Magnetite in one chain").
+
+While a phone cannot write (the chain's data is in a newer format, other
+devices keep writing first), and for phones of a version from before they
+wrote the sidebar, the changes travel in `devices`: the phone lists them in
+its entry, and a desktop makes them.
+
 - A desktop makes each change once, at its next sync, and then notes the
   change's id in its entry and syncs the sidebar. The phone sees the note
   and stops listing the change; the desktop then forgets the id. The note
@@ -185,7 +201,9 @@ reads has them.
   device alone, what is in them, and favorites of a profile only such
   spaces use); a change for a space deleted meanwhile; renaming or
   removing a Today tab, and removing a folder; and a kind of change this
-  version does not know (it stays listed, for a desktop that does).
+  version does not know (it stays listed, for a desktop that does, or
+  until the phone writes it itself: bringing a tab back from the archive
+  and removing one from it are such).
 
 Not synced: downloads, cookies and logins, which pages are
 open, split views, the search engine (a device holding the words could
