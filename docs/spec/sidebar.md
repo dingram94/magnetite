@@ -227,7 +227,9 @@ Code: `crates/engine/src/tabshare.rs`, `tabshare_hook.js`;
   dragged tab or favorite joins it in a split (`split-view.md`). Between two
   tiles, which is their facing edges (10 points each) and the gap, a line
   marks where it would go; it joins the profile of the tile it was last
-  over. A split's tile, and a tab on a tile that takes no further page, go
+  over. Off the tiles (the grid's edge, the room after the last tile) the
+  line stays where it was, or is after the last tile when the tab was over
+  none yet. A split's tile, and a tab on a tile that takes no further page, go
   before or after the tile by the half under the pointer.
 - `Cmd+D` pins the active Today tab at the top of Pinned, or moves the active
   pinned tab to the top of Today. It does nothing for a favorite. With a
