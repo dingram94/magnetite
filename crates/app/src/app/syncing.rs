@@ -1,13 +1,26 @@
 //! Sync as the app sees it: starting or joining a chain, each round, and
 //! what its outcomes change.
 
+use std::time::{Duration, Instant};
+
 use magnetite_engine::Engine;
 
 use crate::devices::{DEVICES, Me, RemoteTab};
+use crate::lock;
 use crate::state::{SyncSettings, now};
 use crate::sync::{self, Job, Outcome, SyncClient};
 
 use super::{MagnetiteApp, global};
+
+/// The shortest time between two rounds run again because another device
+/// wrote first.
+const SYNC_AGAIN_EVERY: Duration = Duration::from_secs(10);
+
+/// When a round was last run again because another device wrote first.
+#[derive(Default)]
+pub(super) struct SyncPace {
+    again: Option<Instant>,
+}
 
 impl MagnetiteApp {
     pub(super) fn sync_client(&self) -> &SyncClient {
@@ -113,12 +126,15 @@ impl MagnetiteApp {
                 self.push_state(engine);
                 self.sync_now();
             }
-            Outcome::Pushed { versions, .. } => {
+            Outcome::Pushed { versions, sidebar } => {
                 self.with_state(|s| {
                     for (name, v) in versions {
                         // A stored version never goes down (rollback protection).
                         let known = s.settings.sync.versions.entry(name).or_insert(0);
                         *known = (*known).max(v);
+                    }
+                    if let Some(sidebar) = sidebar {
+                        s.synced_sidebar = Some(*sidebar);
                     }
                     s.settings.sync.last_sync_at = Some(now());
                     s.settings.sync.last_error = None;
@@ -130,7 +146,10 @@ impl MagnetiteApp {
                 settings,
                 versions,
             } => {
-                let contents = self.with_state(|s| s.adopt_pull(sidebar, settings, versions));
+                let (contents, write) = self.with_state(|s| {
+                    let contents = s.adopt_pull(sidebar, settings, versions);
+                    (contents, s.sidebar_to_write())
+                });
                 for c in contents {
                     engine.close_content(c);
                 }
@@ -139,6 +158,26 @@ impl MagnetiteApp {
                 // Shows what is open already; nothing new loads (`adopt_pull`).
                 self.present(engine);
                 self.push_state(engine);
+                // What this device changed meanwhile was merged in: the
+                // chain gets it now, not with the next round in minutes.
+                if write {
+                    self.sync_now();
+                }
+            }
+            // Read what the other device wrote, then write. Not without
+            // end, should a server keep saying so.
+            Outcome::Behind => {
+                let again = {
+                    let mut pace = lock(&self.sync_pace);
+                    let again = (pace.again).is_none_or(|at| at.elapsed() >= SYNC_AGAIN_EVERY);
+                    if again {
+                        pace.again = Some(Instant::now());
+                    }
+                    again
+                };
+                if again {
+                    self.sync_now();
+                }
             }
             Outcome::Devices {
                 tabs,

@@ -89,6 +89,7 @@ pub struct MagnetiteApp {
     prompts: Mutex<Prompts>,
     /// A save is on its way (`save_soon`).
     save_queued: AtomicBool,
+    sync_pace: Mutex<syncing::SyncPace>,
     show_pace: Mutex<ShowPace>,
     blocker: adblocking::Blocker,
     /// The recording of a page that runs (`record.rs`).
@@ -289,6 +290,7 @@ impl MagnetiteApp {
             updater: Mutex::new(updates::Updater::new()),
             prompts: Mutex::new(Prompts::default()),
             save_queued: AtomicBool::new(false),
+            sync_pace: Mutex::default(),
             show_pace: Mutex::new(ShowPace::default()),
             blocker,
             record: Mutex::new(record::Recorder::default()),

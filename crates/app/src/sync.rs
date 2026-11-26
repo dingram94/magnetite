@@ -237,9 +237,16 @@ pub enum Outcome {
         versions: Vec<(String, u64)>,
     },
     /// Pushed successfully (or nothing to push); remember the new versions.
+    /// `sidebar`: the sidebar of this round, when the server now holds
+    /// exactly it (written, or there already): what this device and the
+    /// chain agree on, which a later merge starts from.
     Pushed {
         versions: Vec<(String, u64)>,
+        sidebar: Option<Box<SidebarSnapshot>>,
     },
+    /// Another device wrote while this one was about to: the round is run
+    /// again, which takes what that device wrote first.
+    Behind,
     /// The tabs open on the chain's other devices, those sent here that
     /// this device took with this round (`sent`: to open now), and which of
     /// the tabs it took over no device lists any more (`forgotten`): their
@@ -693,6 +700,9 @@ impl Worker {
         let mut pulled_sidebar = None;
         let mut pulled_settings = None;
         let mut versions = Vec::new();
+        // The server holds exactly this round's sidebar.
+        let mut held = false;
+        let mut behind = false;
         let plain: [(&str, Vec<u8>); 2] = [
             (SIDEBAR, serde_json::to_vec(snapshot).unwrap_or_default()),
             (
@@ -781,6 +791,7 @@ impl Worker {
                     same = keys
                         .open(&id, remote.version, &remote.sealed())
                         .is_ok_and(|data| data == *bytes);
+                    held |= same && *name == SIDEBAR;
                 }
                 // Nothing there yet. Only the device that started the chain
                 // writes first: a device that joined before that one's first
@@ -815,8 +826,12 @@ impl Worker {
                 Ok(version) => {
                     self.known.insert((*name).to_string(), version);
                     versions.push(((*name).to_string(), version));
+                    held |= *name == SIDEBAR;
                 }
-                Err(Unwritten::Behind) => errors.push(t!("app.sync.wrote_first", name = name)),
+                Err(Unwritten::Behind) => {
+                    errors.push(t!("app.sync.wrote_first", name = name));
+                    behind = true;
+                }
                 Err(Unwritten::Failed(e)) => errors.push(e),
             }
         }
@@ -828,11 +843,17 @@ impl Worker {
                 versions,
             });
         } else if errors.is_empty() || !versions.is_empty() {
-            outcomes.push(Outcome::Pushed { versions });
+            outcomes.push(Outcome::Pushed {
+                versions,
+                sidebar: held.then(|| Box::new(snapshot.clone())),
+            });
         }
         // Last: a collection that went through must not hide the other's
         // failure.
         outcomes.extend(errors.into_iter().map(Outcome::Error));
+        if behind {
+            outcomes.push(Outcome::Behind);
+        }
         outcomes
     }
 
@@ -1065,6 +1086,7 @@ mod tests {
             Outcome::ConnectFailed(e) => format!("ConnectFailed({e})"),
             Outcome::Pulled { .. } => "Pulled".into(),
             Outcome::Pushed { .. } => "Pushed".into(),
+            Outcome::Behind => "Behind".into(),
             Outcome::Devices { .. } => "Devices".into(),
             Outcome::Error(e) => format!("Error({e})"),
             Outcome::Disconnected => "Disconnected".into(),
@@ -1164,10 +1186,31 @@ mod tests {
         }
         ack.store(1, Ordering::SeqCst);
         let out = w.sync(&snapshot("Work"), &settings, false);
-        let [Outcome::Pushed { versions }] = out.as_slice() else {
+        let [Outcome::Pushed { versions, .. }] = out.as_slice() else {
             panic!("{:?}", out.iter().map(describe).collect::<Vec<_>>())
         };
         assert_eq!(versions, &[(SIDEBAR.into(), 1), (SETTINGS.into(), 1)]);
+    }
+
+    #[test]
+    fn a_round_another_device_wrote_into_first_is_run_again() {
+        let server = fake_server(|method, _| match method {
+            "GET" => (404, r#"{"error":"no such collection"}"#.into()),
+            _ => (409, r#"{"error":"version conflict"}"#.into()),
+        });
+        let (mut w, _) = worker_in_chain("behind", &server);
+        let settings = settings_with(&w.settings);
+        let out = w.sync(&snapshot("Work"), &settings, false);
+        // Nothing went through, so nothing is agreed on; the app is told
+        // to read what the other device wrote.
+        assert!(
+            matches!(
+                out.as_slice(),
+                [Outcome::Error(_), Outcome::Error(_), Outcome::Behind]
+            ),
+            "{:?}",
+            out.iter().map(describe).collect::<Vec<_>>()
+        );
     }
 
     /// A worker whose server holds a phone's sent tab in `devices`, at the
@@ -1333,7 +1376,7 @@ mod tests {
         let out = w.sync(&snapshot("Stale"), &at(5), false);
         assert!(
             out.iter()
-                .all(|o| matches!(o, Outcome::Pushed { versions } if versions.is_empty()))
+                .all(|o| matches!(o, Outcome::Pushed { versions, .. } if versions.is_empty()))
         );
         assert_eq!(puts.load(Ordering::SeqCst), 0);
 
@@ -1385,11 +1428,13 @@ mod tests {
         let mut settings = sync_settings(3);
         settings.sync.server_url = server;
 
-        // Round after round with the same data: nothing is written.
+        // Round after round with the same data: nothing is written, and
+        // the device knows that it and the chain agree on this sidebar.
         for _ in 0..3 {
             let out = w.sync(&snapshot("Same"), &settings, false);
             assert!(
-                matches!(out.as_slice(), [Outcome::Pushed { versions }] if versions.is_empty()),
+                matches!(out.as_slice(), [Outcome::Pushed { versions, sidebar: Some(agreed) }]
+                    if versions.is_empty() && **agreed == snapshot("Same")),
                 "{:?}",
                 out.iter().map(describe).collect::<Vec<_>>()
             );
@@ -1400,7 +1445,9 @@ mod tests {
         // since it took the chain's (`sidebar_unchanged`) is not written
         // either: the other device would take it and answer in kind.
         let out = w.sync(&snapshot("Kept here"), &settings, true);
-        assert!(matches!(out.as_slice(), [Outcome::Pushed { versions }] if versions.is_empty()));
+        assert!(
+            matches!(out.as_slice(), [Outcome::Pushed { versions, sidebar: None }] if versions.is_empty())
+        );
         assert_eq!(puts.load(Ordering::SeqCst), 0);
 
         // Nor is a sidebar without spaces (all of them kept on this device):
@@ -1408,15 +1455,18 @@ mod tests {
         let mut kept_here = snapshot("Kept here");
         kept_here.spaces.clear();
         let out = w.sync(&kept_here, &settings, false);
-        assert!(matches!(out.as_slice(), [Outcome::Pushed { versions }] if versions.is_empty()));
+        assert!(
+            matches!(out.as_slice(), [Outcome::Pushed { versions, .. }] if versions.is_empty())
+        );
         assert_eq!(puts.load(Ordering::SeqCst), 0);
 
         // A changed sidebar is written; the unchanged settings are not.
         let out = w.sync(&snapshot("Renamed"), &settings, false);
-        let [Outcome::Pushed { versions }] = out.as_slice() else {
+        let [Outcome::Pushed { versions, sidebar }] = out.as_slice() else {
             panic!("{:?}", out.iter().map(describe).collect::<Vec<_>>())
         };
         assert_eq!(versions, &[(SIDEBAR.into(), 4)]);
+        assert_eq!(sidebar.as_deref(), Some(&snapshot("Renamed")));
         assert_eq!(puts.load(Ordering::SeqCst), 1);
     }
 
@@ -1772,7 +1822,7 @@ mod tests {
             );
             let words = code_words(&d1).expect("code stored");
             let out = a.sync(&snapshot("Work"), &settings_with(&a.settings), false);
-            let Outcome::Pushed { versions } = &out[0] else {
+            let Outcome::Pushed { versions, .. } = &out[0] else {
                 panic!("expected push, got {}", describe(&out[0]))
             };
             assert_eq!(versions.len(), 2);

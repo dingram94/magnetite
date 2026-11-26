@@ -62,17 +62,52 @@ the web for the words.
   a newer version there is taken. Otherwise the device writes its own copy
   as the next version, but only when it has something new: not when the
   server holds the same, and not when the sidebar is still as the device
-  took it from the chain (apart from what a device keeps of its own, see
-  below). So a device left running does not write over what another one
-  changed while offline.
+  and the chain last agreed on it (apart from what a device keeps of its
+  own, see below). So a device left running does not write over what
+  another one changed while offline.
 - What is sent is the saved sidebar without the tabs other devices would
   not take: Magnetite's own pages and local files.
-- A collection is replaced as a whole; there is no merging. When two devices
-  change the sidebar between syncs, the one that syncs second takes the
-  other's sidebar and loses its own changes since its last sync.
+- A sidebar that arrives while this device has changes of its own is
+  merged with them (next section), and the device writes the result right
+  after, without waiting for the next round. When another device wrote in
+  between, it reads again first.
+- The settings are replaced as a whole: of two devices that changed them
+  between syncs, the one that syncs second takes the other's.
 - Versions only go up. A write counts once the server confirms exactly the
   version written, and a server copy older than what the device has seen is
   refused, so a server cannot roll a device back.
+
+## When two devices changed the sidebar
+
+Each device keeps the sidebar it and the chain last agreed on: the one it
+took, or the one it wrote. What differs from that is what the device
+changed since, also before a restart. When a newer sidebar arrives, those
+changes go into it, and nothing is lost for having synced second:
+
+- Everything is told apart by its id: spaces, folders, tabs, favorites,
+  bookmarks, profiles. What only one device changed is taken from it, field
+  by field. A tab renamed on one device and moved on the other is renamed
+  and moved.
+- Where both changed the same thing (the same tab's title, the place of the
+  same tab), the device that synced first wins. A tab's last use is the
+  later of the two, so a tab is not archived for an age it has on one
+  device only.
+- What one device added stays: tabs opened on both are all there.
+- What one device removed goes, unless the other changed it meanwhile: a
+  tab closed on one device and used on the other stays open.
+- A folder or space removed on one device stays if the other put something
+  into it or changed something in it meanwhile, with just that.
+- The order of a list is that of the device that reordered it (of the one
+  that synced first, if both did). What the other device added goes behind
+  the tab it follows there, or first.
+- Two folders moved into each other, one on each device, end where the
+  device that synced first has them.
+- Two devices that fill the same smart folder each make a tab for an item
+  the source lists: one of the two stays.
+
+The merged sidebar is taken like any that arrives ("Taking another device's
+data"). A device that never agreed with the chain, because it just joined,
+has nothing to tell its own changes by and takes the chain's sidebar.
 
 ## What syncs
 
@@ -86,9 +121,9 @@ The server never sees these names, only ids derived from the sync code.
 
 ## Tabs of other devices
 
-The sidebar is replaced as a whole, so a device that only looks at it, a
-phone, must not write it. What a phone has open travels in `devices`
-instead, where every device changes only its own entry and writes the
+A phone reads the sidebar and does not write it: it knows only part of
+what a desktop keeps there, and what it wrote would be without the rest.
+What a phone has open travels in `devices` instead, where every device changes only its own entry and writes the
 collection as the version after the one it read; when another device wrote
 first, it reads again. Devices cannot overwrite each other there.
 
@@ -179,8 +214,10 @@ should not reach a private device, turn it on at the work device.
 
 ## Taking another device's data
 
-The sidebar from the server replaces this device's, with limits so that
-whoever holds the words cannot harm the device through it:
+The sidebar from the server, with this device's own changes merged in
+("When two devices changed the sidebar"), takes the place of this device's,
+with limits so that whoever holds the words cannot harm the device through
+it:
 
 - This device's profiles stay, and whether a profile is private, and which
   one is the default, is decided here. A profile only this device has
@@ -240,6 +277,7 @@ whoever holds the words cannot harm the device through it:
 | `sync.key` in the data folder | the sync code, readable by the owner only (0600); all keys and ids are derived from it |
 | `sync.delete` in the data folder | code and server of a chain whose deletion the server has not confirmed yet |
 | `settings.sync` in `state.json` | on or off, the server address, the last version per collection, the time of the last sync, the last error |
+| `synced_sidebar` in `state.json` | the sidebar this device and the chain last agreed on; gone when the device leaves the chain |
 | the server | the chain's public key, the days it was created and last used, collection ids, versions and ciphertext; by default a chain unused for 400 days is deleted (its README, "Data it stores") |
 
 The code is 32 random bytes, shown as 24 BIP39 words. From it the device
@@ -253,7 +291,8 @@ builds it from a checkout next to this one.
 
 - Syncing the archive.
 
-Code: `crates/app/src/sync.rs` (client), `crates/app/src/devices.rs` (tabs
+Code: `crates/app/src/sync.rs` (client), `crates/core/src/merge.rs` (merging
+two sidebars), `crates/app/src/devices.rs` (tabs
 of other devices, phones' changes), `crates/app/src/state/phone_edits.rs`
 (making those changes), `crates/app/src/state/adopt.rs`
 (`adopt_pull`, `lasting_sidebar`), `crates/app/src/app/syncing.rs` (`sync_now`,

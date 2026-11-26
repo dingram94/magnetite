@@ -181,9 +181,13 @@ pub fn sanitise_snapshot(snap: &mut SidebarSnapshot) {
 }
 
 impl AppState {
-    /// Take what another device synced. The sidebar replaces ours (last writer
-    /// wins), but a device that holds the words cannot hurt this one through
-    /// it: this device's profiles stay (their cookies and logins go only when
+    /// Take what another device synced. What this device changed in its
+    /// sidebar since it last agreed with the chain (`synced_sidebar`) is
+    /// merged into the one that arrives (`magnetite_core::merge`), and the
+    /// device then has something to write. Without such changes, and on a
+    /// device that never agreed with the chain (it just joined), the sidebar
+    /// that arrives replaces ours. Either way a device that holds the words
+    /// cannot hurt this one through it: this device's profiles stay (their cookies and logins go only when
     /// the user deletes the profile here), spaces kept on this device alone
     /// stay untouched (`keep_unsynced`), tabs on screen that the other
     /// device never had stay as Today tabs and keep their privacy, pages of
@@ -200,15 +204,31 @@ impl AppState {
         let mut refused = false;
         match sidebar {
             Some(remote) if remote.spaces.is_empty() => refused = true,
-            Some(remote) => {
+            Some(mut remote) => {
+                sanitise_snapshot(&mut remote);
+                drop_unsafe_tabs(&mut remote);
                 let old_copy = self.holds_unsynced_space(&remote);
-                contents = self.adopt_sidebar(remote);
-                // What this device would send now is what it took, with the
-                // little it keeps of its own: only a change after this is
-                // worth writing (`sidebar_for_sync`). Not if the chain still
-                // holds a space this device keeps to itself: then it writes,
-                // so the space leaves the other devices.
-                self.synced_sidebar = (!old_copy).then(|| self.sidebar_for_sync());
+                let mine = self.sidebar_for_sync();
+                let merged = (self.synced_sidebar.as_ref())
+                    .filter(|agreed| **agreed != mine)
+                    .map(|agreed| magnetite_core::merge::merge(agreed, &mine, &remote));
+                if let Some(merged) = merged {
+                    contents = self.adopt_sidebar(merged);
+                    // The chain holds `remote`: this device's changes are
+                    // what differs from it now, and it writes them.
+                    self.synced_sidebar = Some(remote);
+                } else if old_copy {
+                    // The chain still holds a space this device keeps to
+                    // itself: it writes, so the space leaves the others.
+                    contents = self.adopt_sidebar(remote.clone());
+                    self.synced_sidebar = Some(remote);
+                } else {
+                    contents = self.adopt_sidebar(remote);
+                    // What this device would send now is what it took, with
+                    // the little it keeps of its own: only a change after
+                    // this is worth writing (`sidebar_for_sync`).
+                    self.synced_sidebar = Some(self.sidebar_for_sync());
+                }
             }
             None => {}
         }
@@ -514,6 +534,16 @@ impl AppState {
         snap
     }
 
+    /// Whether this device has something of its sidebar to write to its
+    /// chain: what it would send is not what the two last agreed on.
+    pub fn sidebar_to_write(&self) -> bool {
+        if !self.settings.sync.enabled {
+            return false;
+        }
+        let mine = self.sidebar_for_sync();
+        !mine.spaces.is_empty() && self.synced_sidebar.as_ref() != Some(&mine)
+    }
+
     /// Whether `remote` still holds a space that this device keeps to
     /// itself: an old copy, written before the space was taken out of sync
     /// here or by a device that has not heard of it.
@@ -720,6 +750,67 @@ mod tests {
         assert_eq!(s.runtime["a"].content, Some(1), "surviving page stays open");
         assert!(!s.runtime.contains_key("x"), "nothing new loads by itself");
         assert_eq!(s.settings.sync.versions["sidebar"], 4);
+    }
+
+    #[test]
+    fn what_this_device_changed_is_merged_into_the_sidebar_that_arrives() {
+        let mut s = state();
+        s.settings.sync.enabled = true;
+        // Both devices agree, then each goes its own way.
+        let agreed = s.sidebar_for_sync();
+        s.synced_sidebar = Some(agreed.clone());
+        assert!(!s.sidebar_to_write());
+        // Here: a tab opened (not in front), one closed, one renamed.
+        s.sidebar.spaces[0].today.push(tab("mine"));
+        s.sidebar.spaces[0].today.retain(|t| t.id != "c");
+        s.find_tab_mut("p").unwrap().title = "Mine".into();
+        s.runtime.insert(
+            "mine".into(),
+            TabRuntime {
+                content: Some(7),
+                ..Default::default()
+            },
+        );
+        assert!(s.sidebar_to_write());
+        // There: a tab opened, another closed, the space renamed.
+        let mut theirs = agreed;
+        theirs.spaces[0].today.insert(0, tab("theirs"));
+        theirs.spaces[0].today.retain(|t| t.id != "a");
+        theirs.spaces[0].title = "Renamed".into();
+
+        let close = s.adopt_pull(Some(theirs.clone()), None, vec![("sidebar".into(), 5)]);
+        assert!(close.is_empty(), "the page of this device's new tab stays");
+        let today: Vec<&str> = (s.sidebar.spaces[0].today.iter())
+            .map(|t| t.id.as_str())
+            .collect();
+        assert_eq!(today, ["theirs", "b", "mine"]);
+        assert_eq!(s.sidebar.spaces[0].title, "Renamed");
+        assert_eq!(s.find_tab("p").unwrap().1.title, "Mine");
+        assert_eq!(s.runtime["mine"].content, Some(7));
+        // The chain has the other device's sidebar: this one writes.
+        assert_eq!(s.synced_sidebar.as_ref(), Some(&theirs));
+        assert!(s.sidebar_to_write());
+
+        // Once written, there is nothing more to write, and a sidebar
+        // that arrives then is taken as it is.
+        s.synced_sidebar = Some(s.sidebar_for_sync());
+        let mut next = s.sidebar_for_sync();
+        next.spaces[0].today.retain(|t| t.id != "mine");
+        s.adopt_pull(Some(next), None, vec![("sidebar".into(), 7)]);
+        assert!(s.find_tab("mine").is_none());
+        assert!(!s.sidebar_to_write());
+    }
+
+    #[test]
+    fn a_device_that_never_agreed_with_the_chain_takes_its_sidebar() {
+        let mut s = state();
+        s.settings.sync.enabled = true;
+        // Just joined: nothing to tell its own changes by.
+        s.sidebar.spaces[0].today.push(tab("mine"));
+        s.adopt_pull(Some(remote(&["x"])), None, vec![("sidebar".into(), 1)]);
+        assert!(s.find_tab("mine").is_none());
+        assert!(s.find_tab("x").is_some());
+        assert!(!s.sidebar_to_write());
     }
 
     #[test]
@@ -1304,8 +1395,9 @@ mod tests {
         assert_eq!(office.today.len(), 1);
         assert_eq!(office.today[0].id, "w2", "this device's copy");
         assert_eq!(w.sidebar.spaces.len(), 3, "once");
-        assert_eq!(
-            w.synced_sidebar, None,
+        assert_ne!(
+            w.synced_sidebar,
+            Some(w.sidebar_for_sync()),
             "it writes, so the others lose the copy"
         );
     }

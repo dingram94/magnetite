@@ -5,6 +5,7 @@
 //! data plus the operations the sidebar needs (`sidebar` module).
 
 pub mod links;
+pub mod merge;
 pub mod model;
 pub mod search;
 pub mod sidebar;
