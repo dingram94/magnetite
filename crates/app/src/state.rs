@@ -6,7 +6,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use magnetite_core::split::SplitNode;
-use magnetite_core::{Id, SidebarSnapshot, Space, TabItem, UnixSeconds};
+use magnetite_core::{Id, SidebarSnapshot, Space, UnixSeconds};
 use magnetite_engine::{ContentId, WindowId, WindowPlacement};
 use serde::{Deserialize, Serialize};
 
@@ -205,12 +205,7 @@ impl TabRuntime {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ArchivedTab {
-    pub tab: TabItem,
-    pub space_id: Id,
-    pub archived_at: UnixSeconds,
-}
+pub use magnetite_core::archive::ArchivedTab;
 
 /// What a start does about other browsers' data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -282,6 +277,10 @@ pub struct AppState {
     /// it changed since, and is merged into a sidebar that arrives
     /// (`adopt_pull`). Saved, so changes made before a restart count too.
     pub synced_sidebar: Option<SidebarSnapshot>,
+    /// The archive's records this device and its sync chain last agreed
+    /// on (`magnetite_core::archive::Key`): what was added or removed here
+    /// since is what differs from them (`adopt_archive`). Saved.
+    pub synced_archive: Option<Vec<magnetite_core::archive::Key>>,
     /// The tabs open on the chain's other devices, as of the last sync.
     /// Not saved.
     pub device_tabs: Vec<crate::devices::RemoteTab>,

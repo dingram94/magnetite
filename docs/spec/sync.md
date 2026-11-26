@@ -58,7 +58,7 @@ the web for the words.
 
 - Shortly after start, then every 5 minutes, on "Sync now" and right after
   starting or joining a chain.
-- Each round handles the two collections in turn. It asks the server first:
+- Each round handles the sidebar and the settings in turn. It asks the server first:
   a newer version there is taken. Otherwise the device writes its own copy
   as the next version, but only when it has something new: not when the
   server holds the same, and not when the sidebar is still as the device
@@ -73,6 +73,8 @@ the web for the words.
   between, it reads again first.
 - The settings are replaced as a whole: of two devices that changed them
   between syncs, the one that syncs second takes the other's.
+- The archive has a round of its own after these two, and is merged
+  (`archive.md`). Any device may write it first.
 - Versions only go up. A write counts once the server confirms exactly the
   version written, and a server copy older than what the device has seen is
   refused, so a server cannot roll a device back.
@@ -114,7 +116,8 @@ has nothing to tell its own changes by and takes the chain's sidebar.
 | Collection | Content |
 |---|---|
 | `sidebar` | profiles (name, colour), favorites, spaces (name, glyph or own icon, colour) with their pinned trees (folders, smart folder definitions), Today tabs and bookmarks |
-| `settings` | when Today tabs are archived, when inactive tabs are suspended, where links from other apps open (a tab, a peek or a mini window; a version that does not know a choice uses a new tab), the shortcuts with other keys or none, who gets their keys first, and the sites that get them all first (`shortcuts.md`) |
+| `archive` | the newest 2000 archived tabs: each with its address, title, space and the time it was archived (`archive.md`, "On other devices") |
+| `settings` | when Today tabs are archived, how long archived tabs are kept, when inactive tabs are suspended, where links from other apps open (a tab, a peek or a mini window; a version that does not know a choice uses a new tab), the shortcuts with other keys or none, who gets their keys first, and the sites that get them all first (`shortcuts.md`) |
 | `devices` | per device: the tabs open on it that it lists for the others (phones do), which tabs of other devices it took over, a phone's changes to the sidebar, and which of those a desktop made |
 
 The server never sees these names, only ids derived from the sync code.
@@ -184,7 +187,7 @@ reads has them.
   removing a Today tab, and removing a folder; and a kind of change this
   version does not know (it stays listed, for a desktop that does).
 
-Not synced: the archive, downloads, cookies and logins, which pages are
+Not synced: downloads, cookies and logins, which pages are
 open, split views, the search engine (a device holding the words could
 otherwise send every search to an address of its choice), appearance and
 all other settings, pinned extensions, and smart folder accounts and tokens.
@@ -295,6 +298,7 @@ way:
 | `sync.delete` in the data folder | code and server of a chain whose deletion the server has not confirmed yet |
 | `settings.sync` in `state.json` | on or off, the server address, the last version per collection, the time of the last sync, the last error |
 | `synced_sidebar` in `state.json` | the sidebar this device and the chain last agreed on; gone when the device leaves the chain |
+| `synced_archive` in `state.json` | which archived tabs this device and the chain last agreed on (tab id and time); gone when the device leaves the chain |
 | the server | the chain's public key, the days it was created and last used, collection ids, versions and ciphertext; by default a chain unused for 400 days is deleted (its README, "Data it stores") |
 
 The code is 32 random bytes, shown as 24 BIP39 words. From it the device
@@ -304,12 +308,8 @@ a power of two, at least 1 KiB, before it is encrypted. This protocol code
 is the `magnetite-sync-proto` crate in the server's repository; the browser
 builds it from a checkout next to this one.
 
-## Not built yet
-
-- Syncing the archive.
-
 Code: `crates/app/src/sync.rs` (client), `crates/core/src/merge.rs` (merging
-two sidebars), `crates/app/src/devices.rs` (tabs
+two sidebars), `crates/core/src/archive.rs` (merging two archives), `crates/app/src/devices.rs` (tabs
 of other devices, phones' changes), `crates/app/src/state/phone_edits.rs`
 (making those changes), `crates/app/src/state/adopt.rs`
 (`adopt_pull`, `lasting_sidebar`), `crates/app/src/app/syncing.rs` (`sync_now`,

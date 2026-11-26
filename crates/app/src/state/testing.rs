@@ -54,6 +54,7 @@ pub(crate) fn state() -> AppState {
         closed_folders: std::collections::HashSet::new(),
         switcher: None,
         synced_sidebar: None,
+        synced_archive: None,
         device_tabs: Vec::new(),
         settings: Settings::default(),
         sidebar_visible: true,

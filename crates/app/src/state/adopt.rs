@@ -3,6 +3,7 @@
 
 use std::collections::{BTreeSet, HashSet};
 
+use magnetite_core::archive::{self, ArchivedTab};
 use magnetite_core::{Id, SidebarNode, SidebarSnapshot, TabItem, UnixSeconds};
 use magnetite_engine::ContentId;
 
@@ -544,6 +545,69 @@ impl AppState {
         !mine.spaces.is_empty() && self.synced_sidebar.as_ref() != Some(&mine)
     }
 
+    /// The archive as sent to the sync server: the newest records
+    /// (`archive::SYNCED_MOST`), without what stays on this device, as
+    /// with the sidebar: tabs of a space kept here, tabs that ran in a
+    /// profile kept here, and addresses another device would not open.
+    pub fn archive_for_sync(&self) -> Vec<ArchivedTab> {
+        use crate::url_policy::{Source, allowed};
+        let here = self.unsynced_profiles();
+        let sent = |e: &&ArchivedTab| {
+            !self.unsynced_spaces.contains(&e.space_id)
+                && !e.tab.profile_id.as_ref().is_some_and(|p| here.contains(p))
+                && allowed(&e.tab.url, Source::Stored)
+        };
+        archive::newest(
+            self.archive.iter().filter(sent).cloned().collect(),
+            archive::SYNCED_MOST,
+        )
+    }
+
+    /// Whether this device has something of its archive to write to its
+    /// chain: what it would send is not what the two last agreed on.
+    pub fn archive_to_write(&self) -> bool {
+        if !self.settings.sync.enabled {
+            return false;
+        }
+        let mine = archive::keys(&self.archive_for_sync());
+        match &self.synced_archive {
+            Some(agreed) => *agreed != mine,
+            // Never agreed: an empty archive is not worth a first write.
+            None => !mine.is_empty(),
+        }
+    }
+
+    /// Take the chain's archive: what was closed, brought back or deleted
+    /// on other devices since this one last agreed with the chain, merged
+    /// with what happened here (`archive::merge`). What this device keeps
+    /// to itself (`archive_for_sync`) stays as it is. Records from
+    /// elsewhere are checked like tabs that arrive: an address Magnetite
+    /// does not open from stored data is dropped, times are no later than
+    /// tomorrow, and each comes back as a plain Today tab.
+    pub fn adopt_archive(&mut self, mut remote: Vec<ArchivedTab>) {
+        use crate::url_policy::{Source, allowed};
+        let latest = now() + 24 * 60 * 60;
+        remote.retain_mut(|e| {
+            e.archived_at = e.archived_at.clamp(0, latest);
+            for time in [&mut e.tab.created_at, &mut e.tab.last_active_at] {
+                *time = time.map(|v| v.clamp(0, latest));
+            }
+            e.tab.home_url = None;
+            e.tab.keep_active = false;
+            e.tab.end_panel();
+            !e.tab.id.is_empty() && allowed(&e.tab.url, Source::Stored)
+        });
+        let remote = archive::newest(remote, archive::SYNCED_MOST);
+        let mine = self.archive_for_sync();
+        let sent: HashSet<archive::Key> = mine.iter().map(ArchivedTab::key).collect();
+        let merged = archive::merge(self.synced_archive.as_deref(), &mine, &remote);
+        let kept = std::mem::take(&mut self.archive)
+            .into_iter()
+            .filter(|e| !sent.contains(&e.key()));
+        self.archive = archive::newest(kept.chain(merged).collect(), usize::MAX);
+        self.synced_archive = Some(archive::keys(&remote));
+    }
+
     /// Whether `remote` still holds a space that this device keeps to
     /// itself: an old copy, written before the space was taken out of sync
     /// here or by a device that has not heard of it.
@@ -801,6 +865,62 @@ mod tests {
         s.adopt_pull(Some(next), None, vec![("sidebar".into(), 7)]);
         assert!(s.find_tab("mine").is_none());
         assert!(!s.sidebar_to_write());
+    }
+
+    fn archived(id: &str, space: &str, at: i64) -> ArchivedTab {
+        ArchivedTab {
+            tab: tab(id),
+            space_id: space.into(),
+            archived_at: at,
+            other: magnetite_core::Other::new(),
+        }
+    }
+
+    #[test]
+    fn tabs_closed_and_brought_back_on_other_devices_are_so_here() {
+        let mut s = state();
+        s.settings.sync.enabled = true;
+        let space = s.active_space.clone();
+        s.sidebar.spaces.push(magnetite_core::Space {
+            id: "here".into(),
+            title: "Here".into(),
+            profile_id: "default".into(),
+            ..Default::default()
+        });
+        assert!(s.set_space_synced("here", false));
+        // Agreed on `a` and `b`; `own` is of a space kept on this device.
+        s.archive = vec![
+            archived("a", &space, 1),
+            archived("b", &space, 2),
+            archived("own", "here", 3),
+        ];
+        s.synced_archive = Some(archive::keys(&s.archive_for_sync()));
+        assert_eq!(s.archive_for_sync().len(), 2);
+        assert!(!s.archive_to_write());
+        // Here `b` was brought back and `mine` closed.
+        s.archive.remove(1);
+        s.archive.push(archived("mine", &space, 6));
+        assert!(s.archive_to_write());
+        // There `a` was deleted and `theirs` closed; and something that
+        // is no web page got in.
+        let mut theirs = vec![archived("b", &space, 2), archived("theirs", &space, 5)];
+        theirs.push(ArchivedTab {
+            tab: TabItem {
+                url: "javascript:alert(1)".into(),
+                keep_active: true,
+                ..tab("bad")
+            },
+            ..archived("bad", &space, 4)
+        });
+        s.adopt_archive(theirs);
+        let ids: Vec<&str> = s.archive.iter().map(|e| e.tab.id.as_str()).collect();
+        assert_eq!(ids, ["own", "theirs", "mine"]);
+        // The chain does not have `mine` yet, and still has `b`.
+        assert!(s.archive_to_write());
+        let sent: Vec<String> = (s.archive_for_sync().iter())
+            .map(|e| e.tab.id.clone())
+            .collect();
+        assert_eq!(sent, ["theirs", "mine"]);
     }
 
     #[test]

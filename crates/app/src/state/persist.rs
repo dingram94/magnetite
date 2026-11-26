@@ -38,6 +38,9 @@ pub(super) struct Persisted {
     /// `AppState::synced_sidebar`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     synced_sidebar: Option<SidebarSnapshot>,
+    /// `AppState::synced_archive`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    synced_archive: Option<Vec<magnetite_core::archive::Key>>,
     /// Where the window was that `active_space` and `active_tab` are of.
     #[serde(default)]
     placement: Option<magnetite_engine::WindowPlacement>,
@@ -135,6 +138,10 @@ impl AppState {
             .as_ref()
             .filter(|p| p.settings.sync.enabled)
             .and_then(|p| p.synced_sidebar.clone());
+        let synced_archive = persisted
+            .as_ref()
+            .filter(|p| p.settings.sync.enabled)
+            .and_then(|p| p.synced_archive.clone());
         // `--import-arc`: Arc's sidebar takes the place of the saved one. The
         // archive, settings and downloads stay, and without a sidebar file
         // of Arc nothing changes.
@@ -245,6 +252,7 @@ impl AppState {
             closed_folders: std::collections::HashSet::new(),
             switcher: None,
             synced_sidebar,
+            synced_archive,
             device_tabs: Vec::new(),
             saver: Saver::new(path.clone()),
             path,
@@ -381,6 +389,7 @@ impl AppState {
             deleted_profiles: self.deleted_profiles.clone(),
             unsynced_spaces: self.unsynced_spaces.clone(),
             synced_sidebar: self.synced_sidebar.clone(),
+            synced_archive: self.synced_archive.clone(),
             windows,
         }
     }

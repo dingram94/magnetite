@@ -248,7 +248,7 @@
       },
       "keep_archived": {
         "label": "Archivierte Tabs behalten für",
-        "hint": "Ältere Tabs werden endgültig aus dem Archiv gelöscht. Einzelne Tabs kannst du auch selbst in der Archivansicht entfernen.",
+        "hint": "Ältere Tabs werden endgültig aus dem Archiv gelöscht, mit Sync auf allen Geräten deiner Kette. Einzelne Tabs kannst du auch selbst in der Archivansicht entfernen.",
         "forever": "Für immer"
       },
       "unload_after": {

@@ -211,7 +211,7 @@
     "going_back": "{name}: Der Server hat Version {remote}, dieses Gerät aber schon {seen}; Magnetite übernimmt keinen älteren Stand",
     "unreadable": "nicht lesbar; ist Magnetite auf dem neuesten Stand?",
     "no_spaces": "sie hat keine Spaces",
-    "newer_format": "eine neuere Version von Magnetite hat sie geschrieben; aktualisiere Magnetite auf diesem Gerät, um die Sidebar wieder zu synchronisieren",
+    "newer_format": "eine neuere Version von Magnetite hat sie geschrieben; aktualisiere Magnetite auf diesem Gerät, um sie wieder zu synchronisieren",
     "version_failed": "{name}, Version {version}: {error}",
     "no_data_yet": "{name}: Diese Sync-Kette enthält noch keine Daten; synchronisiere zuerst das Gerät, mit dem sie gestartet wurde",
     "overflow": "{name}: Versionsüberlauf",

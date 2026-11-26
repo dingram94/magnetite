@@ -4,6 +4,7 @@
 //! unit-testable and the engine stays swappable. Everything here is plain
 //! data plus the operations the sidebar needs (`sidebar` module).
 
+pub mod archive;
 pub mod links;
 pub mod merge;
 pub mod model;

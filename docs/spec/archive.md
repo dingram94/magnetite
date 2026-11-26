@@ -1,9 +1,9 @@
 # Archive and auto-archive
 
 Closing a Today tab does not delete it: the tab moves to the archive, a
-local list of closed tabs that can be searched and restored. Today tabs that
-are no longer used move there on their own. The archive stays on the device
-and is not synced.
+list of closed tabs that can be searched and restored. Today tabs that are
+no longer used move there on their own. With sync on, the devices of a chain
+share the archive (below, "On other devices").
 
 ## What is archived
 
@@ -91,9 +91,44 @@ With "Forever" there is no period, and records only leave by hand.
 
 A typed number is saved on Enter or when the field is left. A shorter period
 deletes older records within a minute, and they cannot be brought back. The
-period is this device's and does not sync.
+period is one of the settings that sync (`sync.md`): a record deleted for
+its age on one device is deleted on the others, so they keep records
+equally long.
 
-Code: `crates/app/src/state/tabs.rs` (`archive_tab`, `delete_space`,
+## On other devices
+
+With sync on (`sync.md`), a tab closed on one device can be brought back on
+any other of the chain.
+
+- The archive is a collection of its own in the chain, encrypted like the
+  rest. It is written with the round after it changed, and taken when the
+  chain's is newer.
+- Two devices' archives are merged, never one replaced by the other. Each
+  device keeps which records it and the chain last agreed on. What was
+  closed on either device since is in the archive of both; a tab brought
+  back or removed from the archive on one device leaves it on the others.
+  A device that just joined keeps its own records and gets the chain's.
+- A tab brought back returns to Today on the device that did it, and
+  reaches the others with the sidebar.
+- The chain holds the newest 2000 records, about 1 MiB as they are sent:
+  every change writes all of them. A device may hold more (with "Forever",
+  or a long period); the older ones stay on it, and are not deleted for no
+  longer being in the chain.
+- Not sent, as with the sidebar: tabs of a space kept on this device and
+  tabs that ran in a profile kept on it. They stay in this device's
+  archive. Tabs of private profiles are never archived.
+- Records that arrive are checked like tabs that arrive: an address
+  Magnetite does not open from stored data is dropped, times are no later
+  than tomorrow, and each comes back as a plain Today tab. A record names
+  its space by id; brought back where that space is not, it opens in the
+  current one.
+- Fields a newer version wrote are kept, and an archive in a newer format
+  than this version knows is neither taken nor written over, as with the
+  sidebar (`sync.md`, "Versions of Magnetite in one chain").
+
+Code: `crates/core/src/archive.rs` (the record, merging two archives),
+`crates/app/src/state/adopt.rs` (`archive_for_sync`, `adopt_archive`),
+`crates/app/src/state/tabs.rs` (`archive_tab`, `delete_space`,
 `prune_archive`), `crates/app/src/app/tabs.rs` (`close_tab`, `housekeeping`,
 `reopen_closed`), `crates/ui/web/src/ArchiveView.tsx`,
 `crates/ui/web/src/LibraryButton.tsx`.

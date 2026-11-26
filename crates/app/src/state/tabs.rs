@@ -705,6 +705,7 @@ impl AppState {
                 tab,
                 space_id: space.unwrap_or_else(|| self.active_space.clone()),
                 archived_at: now(),
+                other: magnetite_core::Other::new(),
             });
         }
         self.forget_tab(id)
@@ -1451,7 +1452,7 @@ mod tests {
         assert_eq!(s.restore_archived(0).as_deref(), Some("a"));
         let today = &s.sidebar.spaces[0].today;
         assert_eq!(today.iter().filter(|t| t.id == "a").count(), 1);
-        assert!(s.archive.is_empty());
+        assert_eq!(s.archive, []);
         assert_eq!(s.restore_archived(0), None, "nothing left to restore");
     }
 
@@ -1465,6 +1466,7 @@ mod tests {
                 tab: tab(id),
                 space_id: s.active_space.clone(),
                 archived_at: 100 * day - age_days * day,
+                other: magnetite_core::Other::new(),
             });
         }
         assert!(s.prune_archive(100 * day));

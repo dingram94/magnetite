@@ -90,11 +90,15 @@ impl MagnetiteApp {
                 taken: s.settings.sync.taken.clone(),
                 applied: s.settings.sync.applied.clone(),
             };
+            let archive = s.archive_for_sync();
             Some(Job::Sync {
                 me,
                 sidebar_unchanged: s.synced_sidebar.as_ref() == Some(&snapshot),
                 snapshot: Box::new(snapshot),
                 settings: Box::new(s.settings.clone()),
+                archive_unchanged: s.synced_archive.as_ref()
+                    == Some(&magnetite_core::archive::keys(&archive)),
+                archive,
             })
         });
         if let Some(job) = job {
@@ -122,6 +126,7 @@ impl MagnetiteApp {
                     sy.last_error = None;
                     sy.started_here = created;
                     s.synced_sidebar = None;
+                    s.synced_archive = None;
                 });
                 self.push_state(engine);
                 self.sync_now();
@@ -160,6 +165,38 @@ impl MagnetiteApp {
                 self.push_state(engine);
                 // What this device changed meanwhile was merged in: the
                 // chain gets it now, not with the next round in minutes.
+                if write {
+                    self.sync_now();
+                }
+            }
+            Outcome::Archive {
+                pulled,
+                agreed,
+                version,
+            } => {
+                let write = self.with_state(|s| {
+                    if let Some(v) = version {
+                        // A stored version never goes down (rollback protection).
+                        let known = s
+                            .settings
+                            .sync
+                            .versions
+                            .entry(sync::ARCHIVE.into())
+                            .or_insert(0);
+                        *known = (*known).max(v);
+                    }
+                    if let Some(agreed) = agreed {
+                        s.synced_archive = Some(agreed);
+                    }
+                    // What was closed or brought back here meanwhile is
+                    // merged in, and written right after.
+                    let merged = pulled.is_some();
+                    if let Some(remote) = pulled {
+                        s.adopt_archive(remote);
+                    }
+                    merged && s.archive_to_write()
+                });
+                self.push_state(engine);
                 if write {
                     self.sync_now();
                 }
@@ -241,6 +278,7 @@ impl MagnetiteApp {
                 self.with_state(|s| {
                     s.settings.sync = SyncSettings::default();
                     s.synced_sidebar = None;
+                    s.synced_archive = None;
                     s.device_tabs.clear();
                 });
                 self.push_state(engine);

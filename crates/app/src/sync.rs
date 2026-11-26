@@ -21,6 +21,7 @@ use std::thread;
 use std::time::Duration;
 
 use magnetite_core::SidebarSnapshot;
+use magnetite_core::archive::{self, Archive, ArchivedTab};
 use magnetite_engine::Engine;
 use magnetite_sync_proto::{
     ChainKeys, CollectionResponse, CreateChainRequest, PutCollectionRequest, PutCollectionResponse,
@@ -35,6 +36,7 @@ use crate::state::{Settings, SyncSettings};
 
 pub const SIDEBAR: &str = "sidebar";
 pub const SETTINGS: &str = "settings";
+pub const ARCHIVE: &str = "archive";
 
 /// Time to set up a connection (TLS included), and for a whole request.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -172,6 +174,21 @@ struct SyncedSettings {
     shortcut_priority: magnetite_engine::Priorities,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     shortcut_sites: Vec<String>,
+    /// Left out while it is the usual one, like `shortcuts`.
+    #[serde(
+        default = "usual_archive_days",
+        skip_serializing_if = "is_usual_archive_days"
+    )]
+    archive_days: u32,
+}
+
+fn usual_archive_days() -> u32 {
+    Settings::default().archive_days
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)] // what serde calls it with
+fn is_usual_archive_days(days: &u32) -> bool {
+    *days == usual_archive_days()
 }
 
 impl SyncedSettings {
@@ -183,6 +200,7 @@ impl SyncedSettings {
             shortcuts: s.shortcuts.clone(),
             shortcut_priority: s.shortcut_priority.clone(),
             shortcut_sites: s.shortcut_sites.clone(),
+            archive_days: s.archive_days,
         }
     }
     fn apply(self, s: &mut Settings) {
@@ -192,6 +210,7 @@ impl SyncedSettings {
         s.shortcuts = self.shortcuts;
         s.shortcut_priority = self.shortcut_priority;
         s.shortcut_sites = self.shortcut_sites;
+        s.archive_days = self.archive_days;
     }
 }
 
@@ -214,6 +233,10 @@ pub enum Job {
         sidebar_unchanged: bool,
         /// This device among the chain's devices (`devices` module).
         me: Me,
+        /// What of the archive syncs (`AppState::archive_for_sync`), and
+        /// whether that is what the device and the chain last agreed on.
+        archive: Vec<ArchivedTab>,
+        archive_unchanged: bool,
     },
     /// Stop syncing on this device; the chain stays on the server.
     Leave,
@@ -243,6 +266,14 @@ pub enum Outcome {
     Pushed {
         versions: Vec<(String, u64)>,
         sidebar: Option<Box<SidebarSnapshot>>,
+    },
+    /// The chain's archive. `pulled`: it is newer than this device's, to be
+    /// merged with it. `agreed`: the server holds exactly this round's
+    /// records (written, or there already). `version`: to remember.
+    Archive {
+        pulled: Option<Vec<ArchivedTab>>,
+        agreed: Option<Vec<archive::Key>>,
+        version: Option<u64>,
     },
     /// Another device wrote while this one was about to: the round is run
     /// again, which takes what that device wrote first.
@@ -305,6 +336,8 @@ struct SyncRequest {
     settings: Box<Settings>,
     sidebar_unchanged: bool,
     me: Me,
+    archive: Vec<ArchivedTab>,
+    archive_unchanged: bool,
 }
 
 /// Shared by the UI thread and the sync thread.
@@ -375,12 +408,16 @@ impl SyncClient {
                 settings,
                 sidebar_unchanged,
                 me,
+                archive,
+                archive_unchanged,
             } => {
                 let request = SyncRequest {
                     snapshot,
                     settings,
                     sidebar_unchanged,
                     me,
+                    archive,
+                    archive_unchanged,
                 };
                 if lock(&self.shared.pending).replace(request).is_some() {
                     return; // the wake-up queued for the older one runs this
@@ -435,6 +472,7 @@ fn run(mut w: Worker, rx: &Receiver<Msg>, shared: &Shared, notify: &Notify) {
                 let request = lock(&shared.pending).take();
                 request.map_or_else(Vec::new, |r| {
                     let mut outcomes = w.sync(&r.snapshot, &r.settings, r.sidebar_unchanged);
+                    outcomes.extend(w.archive(&r.archive, r.archive_unchanged));
                     outcomes.extend(w.devices(&r.me));
                     outcomes
                 })
@@ -898,6 +936,110 @@ impl Worker {
         }
     }
 
+    /// The archive's round: take the chain's if it is newer, else write
+    /// this device's records (`mine`) if they changed (`unchanged`: they
+    /// are what the device and the chain last agreed on). Any device may
+    /// write first, unlike with the sidebar: archives are merged, never
+    /// replaced. Versions only go up, as in `sync`.
+    fn archive(&mut self, mine: &[ArchivedTab], unchanged: bool) -> Vec<Outcome> {
+        let Some(code) = self.code.clone() else {
+            return Vec::new();
+        };
+        let keys = code.keys();
+        let id = keys.collection_id(ARCHIVE);
+        let path = format!("/collections/{id}");
+        let applied = self.settings.versions.get(ARCHIVE).copied().unwrap_or(0);
+        let seen = applied.max(self.known.get(ARCHIVE).copied().unwrap_or(0));
+        let failed = |error: String, version: u64| {
+            vec![Outcome::Error(t!(
+                "app.sync.version_failed",
+                name = ARCHIVE,
+                version = version,
+                error = error
+            ))]
+        };
+        let agreed = |version| {
+            vec![Outcome::Archive {
+                pulled: None,
+                agreed: Some(archive::keys(mine)),
+                version,
+            }]
+        };
+        let bytes = serde_json::to_vec(&Archive::new(mine.to_vec())).unwrap_or_default();
+        match self.request(&keys, "GET", &path, None) {
+            Ok(r) if r.status == 200 => {
+                let remote: CollectionResponse = match r.json() {
+                    Ok(c) => c,
+                    Err(e) => return vec![Outcome::Error(e)],
+                };
+                if remote.version < seen {
+                    return vec![Outcome::Error(t!(
+                        "app.sync.going_back",
+                        name = ARCHIVE,
+                        remote = remote.version,
+                        seen = seen
+                    ))];
+                }
+                let Ok(data) = keys.open(&id, remote.version, &remote.sealed()) else {
+                    return failed(t!("app.sync.unreadable").into(), remote.version);
+                };
+                if remote.version > seen {
+                    // Not counted as seen when it cannot be read, as in
+                    // `sync`: this device then never writes over it.
+                    return match serde_json::from_slice::<Archive>(&data) {
+                        Ok(a) if a.version > Archive::VERSION => {
+                            failed(t!("app.sync.newer_format").into(), remote.version)
+                        }
+                        Ok(a) => {
+                            self.known.insert(ARCHIVE.to_string(), remote.version);
+                            vec![Outcome::Archive {
+                                pulled: Some(a.entries),
+                                agreed: None,
+                                version: Some(remote.version),
+                            }]
+                        }
+                        Err(_) => failed(t!("app.sync.unreadable").into(), remote.version),
+                    };
+                }
+                if data == bytes {
+                    return agreed(None);
+                }
+            }
+            // Nothing there yet, and nothing to put there.
+            Ok(r) if r.status == 404 && seen == 0 => {
+                if mine.is_empty() {
+                    return Vec::new();
+                }
+            }
+            Ok(r) if r.status == 404 => {
+                return vec![Outcome::Error(t!(
+                    "app.sync.going_back",
+                    name = ARCHIVE,
+                    remote = 0,
+                    seen = seen
+                ))];
+            }
+            Ok(r) => return vec![Outcome::Error(r.error())],
+            Err(e) => return vec![Outcome::Error(e)],
+        }
+        // `seen > applied`: these records predate a pull the UI thread is
+        // applying; writing them would undo it.
+        if unchanged || seen > applied {
+            return Vec::new();
+        }
+        match self.push(&keys, ARCHIVE, applied, &bytes) {
+            Ok(version) => {
+                self.known.insert(ARCHIVE.to_string(), version);
+                agreed(Some(version))
+            }
+            Err(Unwritten::Behind) => vec![
+                Outcome::Error(t!("app.sync.wrote_first", name = ARCHIVE)),
+                Outcome::Behind,
+            ],
+            Err(Unwritten::Failed(e)) => vec![Outcome::Error(e)],
+        }
+    }
+
     /// Read the tabs open on the chain's other devices, and write which of
     /// them this device took over. Only this device's entry changes; when
     /// another device wrote in between, the round starts over. A version
@@ -1031,6 +1173,20 @@ mod tests {
         assert!(settings.shortcuts.is_empty());
     }
 
+    #[test]
+    fn how_long_archived_tabs_are_kept_is_sent_once_it_is_not_the_usual() {
+        let mut settings = Settings::default();
+        let sent = |s: &Settings| serde_json::to_string(&super::SyncedSettings::from(s)).unwrap();
+        // As a version from before the archive synced writes the settings.
+        assert!(!sent(&settings).contains("archive_days"));
+        settings.archive_days = 30;
+        assert!(sent(&settings).contains(r#""archive_days":30"#));
+        let theirs: super::SyncedSettings = serde_json::from_str(&sent(&settings)).unwrap();
+        let mut here = Settings::default();
+        theirs.apply(&mut here);
+        assert_eq!(here.archive_days, 30);
+    }
+
     use super::*;
 
     #[test]
@@ -1095,6 +1251,7 @@ mod tests {
             Outcome::Pulled { .. } => "Pulled".into(),
             Outcome::Pushed { .. } => "Pushed".into(),
             Outcome::Behind => "Behind".into(),
+            Outcome::Archive { .. } => "Archive".into(),
             Outcome::Devices { .. } => "Devices".into(),
             Outcome::Error(e) => format!("Error({e})"),
             Outcome::Disconnected => "Disconnected".into(),
@@ -1218,6 +1375,97 @@ mod tests {
             ),
             "{:?}",
             out.iter().map(describe).collect::<Vec<_>>()
+        );
+    }
+
+    fn archived(id: &str, at: i64) -> ArchivedTab {
+        ArchivedTab {
+            tab: magnetite_core::TabItem::new(id, format!("https://example.org/{id}"), id),
+            space_id: "s1".into(),
+            archived_at: at,
+            other: magnetite_core::Other::new(),
+        }
+    }
+
+    #[test]
+    fn the_archive_is_written_by_whoever_has_one_and_taken_when_newer() {
+        // The server holds what was last put, at the version in `held`.
+        let held = Arc::new(Mutex::new((0u64, Vec::<ArchivedTab>::new())));
+        let code = SyncCode::generate();
+        let keys = code.keys();
+        let id = keys.collection_id(ARCHIVE);
+        let server = {
+            let (held, keys, id) = (held.clone(), code.keys(), id.clone());
+            fake_server(move |method, _| {
+                let (version, entries) = lock(&held).clone();
+                if method == "PUT" {
+                    return (200, format!(r#"{{"version":{}}}"#, version + 1));
+                }
+                if version == 0 {
+                    return (404, "{}".into());
+                }
+                let plain = serde_json::to_vec(&Archive::new(entries)).unwrap();
+                let body =
+                    CollectionResponse::new(version, keys.seal(&id, version, &plain).unwrap());
+                (200, serde_json::to_string(&body).unwrap())
+            })
+        };
+        let dir = data_dir("archive");
+        save_code(&dir, &code).unwrap();
+        // A device that joined: it may not write a sidebar first, but an
+        // archive it may.
+        let mut w = Worker::new(
+            dir,
+            SyncSettings {
+                server_url: server,
+                ..SyncSettings::default()
+            },
+        );
+        // Nothing here, nothing there: not a word.
+        assert!(w.archive(&[], false).is_empty());
+        let mine = [archived("a", 1), archived("b", 2)];
+        let out = w.archive(&mine, false);
+        let [
+            Outcome::Archive {
+                pulled: None,
+                agreed: Some(agreed),
+                version: Some(1),
+            },
+        ] = out.as_slice()
+        else {
+            panic!("{:?}", out.iter().map(describe).collect::<Vec<_>>())
+        };
+        assert_eq!(*agreed, archive::keys(&mine));
+
+        // Another device wrote: its records are handed over, none written.
+        *lock(&held) = (2, vec![archived("b", 2), archived("c", 3)]);
+        let out = w.archive(&mine, false);
+        let [
+            Outcome::Archive {
+                pulled: Some(theirs),
+                agreed: None,
+                version: Some(2),
+            },
+        ] = out.as_slice()
+        else {
+            panic!("{:?}", out.iter().map(describe).collect::<Vec<_>>())
+        };
+        assert_eq!(theirs.len(), 2);
+        // The same records as the server's: agreed, without a write.
+        w.settings.versions.insert(ARCHIVE.into(), 2);
+        let same = [archived("b", 2), archived("c", 3)];
+        assert!(matches!(
+            w.archive(&same, false).as_slice(),
+            [Outcome::Archive {
+                pulled: None,
+                agreed: Some(_),
+                version: None
+            }]
+        ));
+        // An older copy is refused.
+        *lock(&held) = (1, Vec::new());
+        assert!(
+            matches!(w.archive(&same, false).as_slice(), [Outcome::Error(e)] if e.contains("not going back"))
         );
     }
 
@@ -1825,6 +2073,8 @@ mod tests {
             settings: Box::new(settings_with(&w.settings)),
             sidebar_unchanged: false,
             me: Me::default(),
+            archive: Vec::new(),
+            archive_unchanged: true,
         };
         client.submit(sync());
         let _connection = stalled.accept().unwrap(); // the worker is now stuck

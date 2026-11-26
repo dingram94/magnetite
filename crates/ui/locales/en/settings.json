@@ -248,7 +248,7 @@
       },
       "keep_archived": {
         "label": "Keep archived tabs for",
-        "hint": "Older ones are deleted from the archive for good. A tab can also be removed by hand in the archive view.",
+        "hint": "Older ones are deleted from the archive for good, with sync on every device of your chain. A tab can also be removed by hand in the archive view.",
         "forever": "Forever"
       },
       "unload_after": {
