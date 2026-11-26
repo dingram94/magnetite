@@ -755,6 +755,12 @@ impl Worker {
                                         Ok(s) if s.spaces.is_empty() => {
                                             Err(t!("app.sync.no_spaces").to_string())
                                         }
+                                        // A format this version must not
+                                        // write over: it would write it back
+                                        // as its own, older one.
+                                        Ok(s) if s.version > SidebarSnapshot::VERSION => {
+                                            Err(t!("app.sync.newer_format").to_string())
+                                        }
                                         Ok(s) => {
                                             pulled_sidebar = Some(s);
                                             Ok(())
@@ -1057,6 +1063,7 @@ mod tests {
             is_default: true,
             ephemeral: false,
             color: None,
+            other: magnetite_core::Other::new(),
         });
         s.spaces.push(Space {
             id: "s1".into(),
@@ -1069,6 +1076,7 @@ mod tests {
             pinned: vec![],
             today: vec![],
             bookmarks: Vec::new(),
+            other: magnetite_core::Other::new(),
         });
         s
     }
@@ -1572,6 +1580,57 @@ mod tests {
             out.iter().map(describe).collect::<Vec<_>>()
         );
         assert!(load_pending_delete(&dir).is_none());
+    }
+
+    #[test]
+    fn a_sidebar_in_a_newer_format_is_neither_taken_nor_written_over() {
+        let code = SyncCode::generate();
+        let keys = code.keys();
+        let puts = Arc::new(AtomicUsize::new(0));
+        let counted = puts.clone();
+        let ids = [keys.collection_id(SIDEBAR), keys.collection_id(SETTINGS)];
+        let server = fake_server(move |method, path| {
+            if method == "PUT" {
+                counted.fetch_add(1, Ordering::SeqCst);
+                return (200, r#"{"version":4}"#.into());
+            }
+            let Some(id) = ids.iter().find(|id| path.ends_with(id.as_str())) else {
+                return (404, "{}".into());
+            };
+            let mut newer = snapshot("Newer");
+            newer.version = SidebarSnapshot::VERSION + 1;
+            let plain = if *id == ids[0] {
+                serde_json::to_vec(&newer).unwrap()
+            } else {
+                serde_json::to_vec(&SyncedSettings::from(&Settings::default())).unwrap()
+            };
+            let body = CollectionResponse::new(3, keys.seal(id, 3, &plain).unwrap());
+            (200, serde_json::to_string(&body).unwrap())
+        });
+        let dir = data_dir("newer-format");
+        save_code(&dir, &code).unwrap();
+        let mut w = Worker::new(dir, SyncSettings::default());
+        let mut settings = sync_settings(2);
+        settings.sync.server_url.clone_from(&server);
+        // Round after round: the user is told, and nothing of the sidebar
+        // is taken or written.
+        for _ in 0..2 {
+            let out = w.sync(&snapshot("Local"), &settings, false);
+            assert!(
+                out.iter()
+                    .any(|o| matches!(o, Outcome::Error(e) if e.contains("newer version"))),
+                "{:?}",
+                out.iter().map(describe).collect::<Vec<_>>()
+            );
+            assert!(!out.iter().any(|o| matches!(
+                o,
+                Outcome::Pulled {
+                    sidebar: Some(_),
+                    ..
+                }
+            )));
+        }
+        assert_eq!(puts.load(Ordering::SeqCst), 0);
     }
 
     #[test]

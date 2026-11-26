@@ -65,6 +65,7 @@ impl AppState {
                     None => lists.push(FavoriteSet {
                         profile_id: profile,
                         items: vec![tab],
+                        other: magnetite_core::Other::new(),
                     }),
                 }
                 self.normalise_favorites();

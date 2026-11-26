@@ -219,6 +219,7 @@ mod tests {
             pinned: vec![tab("pinned, not a bookmark", "https://pinned.example/")],
             today: vec![],
             bookmarks,
+            other: magnetite_core::Other::new(),
         }
     }
 
@@ -236,6 +237,7 @@ mod tests {
                         tab("script", "javascript:alert(1)"),
                     ],
                     smart: None,
+                    other: magnetite_core::Other::new(),
                 }),
             ],
         );
@@ -284,10 +286,12 @@ mod tests {
                         icon: None,
                         children: vec![tab("'=1", "https://one.example/")],
                         smart: None,
+                        other: magnetite_core::Other::new(),
                     }),
                     tab("'quoted'", "https://two.example/"),
                 ],
                 smart: None,
+                other: magnetite_core::Other::new(),
             })],
         );
         let home = space("Home", vec![tab("News", "https://news.example/")]);

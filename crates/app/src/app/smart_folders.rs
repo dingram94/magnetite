@@ -144,6 +144,7 @@ impl MagnetiteApp {
                         icon: None,
                         children: vec![],
                         smart: Some(smart),
+                        other: magnetite_core::Other::new(),
                     }),
                 );
                 Some(id)

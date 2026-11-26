@@ -169,6 +169,7 @@ fn folder(
         icon: None,
         children,
         smart: None,
+        other: magnetite_core::Other::new(),
     })
 }
 
@@ -184,6 +185,7 @@ fn new_space(ids: &mut Ids, title: &str) -> Result<Space, ImportError> {
         pinned: Vec::new(),
         today: Vec::new(),
         bookmarks: Vec::new(),
+        other: magnetite_core::Other::new(),
     })
 }
 

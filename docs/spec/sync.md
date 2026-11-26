@@ -253,6 +253,23 @@ it:
   after every round until usable data is there. No device writes a sidebar
   without spaces.
 
+### Versions of Magnetite in one chain
+
+The sidebar is written whole, so a device also writes what it did not
+change. Devices of different versions must not lose each other's data that
+way:
+
+- A field a newer version wrote that this version does not know is kept
+  with what it belongs to (the sidebar, a profile, a list of favorites, a
+  space, a folder, a tab, a smart folder's definition) and written back as
+  it came. This version does not read it, and it merges like any other
+  field. Such a field goes only with the thing it belongs to.
+- A change to the format that an older version must not write over raises
+  the sidebar's `version` (1 today). A device that finds a higher one than
+  it knows does not take that sidebar and writes none; Settings → Sync says
+  that Magnetite has to be updated. Everything else on the device goes on,
+  the other collections included.
+
 ## Safety
 
 - Every request is signed with a key derived from the sync code. The

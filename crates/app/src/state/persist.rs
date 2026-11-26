@@ -82,10 +82,12 @@ pub(super) fn default_sidebar() -> SidebarSnapshot {
         is_default: true,
         ephemeral: false,
         color: None,
+        other: magnetite_core::Other::new(),
     });
     snap.favorites.push(magnetite_core::FavoriteSet {
         profile_id: "default".into(),
         items: vec![],
+        other: magnetite_core::Other::new(),
     });
     snap.spaces.push(Space {
         id: new_id(),
@@ -104,6 +106,7 @@ pub(super) fn default_sidebar() -> SidebarSnapshot {
         // opens one.
         today: vec![],
         bookmarks: Vec::new(),
+        other: magnetite_core::Other::new(),
     });
     snap
 }
@@ -593,6 +596,7 @@ mod tests {
             is_default: false,
             ephemeral: true,
             color: None,
+            other: magnetite_core::Other::new(),
         });
         s.find_tab_mut("b").unwrap().profile_id = Some("secret".into());
         s.deleted_profiles.push("old".into());

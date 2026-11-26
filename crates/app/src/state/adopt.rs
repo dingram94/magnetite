@@ -682,6 +682,7 @@ mod tests {
             is_default: false,
             ephemeral: true,
             color: None,
+            other: magnetite_core::Other::new(),
         });
         if let SidebarNode::Tab(t) = &mut s.sidebar.spaces[0].pinned[0] {
             t.profile_id = Some("private".into());
@@ -713,6 +714,7 @@ mod tests {
             is_default: false,
             ephemeral: true,
             color: None,
+            other: magnetite_core::Other::new(),
         });
         let sid = s.active_space.clone();
         s.sidebar.spaces[0].today.push(TabItem {
@@ -822,6 +824,7 @@ mod tests {
             is_default: false,
             ephemeral: true,
             color: None,
+            other: magnetite_core::Other::new(),
         });
         // Neither in front: a Settings tab and a private Today tab.
         s.sidebar.spaces[0].today.push(TabItem {
@@ -866,6 +869,7 @@ mod tests {
             is_default: false,
             ephemeral: true,
             color: None,
+            other: magnetite_core::Other::new(),
         });
         s.sidebar.spaces[0].profile_id = "secret".into();
         if let SidebarNode::Tab(t) = &mut s.sidebar.spaces[0].pinned[0] {
@@ -897,6 +901,7 @@ mod tests {
             is_default: false,
             ephemeral: true,
             color: None,
+            other: magnetite_core::Other::new(),
         });
         let mut theirs = remote(&["a"]);
         theirs.profiles[0].is_default = false;
@@ -906,6 +911,7 @@ mod tests {
             is_default: true,
             ephemeral: false,
             color: None,
+            other: magnetite_core::Other::new(),
         });
         s.adopt_pull(Some(theirs), None, vec![]);
         // Still a context of its own, in memory: not the default store.
@@ -922,6 +928,7 @@ mod tests {
             is_default: false,
             ephemeral: false,
             color: None,
+            other: magnetite_core::Other::new(),
         });
         let space = s.active_space.clone();
         assert!(s.split_insert(Some("a"), "b", magnetite_core::split::Side::Right));
@@ -958,6 +965,7 @@ mod tests {
             is_default: false,
             ephemeral: false,
             color: None,
+            other: magnetite_core::Other::new(),
         });
         s.sidebar.favorites.push(magnetite_core::FavoriteSet {
             profile_id: "work".into(),
@@ -965,6 +973,7 @@ mod tests {
                 home_url: Some("https://example.org/chat".into()),
                 ..tab("chat")
             }],
+            other: magnetite_core::Other::new(),
         });
         // The other device moved the last favorite of "work" into Today.
         let mut theirs = s.lasting_sidebar();
@@ -989,6 +998,7 @@ mod tests {
             is_default: false,
             ephemeral,
             color: None,
+            other: magnetite_core::Other::new(),
         };
         s.sidebar.profiles.push(private(true));
         let sid = s.active_space.clone();
@@ -1031,6 +1041,7 @@ mod tests {
             is_default: false,
             ephemeral: false,
             color: None,
+            other: magnetite_core::Other::new(),
         });
         for (id, page) in [("a", 1), ("b", 2)] {
             s.runtime.insert(
@@ -1180,6 +1191,7 @@ mod tests {
             icon: None,
             children: vec![],
             smart: Some(SmartFolder::new(source(""))),
+            other: magnetite_core::Other::new(),
         }));
         let sf = |s: &AppState| s.smart_folders()[0].1.clone();
         assert!(!s.smart_is_allowed("f", &sf(&s)), "arrived by sync: waits");
@@ -1200,6 +1212,7 @@ mod tests {
             is_default: false,
             ephemeral: false,
             color: Some(magnetite_core::PROFILE_COLORS[0]),
+            other: magnetite_core::Other::new(),
         }
     }
 
@@ -1294,6 +1307,7 @@ mod tests {
                 home_url: Some("https://example.org/wf".into()),
                 ..tab("wf")
             }],
+            other: magnetite_core::Other::new(),
         });
         s
     }

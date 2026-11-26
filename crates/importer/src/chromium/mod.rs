@@ -44,10 +44,12 @@ pub fn import(root: &Path, name: &str) -> Result<SidebarSnapshot, ImportError> {
             is_default: i == 0,
             ephemeral: false,
             color: None,
+            other: magnetite_core::Other::new(),
         });
         snap.favorites.push(FavoriteSet {
             profile_id,
             items: vec![],
+            other: magnetite_core::Other::new(),
         });
         snap.spaces.push(space);
     }
@@ -225,6 +227,7 @@ fn space(
         pinned,
         today,
         bookmarks: saved,
+        other: magnetite_core::Other::new(),
     })
 }
 
@@ -244,6 +247,7 @@ fn folder(
         icon: None,
         children,
         smart: None,
+        other: magnetite_core::Other::new(),
     }))
 }
 

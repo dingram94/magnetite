@@ -338,6 +338,7 @@ mod tests {
             is_default: false,
             ephemeral: true,
             color: None,
+            other: magnetite_core::Other::new(),
         });
         s.find_tab_mut("b").unwrap().profile_id = Some("secret".into());
         s.record_visit(1, "https://example.org/a");

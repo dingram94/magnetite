@@ -165,7 +165,8 @@ fn many_unsafe_profile_ids_do_not_stall_the_import() {
         .collect();
     let file = sidebar(&[container("x", &[])], &spaces, &[]);
     let (done, result) = std::sync::mpsc::channel();
-    std::thread::spawn(move || done.send(import_str(&file)));
+    // Nobody waits any more once the test gave up: nothing to do then.
+    std::thread::spawn(move || drop(done.send(import_str(&file))));
     let snap = result
         .recv_timeout(std::time::Duration::from_secs(20))
         .expect("the import finishes in time")

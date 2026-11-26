@@ -211,6 +211,7 @@
     "going_back": "{name}: the server has version {remote} but this device has {seen}; not going back",
     "unreadable": "cannot read it; is Magnetite up to date?",
     "no_spaces": "it has no spaces",
+    "newer_format": "a newer version of Magnetite wrote it; update Magnetite on this device to sync its sidebar again",
     "version_failed": "{name} version {version}: {error}",
     "no_data_yet": "{name}: this sync chain holds no data yet; sync the device that started it first",
     "overflow": "{name}: version overflow",

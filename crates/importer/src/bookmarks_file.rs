@@ -52,6 +52,7 @@ pub fn bookmarks(html: &str) -> Result<Vec<SidebarNode>, ImportError> {
                         icon: None,
                         children,
                         smart: None,
+                        other: magnetite_core::Other::new(),
                     };
                     last(&mut open).push(SidebarNode::Folder(folder));
                 }
@@ -145,6 +146,7 @@ fn folder(id: String, title: String, children: Vec<SidebarNode>) -> Folder {
         icon: None,
         children,
         smart: None,
+        other: magnetite_core::Other::new(),
     }
 }
 

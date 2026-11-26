@@ -539,6 +539,7 @@ mod tests {
             is_default: false,
             ephemeral: false,
             color: None,
+            other: magnetite_core::Other::new(),
         });
         assert_eq!(s.pins("work"), ids(&["ours"]));
         assert!(s.follow_chromium_pins("work", ids(&["vault"])));

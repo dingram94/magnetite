@@ -221,6 +221,7 @@ pub(super) fn move_tab(s: &mut AppState, id: &str, to: &Destination) {
                     lists.push(magnetite_core::FavoriteSet {
                         profile_id,
                         items: vec![],
+                        other: magnetite_core::Other::new(),
                     });
                     lists.len() - 1
                 });

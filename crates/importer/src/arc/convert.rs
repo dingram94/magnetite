@@ -67,6 +67,7 @@ pub fn to_snapshot(file: &raw::SidebarFile) -> Result<SidebarSnapshot, ImportErr
             pinned,
             today,
             bookmarks: Vec::new(),
+            other: magnetite_core::Other::new(),
         });
     }
 
@@ -151,6 +152,7 @@ fn profile_for(space: &raw::Space, ids: &mut ProfileIds, snapshot: &mut SidebarS
             is_default: false,
             ephemeral: false,
             color: None,
+            other: magnetite_core::Other::new(),
         });
     }
     id
@@ -277,6 +279,7 @@ impl<'a> Walker<'a> {
                     icon: icon_name(&list.custom_info.icon_type),
                     children,
                     smart,
+                    other: magnetite_core::Other::new(),
                 }));
             } else {
                 // Split views, easels, documents: no equivalent yet. Their
@@ -289,6 +292,7 @@ impl<'a> Walker<'a> {
                         icon: None,
                         children: nested,
                         smart: None,
+                        other: magnetite_core::Other::new(),
                     }));
                 }
             }

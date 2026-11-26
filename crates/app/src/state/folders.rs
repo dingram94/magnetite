@@ -125,6 +125,7 @@ impl AppState {
             icon: None,
             children: vec![],
             smart: None,
+            other: magnetite_core::Other::new(),
         });
         let takes_one = |s: &Self, p: &str| {
             (s.sidebar.spaces.iter())
@@ -277,6 +278,7 @@ mod tests {
                     items: vec![listed.into()],
                     ..SmartFolder::new(source)
                 }),
+                other: magnetite_core::Other::new(),
             }));
         s.runtime.insert(
             "pr1".into(),
@@ -302,6 +304,7 @@ mod tests {
             icon: None,
             children,
             smart: None,
+            other: magnetite_core::Other::new(),
         })
     }
 
@@ -400,6 +403,7 @@ mod tests {
                 icon: None,
                 children: vec![SidebarNode::Tab(tab("x")), SidebarNode::Tab(tab("y"))],
                 smart: None,
+                other: magnetite_core::Other::new(),
             }));
         s.sidebar.spaces[0].pinned.push(SidebarNode::Tab(tab("z")));
         assert_eq!(s.delete_folder("f"), Vec::<ContentId>::new());

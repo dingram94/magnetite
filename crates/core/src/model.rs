@@ -8,8 +8,15 @@ use serde::{Deserialize, Serialize};
 pub type Id = String;
 pub type UnixSeconds = i64;
 
+/// What a newer version of Magnetite wrote next to the fields this one
+/// knows, by name. The sidebar is written whole when it syncs, so each of
+/// its parts keeps these and writes them back as they came: an older
+/// version in a sync chain then does not remove what a newer one added.
+/// Nothing reads them.
+pub type Other = serde_json::Map<String, serde_json::Value>;
+
 /// An isolated browsing context: cookies, storage, history, extensions.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Profile {
     pub id: Id,
     pub name: String,
@@ -25,6 +32,8 @@ pub struct Profile {
     /// one; every other lasting profile gets one (`color_profiles`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<Color>,
+    #[serde(flatten)]
+    pub other: Other,
 }
 
 /// The colours profiles get by themselves, the first one that no profile
@@ -126,6 +135,8 @@ pub struct TabItem {
     /// Counts for favorites only (`SidebarSnapshot::favorite_shows`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub only_in: Vec<Id>,
+    #[serde(flatten)]
+    pub other: Other,
 }
 
 impl TabItem {
@@ -149,7 +160,7 @@ impl TabItem {
 }
 
 /// A folder in the pinned section. Folders nest.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Folder {
     pub id: Id,
     pub title: String,
@@ -160,6 +171,8 @@ pub struct Folder {
     /// Set when the folder fills itself from a source (`smart` module).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub smart: Option<crate::smart::SmartFolder>,
+    #[serde(flatten)]
+    pub other: Other,
 }
 
 /// One row of the pinned tree.
@@ -171,7 +184,7 @@ pub enum SidebarNode {
 }
 
 /// A named, themed set of pinned and Today tabs, with its bookmarks.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Space {
     pub id: Id,
     pub title: String,
@@ -200,14 +213,18 @@ pub struct Space {
     /// this space. They are no part of `all_tabs`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub bookmarks: Vec<SidebarNode>,
+    #[serde(flatten)]
+    pub other: Other,
 }
 
 /// Favorites belong to a profile and are shared by all its spaces.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FavoriteSet {
     pub profile_id: Id,
     #[serde(default)]
     pub items: Vec<TabItem>,
+    #[serde(flatten)]
+    pub other: Other,
 }
 
 /// Everything the sidebar shows, in one serialisable snapshot. This is also
@@ -223,6 +240,8 @@ pub struct SidebarSnapshot {
     /// In display order.
     #[serde(default)]
     pub spaces: Vec<Space>,
+    #[serde(flatten)]
+    pub other: Other,
 }
 
 impl SidebarSnapshot {
@@ -236,6 +255,7 @@ impl SidebarSnapshot {
             profiles: Vec::new(),
             favorites: Vec::new(),
             spaces: Vec::new(),
+            other: Other::new(),
         }
     }
 
@@ -317,5 +337,36 @@ impl SidebarNode {
             SidebarNode::Tab(t) => &t.id,
             SidebarNode::Folder(f) => &f.id,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn what_a_newer_version_wrote_is_kept_and_written_back() {
+        // Every part of the sidebar with a field this version does not know.
+        let written = serde_json::json!({
+            "format": "magnetite-sidebar", "version": 1, "mood": "calm",
+            "profiles": [{"id": "p", "name": "Me", "is_default": true, "badge": {"shape": "dot"}}],
+            "favorites": [{"profile_id": "p", "shelf": 2, "items": [
+                {"id": "f", "url": "https://example.org/", "title": "F", "custom_title": false,
+                 "unread": false, "note": "read later"}
+            ]}],
+            "spaces": [{
+                "id": "s", "title": "Work", "profile_id": "p", "wallpaper": "hills",
+                "pinned": [{"kind": "folder", "id": "d", "title": "Docs", "stripe": [1, 2], "children": [
+                    {"kind": "tab", "id": "t", "url": "https://example.org/t", "title": "T",
+                     "custom_title": false, "unread": false, "muted": true}
+                ], "smart": {"source": {"service": "youtrack", "url": "https://example.org", "query": "for: me"},
+                    "limit": 20, "refresh_minutes": 15, "items": [], "filled": false, "sort": "newest"}}],
+                "today": []
+            }]
+        });
+        let read: SidebarSnapshot = serde_json::from_value(written.clone()).unwrap();
+        assert_eq!(read.spaces[0].title, "Work");
+        assert_eq!(read.spaces[0].other["wallpaper"], "hills");
+        assert_eq!(serde_json::to_value(&read).unwrap(), written);
     }
 }

@@ -239,6 +239,7 @@ impl AppState {
                     is_default: false,
                     ephemeral: p.ephemeral,
                     color: None,
+                    other: magnetite_core::Other::new(),
                 });
                 id
             };
@@ -255,6 +256,7 @@ impl AppState {
                 self.sidebar.favorites.push(magnetite_core::FavoriteSet {
                     profile_id: profile,
                     items: vec![],
+                    other: magnetite_core::Other::new(),
                 });
                 self.sidebar.favorites.len() - 1
             });
@@ -334,6 +336,7 @@ mod tests {
             pinned: vec![],
             today: tabs.iter().map(|t| tab(t)).collect(),
             bookmarks: Vec::new(),
+            other: magnetite_core::Other::new(),
         };
         let import = |spaces: Vec<Space>| {
             let mut snap = SidebarSnapshot::new();
@@ -343,6 +346,7 @@ mod tests {
                 is_default: true,
                 ephemeral: false,
                 color: None,
+                other: magnetite_core::Other::new(),
             }];
             snap.spaces = spaces;
             snap
@@ -401,6 +405,7 @@ mod tests {
                 is_default: true,
                 ephemeral: false,
                 color: None,
+                other: magnetite_core::Other::new(),
             },
             Profile {
                 id: "p1".into(),
@@ -408,11 +413,13 @@ mod tests {
                 is_default: false,
                 ephemeral: false,
                 color: None,
+                other: magnetite_core::Other::new(),
             },
         ];
         snap.favorites = vec![magnetite_core::FavoriteSet {
             profile_id: "p0".into(),
             items: vec![tab("fav"), tab("dup")],
+            other: magnetite_core::Other::new(),
         }];
         let space = |id: &str, profile: &str| Space {
             id: id.into(),
@@ -425,6 +432,7 @@ mod tests {
             pinned: vec![],
             today: vec![],
             bookmarks: Vec::new(),
+            other: magnetite_core::Other::new(),
         };
         snap.spaces = vec![
             Space {
@@ -434,6 +442,7 @@ mod tests {
                     icon: None,
                     children: vec![SidebarNode::Tab(tab("a"))],
                     smart: None,
+                    other: magnetite_core::Other::new(),
                 })],
                 today: vec![
                     tab("b"),
@@ -454,6 +463,7 @@ mod tests {
                         }),
                     ],
                     smart: None,
+                    other: magnetite_core::Other::new(),
                 })],
                 ..space("x", "p0")
             },
@@ -526,6 +536,7 @@ mod tests {
             icon: None,
             children: vec![SidebarNode::Tab(tab("a")), SidebarNode::Tab(tab("b"))],
             smart: None,
+            other: magnetite_core::Other::new(),
         })];
         snap.spaces[0].today = vec![
             tab("c"),
@@ -597,10 +608,12 @@ mod tests {
             is_default: false,
             ephemeral: false,
             color: None,
+            other: magnetite_core::Other::new(),
         });
         snap.favorites.push(magnetite_core::FavoriteSet {
             profile_id: "work".into(),
             items: vec![tab("fav")],
+            other: magnetite_core::Other::new(),
         });
         let choice = |index, from: &str| SpaceChoice {
             index,

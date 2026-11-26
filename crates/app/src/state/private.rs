@@ -169,6 +169,7 @@ impl AppState {
             pinned: vec![],
             today: vec![],
             bookmarks: vec![],
+            other: magnetite_core::Other::new(),
         });
         self.private_space = Some(id.clone());
         self.private_home = self.window;
@@ -185,6 +186,7 @@ impl AppState {
             is_default: false,
             ephemeral: true,
             color: None,
+            other: magnetite_core::Other::new(),
         });
         self.private_profiles.insert(id.clone());
         id

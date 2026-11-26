@@ -176,6 +176,7 @@ fn unpack(shared: Shared, depth: usize, tabs: &mut usize) -> Result<Folder, Shar
         icon: shared.icon.filter(|i| i.len() <= 64),
         children,
         smart: None,
+        other: magnetite_core::Other::new(),
     })
 }
 
@@ -237,6 +238,7 @@ mod tests {
             icon: None,
             children,
             smart: None,
+            other: magnetite_core::Other::new(),
         }
     }
 

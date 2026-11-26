@@ -37,6 +37,8 @@ pub struct SmartFolder {
     /// (shown as unread), also in a folder that was empty until then.
     #[serde(default)]
     pub filled: bool,
+    #[serde(flatten)]
+    pub other: crate::model::Other,
 }
 
 fn default_limit() -> u32 {
@@ -58,6 +60,7 @@ impl SmartFolder {
             snoozed: Vec::new(),
             hidden: Vec::new(),
             filled: false,
+            other: crate::model::Other::new(),
         }
     }
 }
@@ -354,6 +357,7 @@ mod tests {
                 show: ReviewShow::PullRequests,
                 filter: String::new(),
             })),
+            other: crate::Other::new(),
         }
     }
 

@@ -95,10 +95,12 @@ pub(crate) fn default_profile_snapshot() -> SidebarSnapshot {
             is_default: true,
             ephemeral: false,
             color: None,
+            other: magnetite_core::Other::new(),
         }],
         favorites: vec![FavoriteSet {
             profile_id: DEFAULT_PROFILE.into(),
             items: Vec::new(),
+            other: magnetite_core::Other::new(),
         }],
         ..SidebarSnapshot::new()
     }

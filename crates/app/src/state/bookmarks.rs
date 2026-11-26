@@ -94,6 +94,7 @@ impl AppState {
                             icon: None,
                             children,
                             smart: None,
+                            other: magnetite_core::Other::new(),
                         })
                     })
                 }
@@ -130,6 +131,7 @@ impl AppState {
                     icon: None,
                     children: copy(&f.children),
                     smart: None,
+                    other: magnetite_core::Other::new(),
                 })),
                 SidebarNode::Folder(_) => None,
             };
@@ -222,6 +224,7 @@ impl AppState {
                 icon: None,
                 children: Vec::new(),
                 smart: None,
+                other: magnetite_core::Other::new(),
             }),
         );
         Some(id)
@@ -335,6 +338,7 @@ mod tests {
                 icon: None,
                 children,
                 smart: None,
+                other: magnetite_core::Other::new(),
             })
         };
         let file = vec![

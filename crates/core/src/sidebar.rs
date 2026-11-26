@@ -111,10 +111,12 @@ mod tests {
                     icon: None,
                     children: vec![SidebarNode::Tab(tab("p2"))],
                     smart: None,
+                    other: crate::Other::new(),
                 }),
             ],
             today: vec![tab("t1"), tab("t2")],
             bookmarks: Vec::new(),
+            other: crate::Other::new(),
         }
     }
 
