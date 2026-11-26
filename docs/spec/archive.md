@@ -14,6 +14,8 @@ and is not synced.
 - "Archive other tabs" in the context menu of a Today tab: all other Today
   tabs of the space, or those above or below it (`sidebar.md`). The command
   "Close other Today tabs" does the first for the tab in front.
+- Several Today tabs chosen together (`sidebar.md`): "Archive N tabs" in
+  their menu, or `Cmd+W`.
 - Auto-archive (below).
 - Deleting a space: its pinned and Today tabs. A pinned one comes back as a
   Today tab.

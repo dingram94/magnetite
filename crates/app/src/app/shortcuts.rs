@@ -8,6 +8,7 @@ use magnetite_engine::{
 use serde_json::{Value, json};
 
 use super::{LinkVariant, MagnetiteApp, PaletteMode};
+use crate::lock;
 use crate::state::typed_site;
 
 impl MagnetiteApp {
@@ -252,12 +253,18 @@ impl MagnetiteApp {
                 Self::open_palette(engine, mode, None, None);
             }
             Shortcut::CloseTab => {
+                // The page forgets them once they are gone, and tells so.
+                let chosen = lock(&self.selected_tabs).clone();
                 // A peek is in front: the key closes it, not the tab behind it.
                 if self.with_state(|s| s.peek().is_some()) {
                     self.close_peek(engine);
                 } else if engine.web_panel_focused() {
                     // The keyboard is in the web panel: the key is for it.
                     self.close_web_panel(engine);
+                } else if chosen.len() > 1 {
+                    // Several tabs are chosen in the sidebar: the key is for
+                    // them, as "Archive" in their menu.
+                    self.archive_today(engine, |id| chosen.iter().any(|x| x == id));
                 } else if let Some(id) = self.with_state(|s| s.active_tab_id().map(str::to_owned)) {
                     self.close_tab(engine, &id);
                 }

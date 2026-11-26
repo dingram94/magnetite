@@ -22,6 +22,7 @@ import { SpaceSwitcher } from "./SpaceSwitcher";
 import { dragging, endDrag, indexAfterTaking, movedIds } from "./dnd";
 import { useSpaceSwipe } from "./useSpaceSwipe";
 import { keysHint, keysLabel } from "./settings/shortcutKeys";
+import { useTabSelection } from "./selection";
 import { useSidebarShortcuts } from "./useSidebarShortcuts";
 import { t } from "./i18n";
 import { reportMediaDevices } from "./mediaDevices";
@@ -95,6 +96,8 @@ export function App() {
   }, [textScale, density]);
 
   const openMenu = useCallback((x: number, y: number, items: MenuItem[]) => setMenu({ x, y, items }), []);
+  // The Today tabs chosen together (a click with ⌘ or Ctrl, or with Shift).
+  const { selected, select, clear: clearSelection } = useTabSelection(state);
 
   if (!state) return <div className="h-full" />;
   const space = state.sidebar.spaces.find((s) => s.id === state.active_space) ?? state.sidebar.spaces[0]!;
@@ -129,7 +132,7 @@ export function App() {
   // Today. One of favorites only is a tile in their list.
   const isFavorite = (id: string) => favoriteLists.some((f) => f.items.some((t) => t.id === id));
   const looseSplit = state.split && !splitIds(state.split).some((id) => splitAt.has(id)) && !splitIds(state.split).every(isFavorite) ? state.split : null;
-  const ctx: RowContext = { state, spaceId: space.id, openMenu, renaming, setRenaming, newProfileFor, splitAt, inSplit, pickIcon };
+  const ctx: RowContext = { state, spaceId: space.id, openMenu, renaming, setRenaming, newProfileFor, splitAt, inSplit, pickIcon, selected, select, clearSelection };
   // The space's profile shows beside its name once there is more than one to tell apart.
   const spaceProfile = state.sidebar.profiles.filter((p) => !p.ephemeral).length > 1 ? state.sidebar.profiles.find((p) => p.id === space.profile_id) : undefined;
   // The pinned tabs can be hidden, space by space. The tab in front stays: its row (a split's: the row of the split) is the one left, at its own place for what is dropped on it.

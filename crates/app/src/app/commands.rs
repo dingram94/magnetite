@@ -427,6 +427,11 @@ pub(super) enum UiCommand {
     ArchiveTabs {
         ids: Vec<String>,
     },
+    /// The Today tabs chosen together in the sidebar (none: the choice
+    /// ended). The key that closes a tab closes them (`Shortcut::CloseTab`).
+    SelectTabs {
+        ids: Vec<String>,
+    },
     ReopenClosed,
     /// Take the tab `id` over from the device of the sync chain it is open
     /// on.
@@ -1603,6 +1608,7 @@ impl MagnetiteApp {
             UiCommand::ArchiveTabs { ids } => {
                 self.archive_today(engine, |id| ids.iter().any(|x| x == id));
             }
+            UiCommand::SelectTabs { ids } => *lock(&self.selected_tabs) = ids,
             UiCommand::ReopenClosed => self.reopen_closed(engine),
             UiCommand::RestoreArchived { id } => {
                 let restored = self.with_state(|s| {

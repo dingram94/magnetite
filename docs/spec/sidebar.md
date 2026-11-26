@@ -350,6 +350,19 @@ Code: `crates/engine/src/tabshare.rs`, `tabshare_hook.js`;
   Close show the keys that do the same at the right edge; the keys act on
   the tab in front, so no other tab's menu shows them. The private
   space's menu shows the keys for hiding and closing it.
+- Several Today tabs can be chosen together: a click with `Cmd` (`Ctrl` on
+  Linux and Windows) chooses a tab or lets it go, a click with `Shift`
+  chooses all from the tab chosen last (else the tab in front) to this one.
+  Chosen tabs show in the space's colour; the click does not bring them to
+  the front. Only Today tabs with a row of their own are chosen, not a
+  split. A right click on one of them opens a menu for all: Reload, Copy
+  links; Pin tabs, Add to favorites, Add to bookmarks, Move to another
+  space; and "Archive N tabs" ("Close N tabs" in the private space). The
+  key that closes a tab (`Cmd+W`) does the same while more than one is
+  chosen. The choice ends with a plain click on a tab, a right click on
+  another row, Esc, a change of space, and when the sidebar loses the
+  keyboard (a click into a page, another app): the key never closes tabs
+  chosen a while ago.
 - A row that is on or off (Keep active, Open as panel) has a check mark
   while it is on, and of the rows to choose one from (the profiles) the one
   chosen has a dot. Both stand in a column of their own before the labels,

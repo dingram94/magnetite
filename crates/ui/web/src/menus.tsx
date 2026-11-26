@@ -56,6 +56,61 @@ export function profileRow(profiles: Snapshot["profiles"], current: string | und
 }
 
 /**
+ * The row that moves to another space: the space itself where there is one
+ * other, a list of them where there are more (see `ContextMenu`). Where the
+ * spaces use more than one profile, each names its own: two spaces may share
+ * a name, and a tab moved into another profile loads again with that
+ * profile's logins. Nothing in the private space: nothing of it moves out.
+ */
+function moveRow(ctx: RowContext, inPrivate: boolean, to: (space: Space) => void): MenuItem | undefined {
+  const { spaces, profiles } = ctx.state.sidebar;
+  const movable = inPrivate ? [] : spaces.filter((sp) => sp.id !== ctx.state.private_space);
+  const targets = movable.filter((sp) => sp.id !== ctx.spaceId);
+  const showProfile = new Set(movable.map((sp) => sp.profile_id)).size > 1;
+  const moveTo = (sp: Space) => ({
+    tag: showProfile ? (profiles.find((p) => p.id === sp.profile_id)?.name ?? t("sidebar.profile.fallback")) : undefined,
+    onClick: () => to(sp),
+  });
+  const [first, ...others] = targets;
+  if (!first) return undefined;
+  return others.length === 0
+    ? { label: t("sidebar.tab_menu.move_to", { space: first.title }), ...moveTo(first) }
+    : { label: t("sidebar.tab_menu.move_to_space"), items: targets.map((sp) => ({ label: sp.title, icon: <SpaceIcon space={sp} size={16} />, ...moveTo(sp) })) };
+}
+
+/**
+ * Right-click menu of the Today tabs chosen together (`useTabSelection`),
+ * opened on one of them: what can be done with several tabs at once, in the
+ * groups of every menu. Each row acts on all of them, in their order.
+ */
+export function selectionMenu(ctx: RowContext): MenuItem[] {
+  const { state } = ctx;
+  const today = state.sidebar.spaces.find((sp) => sp.id === ctx.spaceId)?.today ?? [];
+  const tabs = today.filter((tab) => ctx.selected.has(tab.id));
+  const ids = tabs.map((tab) => tab.id);
+  const inPrivate = state.private_space === ctx.spaceId;
+  const loaded = ids.filter((id) => state.runtime[id]?.loaded);
+  // What puts each tab at the top takes the last one first: they keep their order.
+  const fromLast = (run: (id: string) => void) => [...ids].reverse().forEach(run);
+  return menuOf({
+    page: [
+      { label: t("sidebar.selection_menu.reload"), disabled: loaded.length === 0, title: loaded.length === 0 ? t("sidebar.selection_menu.why.no_pages") : undefined, onClick: () => loaded.forEach((id) => send({ cmd: "reload", id })) },
+      { label: t("sidebar.selection_menu.copy_links"), onClick: () => navigator.clipboard?.writeText(tabs.map((tab) => tab.url).join("\n")) },
+    ],
+    place: [
+      !inPrivate && { label: t("sidebar.selection_menu.pin"), onClick: () => fromLast((id) => send({ cmd: "pin", id })) },
+      !inPrivate && { label: t("sidebar.tab_menu.add_to_favorites"), onClick: () => ids.forEach((id) => send({ cmd: "move_tab", id, space: ctx.spaceId, section: "favorites", index: 999 })) },
+      !inPrivate && { label: t("sidebar.tab_menu.add_to_bookmarks"), onClick: () => ids.forEach((id) => send({ cmd: "add_bookmark", id })) },
+      moveRow(ctx, inPrivate, (sp) => fromLast((id) => send({ cmd: "move_tab", id, space: sp.id, section: "today", index: 0 }))),
+    ],
+    remove: [
+      // The key that closes a tab closes the chosen ones.
+      { label: t(inPrivate ? "sidebar.selection_menu.close" : "sidebar.selection_menu.archive", { count: ids.length }), hint: keysLabel(state.keys.close_tab) || undefined, danger: true, onClick: () => send({ cmd: "archive_tabs", ids }) },
+    ],
+  });
+}
+
+/**
  * The other Today tabs of the space of `ctx`, by where they stand to tab
  * `id`: all of them, those in the rows above it and those in the rows below.
  * A split is one row, where the first of its pages with a row in the space
@@ -94,23 +149,7 @@ export function tabMenu(ctx: RowContext, tab: TabItem, section: Section, at: { x
   const keys = (label: string) => (inFront && label ? label : undefined);
   const away = !!tab.home_url && tab.home_url !== tab.url;
 
-  // One other space is a row of its own; more are a list (see `ContextMenu`).
-  // Where the spaces use more than one profile, each names its own: two
-  // spaces may share a name, and a tab moved into another profile loads
-  // again with that profile's logins.
-  const movable = inPrivate ? [] : spaces.filter((sp) => sp.id !== state.private_space);
-  const targets = movable.filter((sp) => sp.id !== ctx.spaceId);
-  const showProfile = new Set(movable.map((sp) => sp.profile_id)).size > 1;
-  const moveTo = (sp: Space) => ({
-    tag: showProfile ? (profiles.find((p) => p.id === sp.profile_id)?.name ?? t("sidebar.profile.fallback")) : undefined,
-    onClick: () => send({ cmd: "move_tab", id: tab.id, space: sp.id, section: "today", index: 0 }),
-  });
-  const [first, ...others] = targets;
-  const move: MenuItem | undefined = !first
-    ? undefined
-    : others.length === 0
-      ? { label: t("sidebar.tab_menu.move_to", { space: first.title }), ...moveTo(first) }
-      : { label: t("sidebar.tab_menu.move_to_space"), items: targets.map((sp) => ({ label: sp.title, icon: <SpaceIcon space={sp} size={16} />, ...moveTo(sp) })) };
+  const move = moveRow(ctx, inPrivate, (sp) => send({ cmd: "move_tab", id: tab.id, space: sp.id, section: "today", index: 0 }));
 
   // A favorite runs in the profile of its list; choosing another moves it.
   // Each profile has its own cookies and logins: two favorites of the same

@@ -5,9 +5,10 @@ import { ago, findFolder, localInputValue, snoozeChoices, wakeLabel } from "./sm
 import { Glyph, glyphFor } from "./Glyphs";
 import { dragging, dropIndex, endDrag, indexAfterTaking, movedIds, overRowMiddle, rowZone, sideOf, splittable, startDrag } from "./dnd";
 import { errorCount } from "./DevBar";
-import { accentCss, findTab, hostOf, send, splitGroup, splitIds, type DeviceTab, type FavoriteList, type Folder, type SidebarNode, type Side, type Snapshot, type Snoozed, type SplitNode, type TabItem, type TabRuntime, type UiState } from "./bridge";
+import { accentCss, findTab, hostOf, IS_MAC, send, splitGroup, splitIds, type DeviceTab, type FavoriteList, type Folder, type SidebarNode, type Side, type Snapshot, type Snoozed, type SplitNode, type TabItem, type TabRuntime, type UiState } from "./bridge";
 import { SEPARATOR, type MenuItem } from "./ContextMenu";
-import { MAX_PANES, menuOf, tabMenu } from "./menus";
+import { MAX_PANES, menuOf, selectionMenu, tabMenu } from "./menus";
+import type { SelectMode } from "./selection";
 import { language, t } from "./i18n";
 
 export type Section = "favorites" | "pinned" | "today";
@@ -26,6 +27,10 @@ export interface RowContext {
   inSplit: Set<string>;
   /** Open the glyph picker at `at`; `onPick(null)` asks for the default icon. */
   pickIcon: (at: { x: number; y: number }, current: string | undefined, onPick: (glyph: string | null) => void, allowDefault?: boolean) => void;
+  /** The Today tabs chosen together (`useTabSelection`). */
+  selected: Set<string>;
+  select: (id: string, mode: SelectMode) => void;
+  clearSelection: () => void;
 }
 
 
@@ -462,9 +467,11 @@ interface InnerProps {
 }
 
 // Re-render only when this row's own data changes, or what its menu reads
-// (spaces, the active tab, the pages on screen).
+// (spaces, the active tab, the pages on screen, the tabs chosen together).
 const TabRowInner = memo(
   function TabRowInner({ tab, rt, active, renaming, snoozable, shareTarget, section, index, folderId, ctx, onDropAt }: InnerProps) {
+    // One of the tabs chosen together (only Today tabs are).
+    const chosen = ctx.selected.has(tab.id);
     // `left`/`right`: a tab hovers the middle and would open beside this one.
     const [over, setOver] = useState<"before" | "after" | Side | null>(null);
     // The user picks a time of their own to snooze until, in the title's place.
@@ -507,6 +514,7 @@ const TabRowInner = memo(
       <div
         className={"row drop"}
         data-active={active || undefined}
+        data-selected={chosen || undefined}
         data-dev={(rt?.dev?.local && ctx.state.settings.developer.enabled) || undefined}
         data-unloaded={!rt?.loaded || undefined}
         data-before={over === "before" || undefined}
@@ -543,21 +551,28 @@ const TabRowInner = memo(
         }}
         onClick={(e) => {
           if (renaming) return;
+          // With ⌘ (Ctrl elsewhere) or Shift a Today tab is chosen, not shown:
+          // one more or less, or all from the last one chosen to this one.
+          if (section === "today" && (e.shiftKey || (IS_MAC ? e.metaKey : e.ctrlKey))) return ctx.select(tab.id, e.shiftKey ? "range" : "toggle");
+          ctx.clearSelection();
           // A pinned tab that opens as a web panel: the click opens and closes it.
           if (tab.panel && section === "pinned") send({ cmd: "toggle_web_panel", id: tab.id });
           else if (e.altKey) send({ cmd: "add_split", id: tab.id });
           else send({ cmd: "activate_tab", id: tab.id });
         }}
         onDoubleClick={(e) => {
-          // Two quick clicks on mute, close or back are not a rename.
-          if (!(e.target instanceof Element && e.target.closest("button"))) ctx.setRenaming(tab.id);
+          // Two quick clicks on mute, close or back are not a rename, and none that choose tabs.
+          if (!(e.target instanceof Element && e.target.closest("button")) && !e.shiftKey && !e.metaKey && !e.ctrlKey) ctx.setRenaming(tab.id);
         }}
         // Not from the rename or time field (a middle click pastes there on Linux).
         onAuxClick={(e) => e.button === 1 && !renaming && !pickingTime && close(e)}
         onMouseLeave={() => setJustClosed(false)}
         onContextMenu={(e) => {
           e.preventDefault();
-          ctx.openMenu(e.clientX, e.clientY, tabMenu(ctx, tab, section, { x: e.screenX, y: e.screenY }, snoozable));
+          // On one of several chosen tabs: the menu for all of them. Elsewhere the choice ends.
+          const together = chosen && ctx.selected.size > 1 ? selectionMenu(ctx) : null;
+          if (!together) ctx.clearSelection();
+          ctx.openMenu(e.clientX, e.clientY, together ?? tabMenu(ctx, tab, section, { x: e.screenX, y: e.screenY }, snoozable));
         }}
         title={tab.url}
         data-folder={folderId}
@@ -695,7 +710,7 @@ const TabRowInner = memo(
     a.tab === b.tab && a.rt === b.rt && a.active === b.active && a.renaming === b.renaming && a.snoozable === b.snoozable && a.shareTarget === b.shareTarget &&
     a.section === b.section && a.index === b.index && a.folderId === b.folderId &&
     a.ctx.spaceId === b.ctx.spaceId && a.ctx.state.sidebar.spaces === b.ctx.state.sidebar.spaces &&
-    a.ctx.state.active_tab === b.ctx.state.active_tab && a.ctx.state.panes === b.ctx.state.panes,
+    a.ctx.state.active_tab === b.ctx.state.active_tab && a.ctx.state.panes === b.ctx.state.panes && a.ctx.selected === b.ctx.selected,
 );
 
 /**

@@ -101,6 +101,10 @@ pub struct MagnetiteApp {
     private_engines: Mutex<crate::state::SystemEngine>,
     /// The pinned tabs loading at start, a few at a time (`load_pinned`).
     start_loads: Mutex<tabs::StartLoads>,
+    /// The Today tabs chosen together in the sidebar, as its page last said
+    /// (`select_tabs`): the key that closes a tab closes them. The page
+    /// keeps them only while it has the keyboard.
+    selected_tabs: Mutex<Vec<String>>,
     /// The cameras and microphones the main UI page last reported.
     media_devices: Mutex<MediaDevices>,
 }
@@ -298,6 +302,7 @@ impl MagnetiteApp {
                 ..Default::default()
             }),
             start_loads: Mutex::default(),
+            selected_tabs: Mutex::default(),
             media_devices: Mutex::default(),
         }
     }

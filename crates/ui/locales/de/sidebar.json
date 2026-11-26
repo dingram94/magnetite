@@ -102,6 +102,18 @@
       "none_below": "Unter diesem Tab ist kein Heute-Tab"
     }
   },
+  "selection_menu": {
+    "reload": "Neu laden",
+    "copy_links": "Links kopieren",
+    "pin": "Tabs anheften",
+    "archive_one": "{count} Tab archivieren",
+    "archive_other": "{count} Tabs archivieren",
+    "close_one": "{count} Tab schließen",
+    "close_other": "{count} Tabs schließen",
+    "why": {
+      "no_pages": "Bei keinem ist eine Seite geladen"
+    }
+  },
   "tab_row": {
     "back_to_home": "Zurück zu {host}, der angehefteten Seite",
     "back_to_home_label": "Zurück zur angehefteten Seite, {host}",

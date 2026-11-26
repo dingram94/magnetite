@@ -637,6 +637,8 @@ export type Command =
   /** Archive the current space's Today tabs, all but `keep`. */
   | { cmd: "archive_today"; keep?: Id }
   | { cmd: "archive_tabs"; ids: Id[] }
+  /** The Today tabs chosen together in the sidebar: the key that closes a tab closes them. */
+  | { cmd: "select_tabs"; ids: Id[] }
   | { cmd: "take_device_tab"; id: Id }
   | { cmd: "reopen_closed" }
   | { cmd: "restore_archived"; id: Id }

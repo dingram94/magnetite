@@ -102,6 +102,18 @@
       "none_below": "No Today tab is below this one"
     }
   },
+  "selection_menu": {
+    "reload": "Reload",
+    "copy_links": "Copy links",
+    "pin": "Pin tabs",
+    "archive_one": "Archive {count} tab",
+    "archive_other": "Archive {count} tabs",
+    "close_one": "Close {count} tab",
+    "close_other": "Close {count} tabs",
+    "why": {
+      "no_pages": "None of them has a page loaded"
+    }
+  },
   "tab_row": {
     "back_to_home": "Back to {host} (the pinned page)",
     "back_to_home_label": "Back to the pinned page, {host}",
