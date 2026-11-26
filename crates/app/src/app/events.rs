@@ -40,6 +40,7 @@ impl EngineDelegate for MagnetiteApp {
                 engine.set_default_zoom(self.with_state(|s| s.settings.page_zoom));
                 engine.set_languages(&self.with_state(|s| s.settings.languages.clone()));
                 engine.set_device_order(&self.with_state(|s| s.settings.device_order.clone()));
+                self.apply_web_search();
                 // Before the first page: its address decides its engine.
                 engine.set_system_engine_sites(self.system_engine_sites());
                 engine.set_sidebar_width(width);
@@ -60,12 +61,19 @@ impl EngineDelegate for MagnetiteApp {
                         self.data_dir.display()
                     );
                 }
-                engine.create_frame();
+                // Where the first window was at the last run.
+                engine.create_frame(self.with_state(|s| s.placement));
                 self.reopen_windows(engine);
             }
             EngineEvent::WindowClosed { win } => self.window_closed(engine, win),
-            EngineEvent::FrameCreated { .. }
-            | EngineEvent::FrameBoundsChanged
+            // Not for a window that closed in the meantime: its event
+            // reaches the current one (`Engine::emit`).
+            EngineEvent::FramePlaced { win, placement } if win == engine.current_window() => {
+                self.with_state(|s| s.placement = Some(placement));
+                self.save_soon();
+            }
+            EngineEvent::FramePlaced { .. }
+            | EngineEvent::FrameCreated { .. }
             | EngineEvent::ContentCreated { .. } => {}
             EngineEvent::SidebarLoaded => self.push_state(engine),
             EngineEvent::ContentClosed { id } => {
@@ -78,10 +86,9 @@ impl EngineDelegate for MagnetiteApp {
                 // button) still has its peek, mini window or tab, and the
                 // sidebar must hear that it is gone.
                 let by_itself = self.with_state(|s| {
-                    let was_peek = s.peek.as_ref().is_some_and(|p| p.content == id);
-                    if was_peek {
-                        s.peek = None;
-                    }
+                    let peeks = s.peeks.len();
+                    s.peeks.retain(|_, p| p.content != id);
+                    let was_peek = s.peeks.len() < peeks;
                     s.minis.retain(|m| m.content != id);
                     s.drop_phone(id);
                     let tab = s.content_to_tab.remove(&id);
@@ -139,12 +146,9 @@ impl EngineDelegate for MagnetiteApp {
                 self.push_state(engine);
             }
             EngineEvent::MediaChanged { id, media } => {
-                self.with_state(|s| {
-                    if let Some(rt) = s.page_runtime(id) {
-                        rt.media = media;
-                    }
-                });
-                self.show_state_paced(engine);
+                if self.with_state(|s| s.set_media(id, media)) {
+                    self.show_state_paced(engine);
+                }
             }
             EngineEvent::ShareChanged {
                 id,
@@ -266,7 +270,7 @@ impl EngineDelegate for MagnetiteApp {
                     // A web panel counts as the peek does: narrow, and over
                     // the page, it is no place for a second page.
                     let from_peek = from.is_some()
-                        && (from == s.peek.as_ref().map(|p| p.content)
+                        && (from == s.peek().map(|p| p.content)
                             || from == engine.web_panel_content());
                     let ask = Ask {
                         source,

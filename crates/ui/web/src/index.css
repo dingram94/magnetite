@@ -153,9 +153,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focu
 .ib.lg { width: 32px; height: 32px; border-radius: 8px; }
 
 /* favorites */
-/* All profiles' favorites in one grid. A profile's list is no box of its own: its tiles are the grid's. */
+/* All profiles' favorites in one grid. A profile's list is no box of its own: its tiles are the grid's, and the grid takes the drops. */
 .favs-flow { position: relative; z-index: 2; display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 6px; }
-.favs-group { display: contents; }
 .favs-flow > .fav-rename { grid-column: 1 / -1; margin-top: 0; }
 /* A favorite of another profile than the default one: its tile is tinted with the profile's colour, so two logins of one site differ. */
 .fav[data-profile] { background: color-mix(in srgb, var(--profile) 13%, rgba(255,255,255,0.05)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--profile) 18%, transparent); }

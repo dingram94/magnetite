@@ -5,11 +5,13 @@ use std::collections::HashSet;
 
 use magnetite_core::split::SplitNode;
 use magnetite_core::{Color, Id, SidebarNode, Space, TabItem, UnixSeconds};
-use magnetite_engine::{ContentId, MemoryPressure};
+use magnetite_engine::{ContentId, MediaState, MemoryPressure};
 
 use super::history::page_of;
 use super::settings::{MAX_ARCHIVE_DAYS, NEVER_ARCHIVE};
-use super::{AppState, ArchivedTab, ChosenProfile, NewTabPlace, Peek, TabRuntime, new_id, now};
+use super::{
+    AppState, ArchivedTab, ChosenProfile, NewTabPlace, Peek, PeekOver, TabRuntime, new_id, now,
+};
 
 /// The page of `split` whose row shows the split in space `sp`: the first
 /// of its pages, in reading order, with a row there, as the sidebar draws
@@ -102,20 +104,66 @@ impl AppState {
         None
     }
 
-    /// The page outside the sidebar in window `id`: the peek, a mini
-    /// window's page, or the phone of a responsive split.
+    /// The page outside the sidebar in window `id`: a peek (on screen or
+    /// not), a mini window's page, or the phone of a responsive split.
     pub fn page_outside(&self, id: ContentId) -> Option<&Peek> {
-        (self.peek.iter())
+        (self.peeks.values())
             .chain(self.minis.iter())
             .chain(self.phones.iter().map(|p| &p.page))
             .find(|p| p.content == id)
     }
 
     pub fn page_outside_mut(&mut self, id: ContentId) -> Option<&mut Peek> {
-        (self.peek.iter_mut())
+        (self.peeks.values_mut())
             .chain(self.minis.iter_mut())
             .chain(self.phones.iter_mut().map(|p| &mut p.page))
             .find(|p| p.content == id)
+    }
+
+    /// What a peek opened now in the current window lies over.
+    pub fn peek_over(&self) -> PeekOver {
+        PeekOver::front(self.active_tab.get(&self.active_space), self.window)
+    }
+
+    /// The peek on screen in the current window: the one over the tab in
+    /// front, or over the window while no tab is.
+    pub fn peek(&self) -> Option<&Peek> {
+        self.peeks.get(&self.peek_over())
+    }
+
+    /// Take the peek on screen in the current window out of the state.
+    pub fn take_peek(&mut self) -> Option<Peek> {
+        let over = self.peek_over();
+        self.peeks.remove(&over)
+    }
+
+    /// The peeks on screen, at most one per window.
+    pub fn peeks_on_screen(&self) -> impl Iterator<Item = &Peek> {
+        let others = (self.views.iter()).map(|(win, view)| view.peek_over(*win));
+        (std::iter::once(self.peek_over()).chain(others)).filter_map(|over| self.peeks.get(&over))
+    }
+
+    /// Take out the peeks that lost their place: a tab whose page is gone
+    /// (closed, archived or unloaded: its peek goes with it), or a window
+    /// that is gone or has a tab in front now. Returns their page windows.
+    pub fn drop_stale_peeks(&mut self) -> Vec<ContentId> {
+        let has_place = |over: &PeekOver| match over {
+            PeekOver::Tab(tab) => {
+                self.find_tab(tab).is_some()
+                    && (self.runtime.get(tab)).is_some_and(|rt| rt.content.is_some())
+            }
+            PeekOver::Window(win) if *win == self.window => self.active_tab_id().is_none(),
+            PeekOver::Window(win) => (self.views.get(win))
+                .is_some_and(|view| !view.active_tab.contains_key(&view.active_space)),
+        };
+        let stale: Vec<PeekOver> = (self.peeks.keys())
+            .filter(|over| !has_place(over))
+            .cloned()
+            .collect();
+        (stale.iter())
+            .filter_map(|over| self.peeks.remove(over))
+            .map(|p| p.content)
+            .collect()
     }
 
     /// The phone in window `id` is gone: its tab has none beside it.
@@ -162,6 +210,34 @@ impl AppState {
         Some(self.runtime.entry(tab).or_default())
     }
 
+    /// Record what page `id` plays now (`EngineEvent::MediaChanged`), and
+    /// tell whether a sidebar shows the change. A sidebar shows a page's
+    /// media in two places: the speaker on its tab's row while it plays
+    /// sound (`Rows.tsx`), and the media bar, which lists the tabs that are
+    /// not on screen in its window (`App.tsx`). A muted video that starts
+    /// and stops in the tab on screen, as a feed's videos do while it
+    /// scrolls, shows in neither: the next state the sidebar gets carries
+    /// it. Neither does the media of a page outside the sidebar (the peek,
+    /// a mini window, a phone).
+    pub fn set_media(&mut self, id: ContentId, media: Option<MediaState>) -> bool {
+        let sound = |m: &Option<MediaState>| m.as_ref().is_some_and(|m| m.playing && !m.silent);
+        let outside = self.page_outside(id).is_some();
+        let Some(rt) = self.page_runtime(id) else {
+            return false;
+        };
+        let before = std::mem::replace(&mut rt.media, media);
+        if outside || before == rt.media {
+            return false;
+        }
+        if sound(&before) != sound(&rt.media) {
+            return true;
+        }
+        // With another window, its media bar lists the tab.
+        let on_screen =
+            (self.content_to_tab.get(&id)).is_some_and(|tab| self.visible_panes().contains(tab));
+        !on_screen || !self.views.is_empty()
+    }
+
     /// The tabs a page that shares a tab could share instead, as with
     /// Chromium's "Share this tab instead": the loaded tabs of that page's
     /// profile (the share dialog offers no others), except the shared one
@@ -188,7 +264,7 @@ impl AppState {
     /// Turn the peek into a Today tab of the active space, reusing its
     /// window and what is known about its page. Returns the tab's id.
     pub fn keep_peek(&mut self) -> Option<Id> {
-        let p = self.peek.take()?;
+        let p = self.take_peek()?;
         let space = self.keep_space(&p.profile, &self.active_space);
         Some(self.keep_page(p, &space))
     }
@@ -1006,6 +1082,37 @@ mod tests {
     }
 
     #[test]
+    fn media_changes_reach_the_sidebar_only_where_it_shows_them() {
+        let mut s = state();
+        s.content_to_tab.insert(1, "a".into());
+        s.content_to_tab.insert(2, "b".into());
+        let video = |playing: bool, silent: bool| {
+            Some(MediaState {
+                playing,
+                video: true,
+                silent,
+                ..MediaState::default()
+            })
+        };
+        // `b` is on screen: its muted video starting and stopping shows
+        // nowhere, but is kept.
+        assert!(!s.set_media(2, video(true, true)));
+        assert!(!s.set_media(2, None));
+        assert!(!s.set_media(2, video(false, true)));
+        assert_eq!(s.runtime["b"].media, video(false, true));
+        // Sound starting or stopping shows on its row.
+        assert!(s.set_media(2, video(true, false)));
+        assert!(s.set_media(2, video(true, true)));
+        // `a` is not on screen: the media bar lists it.
+        assert!(s.set_media(1, video(true, true)));
+        assert!(!s.set_media(1, video(true, true)));
+        // Another window's media bar lists `b`.
+        s.open_window(2);
+        s.enter(1);
+        assert!(s.set_media(2, video(false, true)));
+    }
+
+    #[test]
     fn switching_space_shows_its_last_tab_only_if_it_is_still_there() {
         let mut s = state();
         let first = s.active_space.clone();
@@ -1055,17 +1162,21 @@ mod tests {
     #[test]
     fn a_kept_peek_knows_what_its_page_was_doing() {
         let mut s = state();
-        s.peek = Some(crate::state::Peek {
-            content: 7,
-            url: "https://example.org/video".into(),
-            title: "Video".into(),
-            runtime: TabRuntime {
-                content: Some(7),
-                loaded: true,
-                ..TabRuntime::default()
+        let over = s.peek_over();
+        s.peeks.insert(
+            over,
+            crate::state::Peek {
+                content: 7,
+                url: "https://example.org/video".into(),
+                title: "Video".into(),
+                runtime: TabRuntime {
+                    content: Some(7),
+                    loaded: true,
+                    ..TabRuntime::default()
+                },
+                profile: s.active_space().profile_id.clone(),
             },
-            profile: s.active_space().profile_id.clone(),
-        });
+        );
         // Events of the peek's page go to the peek, not to a tab.
         let rt = s.page_runtime(7).expect("the peek");
         rt.can_go_back = true;
@@ -1074,13 +1185,59 @@ mod tests {
         assert!(s.page_runtime(8).is_none(), "no such page");
 
         let id = s.keep_peek().expect("a tab");
-        assert!(s.peek.is_none());
+        assert!(s.peeks.is_empty());
         let kept = &s.runtime[&id];
         assert_eq!(kept.content, Some(7));
         assert!(kept.loaded && kept.can_go_back && kept.camera);
         // From now on the page's events go to the tab.
         s.page_runtime(7).expect("the tab").can_go_back = false;
         assert!(!s.runtime[&id].can_go_back);
+    }
+
+    #[test]
+    fn a_peek_stays_with_its_tab_until_the_tabs_page_goes() {
+        let mut s = state();
+        let space = s.active_space.clone();
+        let page = |content| Peek {
+            content,
+            url: format!("https://example.org/peek-{content}"),
+            title: String::new(),
+            runtime: TabRuntime::default(),
+            profile: String::new(),
+        };
+        for (tab, content) in [("a", 1), ("b", 2), ("c", 3)] {
+            s.runtime.entry(tab.into()).or_default().content = Some(content);
+        }
+        let front = |s: &AppState| s.peek().map(|p| p.content);
+        // A peek over "b", then one over "a": each shows while its tab is
+        // in front.
+        s.peeks.insert(s.peek_over(), page(12));
+        s.active_tab.insert(space.clone(), "a".into());
+        assert_eq!(front(&s), None, "a has no peek yet");
+        s.peeks.insert(s.peek_over(), page(11));
+        assert_eq!(front(&s), Some(11));
+        s.active_tab.insert(space.clone(), "b".into());
+        assert_eq!(front(&s), Some(12), "back on b, its peek is there");
+        assert!(
+            s.page_outside(11).is_some(),
+            "a hidden peek still hears its page"
+        );
+        assert_eq!(s.drop_stale_peeks(), [] as [ContentId; 0]);
+
+        // Its tab unloaded or archived: the peek goes too.
+        s.runtime.get_mut("a").unwrap().content = None;
+        assert_eq!(s.drop_stale_peeks(), [11]);
+        s.archive_tab("b");
+        assert_eq!(s.drop_stale_peeks(), [12]);
+        assert!(s.peeks.is_empty());
+
+        // Over a space with no tab in front, a peek lasts until one is.
+        s.active_tab.remove(&space);
+        assert_eq!(s.peek_over(), PeekOver::Window(1));
+        s.peeks.insert(s.peek_over(), page(9));
+        assert_eq!(s.drop_stale_peeks(), [] as [ContentId; 0]);
+        s.active_tab.insert(space, "c".into());
+        assert_eq!(s.drop_stale_peeks(), [9]);
     }
 
     #[test]

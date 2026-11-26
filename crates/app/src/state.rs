@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use magnetite_core::split::SplitNode;
 use magnetite_core::{Id, SidebarSnapshot, Space, TabItem, UnixSeconds};
-use magnetite_engine::{ContentId, WindowId};
+use magnetite_engine::{ContentId, WindowId, WindowPlacement};
 use serde::{Deserialize, Serialize};
 
 mod adopt;
@@ -124,6 +124,22 @@ pub struct Peek {
     pub profile: String,
 }
 
+/// What a peek lies over (`peek.md`): the tab in front when it opened,
+/// which it stays with, or a window with no tab in front, until one is.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum PeekOver {
+    Tab(Id),
+    Window(WindowId),
+}
+
+impl PeekOver {
+    /// Over `tab`, the tab in front of window `win`, or over `win` itself
+    /// while it has none.
+    pub fn front(tab: Option<&Id>, win: WindowId) -> Self {
+        tab.map_or(Self::Window(win), |t| Self::Tab(t.clone()))
+    }
+}
+
 /// The phone of a responsive split: a second page of tab `tab`, shown right
 /// of it while that tab is on screen. No tab of its own: it is in no
 /// sidebar, archive or sync, and goes with its tab.
@@ -211,8 +227,9 @@ pub enum ArcImport {
 
 pub struct AppState {
     pub sidebar: SidebarSnapshot,
-    /// The window `active_space`, `active_tab`, `peek`, `web_panel` and
-    /// `sidebar_visible` are of: the current one (`windows.rs`).
+    /// The window `active_space`, `active_tab`, `peek`, `web_panel`,
+    /// `sidebar_visible` and `placement` are of: the current one
+    /// (`windows.rs`).
     pub window: WindowId,
     /// What the other windows show.
     pub views: HashMap<WindowId, windows::View>,
@@ -229,7 +246,10 @@ pub struct AppState {
     /// Split views: which tabs tile the page area together, and how. A tab
     /// is in at most one; the one holding the active tab is on screen.
     pub splits: Vec<SplitNode<Id>>,
-    pub peek: Option<Peek>,
+    /// The peeks, by what they lie over. The one over what is in front of
+    /// a window shows there (`AppState::peek`); the others wait hidden
+    /// until their tab is in front again. In memory only.
+    pub peeks: HashMap<PeekOver, Peek>,
     /// The favorite whose web panel is open (`panels.rs`). In memory only.
     pub web_panel: Option<Id>,
     /// Pages in mini windows, in the order they opened. Like the peek, they
@@ -248,6 +268,9 @@ pub struct AppState {
     /// it (`set_folder_open`). `Ctrl+Tab` skips their tabs. In memory only.
     pub closed_folders: HashSet<Id>,
     pub sidebar_visible: bool,
+    /// Where the window is (`EngineEvent::FramePlaced`), or was at the last
+    /// run until it reports: it opens there at the next start.
+    pub placement: Option<WindowPlacement>,
     /// Smart folder accounts of this device (tokens on disk, owner-only).
     pub accounts: crate::smart::Accounts,
     pub smart_status: HashMap<Id, SmartStatus>,
@@ -330,7 +353,7 @@ impl AppState {
             panes: self.visible_panes(),
             split: self.visible_split(),
             splits: self.live_splits().collect(),
-            peek: self.peek.as_ref(),
+            peek: self.peek(),
             web_panel: self.web_panel.as_deref(),
             switcher: self.switcher.as_ref(),
             settings: &self.settings,

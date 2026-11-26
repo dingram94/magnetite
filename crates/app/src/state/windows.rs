@@ -1,6 +1,7 @@
 //! Several windows on one sidebar. Every window shows the same spaces and
-//! tabs; what differs is the space and tab in front, the peek, the web
-//! panel and whether the sidebar is out. `AppState` holds these for one window at a time, the
+//! tabs; what differs is the space and tab in front (and with it the peek,
+//! `AppState::peek`), the web panel, whether the sidebar is out, and where
+//! the window is. `AppState` holds these for one window at a time, the
 //! current one (`AppState::window`), in its own fields; the other windows'
 //! wait in `AppState::views`. A tab is on screen in one window at most: the
 //! window that shows it takes it from the others (`claim_panes`).
@@ -8,28 +9,37 @@
 use std::collections::HashMap;
 
 use magnetite_core::Id;
-use magnetite_engine::WindowId;
+use magnetite_engine::{WindowId, WindowPlacement};
 use serde::{Deserialize, Serialize};
 
-use super::{AppState, Peek};
+use super::{AppState, PeekOver};
 
-/// What a window that is not the current one shows.
+/// What a window that is not the current one shows, and where it is.
 #[derive(Debug)]
 pub struct View {
     pub active_space: Id,
     pub active_tab: HashMap<Id, Id>,
-    pub peek: Option<Peek>,
     pub web_panel: Option<Id>,
     pub sidebar_visible: bool,
+    pub placement: Option<WindowPlacement>,
+}
+
+impl View {
+    /// What a peek on screen in this window, `win`, lies over.
+    pub fn peek_over(&self, win: WindowId) -> PeekOver {
+        PeekOver::front(self.active_tab.get(&self.active_space), win)
+    }
 }
 
 /// A window other than the current one as `state.json` keeps it: what
-/// it shows, for opening it again at the next start.
+/// it shows and where it was, for opening it again at the next start.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SavedWindow {
     pub active_space: Id,
     #[serde(default)]
     pub active_tab: HashMap<Id, Id>,
+    #[serde(default)]
+    pub placement: Option<WindowPlacement>,
 }
 
 impl AppState {
@@ -37,9 +47,9 @@ impl AppState {
     fn swap_view(&mut self, view: &mut View) {
         std::mem::swap(&mut self.active_space, &mut view.active_space);
         std::mem::swap(&mut self.active_tab, &mut view.active_tab);
-        std::mem::swap(&mut self.peek, &mut view.peek);
         std::mem::swap(&mut self.web_panel, &mut view.web_panel);
         std::mem::swap(&mut self.sidebar_visible, &mut view.sidebar_visible);
+        std::mem::swap(&mut self.placement, &mut view.placement);
     }
 
     /// Make `win` the current window. False, and nothing changes, if it is
@@ -82,9 +92,9 @@ impl AppState {
         let mut view = View {
             active_space: self.lasting_space(&self.active_space),
             active_tab: HashMap::new(),
-            peek: None,
             web_panel: None,
             sidebar_visible: true,
+            placement: None,
         };
         self.swap_view(&mut view);
         let before = std::mem::replace(&mut self.window, win);
@@ -117,20 +127,21 @@ impl AppState {
     /// among them, as it ends with the run: if it is the current one, the
     /// first other window begins the next start.
     pub(super) fn lasting_windows(&self) -> (SavedWindow, Vec<SavedWindow>) {
-        let saved = |active_space: &Id, active_tab: &HashMap<Id, Id>| SavedWindow {
+        let saved = |active_space: &Id, active_tab: &HashMap<Id, Id>, placement| SavedWindow {
             active_space: self.lasting_space(active_space),
             active_tab: active_tab.clone(),
+            placement,
         };
         let own = self.private_window();
         let mut ids: Vec<&WindowId> = (self.views.keys()).filter(|id| Some(**id) != own).collect();
         ids.sort_unstable();
         let mut others: Vec<SavedWindow> = (ids.into_iter().map(|id| &self.views[id]))
-            .map(|v| saved(&v.active_space, &v.active_tab))
+            .map(|v| saved(&v.active_space, &v.active_tab, v.placement))
             .collect();
         let first = if own == Some(self.window) && !others.is_empty() {
             others.remove(0)
         } else {
-            saved(&self.active_space, &self.active_tab)
+            saved(&self.active_space, &self.active_tab, self.placement)
         };
         others.extend(self.reopen.iter().cloned());
         (first, others)
@@ -143,6 +154,7 @@ impl AppState {
         if self.window == win {
             self.active_space = saved.active_space;
             self.active_tab = saved.active_tab;
+            self.placement = saved.placement;
         }
     }
 

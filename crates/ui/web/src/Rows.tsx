@@ -102,16 +102,57 @@ export function profileColor(profiles: Snapshot["profiles"], id: string): string
   return color && accentCss(color);
 }
 
+/** Where the tab or split carried over the favorites (`id` stands for it) would go: before tile `index` of list `list`'s other tiles. */
+interface FavPlace {
+  id: string;
+  list: string;
+  index: number;
+}
+
+/** The tab `id` carried over a tile of list `list`: dropped, it joins page `cell` of tile `tile` in a split, on `side`. */
+interface FavJoin {
+  id: string;
+  list: string;
+  tile: string;
+  cell: string;
+  side: Side;
+}
+
 /**
  * The favorites above the space list, the same in every space: one grid of
  * tiles, profile after profile. A tile carries its profile's colour
  * (`profileColor`); with favorites of more than one profile, or of another
  * than the default one, its label names the profile too.
+ *
+ * The grid takes the drags, gaps and edges included (a list has no box of its
+ * own). A tab dragged over a tile joins it in a split, or goes between two
+ * tiles, where a line marks its place; it takes the profile of that tile's
+ * list. Off the tiles the place stays where the last tile said, or is after
+ * the last tile when the tab was over none yet.
  */
 export function FavoriteLists({ ctx, lists }: { ctx: RowContext; lists: FavoriteList[] }) {
-  const { profiles } = ctx.state.sidebar;
+  const { state } = ctx;
+  const { profiles } = state.sidebar;
   const profile = (id: string) => profiles.find((p) => p.id === id);
   const mixed = lists.length > 1 || lists.some((l) => !profile(l.profile_id)?.is_default);
+  const grid = lists.map((list) => ({ list, tiles: favoriteTiles(state, list) }));
+  const listOf = (id: string | undefined) => grid.find((g) => g.list.profile_id === id);
+  const [place, setPlace] = useState<FavPlace | null>(null);
+  const [join, setJoin] = useState<FavJoin | null>(null);
+  const leave = () => {
+    setPlace(null);
+    setJoin(null);
+  };
+  /** A tab the favorites take: nothing of the private space is kept. */
+  const takes = (d: ReturnType<typeof dragging>): d is NonNullable<typeof d> =>
+    d?.kind === "tab" && (state.private_space !== ctx.spaceId || state.sidebar.favorites.some((f) => f.items.some((t) => t.id === d.id)));
+  // What a drag shows. The tiles stay where they are: a line between two of
+  // them marks where the carried one would go, and a tile it would join
+  // previews the pair. A place left over from a drag that ended elsewhere
+  // counts for nothing.
+  const d = dragging();
+  const joining = join && d?.id === join.id ? join : null;
+  const before = place && d?.id === place.id && !joining ? place : null;
   const box = useRef<HTMLDivElement>(null);
   const label = useRef<HTMLDivElement>(null);
   const [tip, setTip] = useState<FavTip | null>(null);
@@ -146,9 +187,88 @@ export function FavoriteLists({ ctx, lists }: { ctx: RowContext; lists: Favorite
   const tipped = tip && lists.some((l) => l.items.some((t) => t.id === tip.id)) && !dragging() ? tip : null;
   if (lists.length === 0) return null;
   return (
-    <div ref={box} className="favs-flow shrink-0 px-2 pt-3" onMouseLeave={noTip}>
-      {lists.map((list) => (
-        <Favorites key={list.profile_id} ctx={ctx} list={list} flow={flow} color={profileColor(profiles, list.profile_id)} profile={mixed ? (profile(list.profile_id)?.name ?? t("sidebar.profile.fallback")) : undefined} />
+    <div
+      ref={box}
+      className="favs-flow shrink-0 px-2 pt-3"
+      onMouseLeave={noTip}
+      onDragOver={(e) => {
+        const d = dragging();
+        if (!takes(d)) return;
+        e.preventDefault();
+        const target = e.target as HTMLElement;
+        const overTile = target.closest<HTMLElement>("[data-fav]");
+        const over = listOf(overTile?.dataset.list);
+        // Off the tiles (a gap, the grid's edge, the room after the last
+        // tile): where the edge passed on the way there said, else after the
+        // last tile.
+        if (!overTile || !over) {
+          setJoin(null);
+          const last = grid.at(-1);
+          if (last && place?.id !== d.id) setPlace({ id: d.id, list: last.list.profile_id, index: without(last.tiles, movedIds(d)).length });
+          return;
+        }
+        const rest = without(over.tiles, movedIds(d));
+        const k = rest.findIndex((tile) => tile[0].id === overTile.dataset.fav);
+        const onto = rest[k];
+        // On a tile, the carried tab joins it: the two form a split, the tab
+        // beside the page under the pointer, on the half of that page.
+        // Between two tiles (their facing edges and the gap) it goes there.
+        const joins = onto && splittable(d) && onto.length < MAX_PANES && !onto.some((t) => t.panel) && !findTab(state, d.id)?.panel;
+        if (onto && joins && overMiddle(e, overTile)) {
+          // Over the place the carried tab would join, the preview stays.
+          if (target.closest("[data-ghost]")) return;
+          const page = pageAt(e, overTile);
+          const next = { id: d.id, list: over.list.profile_id, tile: onto[0].id, cell: page.dataset.page ?? onto[0].id, side: sideOf(e, page) };
+          return setJoin((j) => (j && j.id === next.id && j.cell === next.cell && j.side === next.side ? j : next));
+        }
+        setJoin(null);
+        // Over the carried tile itself: where it is.
+        const own = over.tiles.findIndex((tile) => tile[0].id === overTile.dataset.fav);
+        const index = onto ? (sideOf(e, overTile) === "left" ? k : k + 1) : own >= 0 ? own : null;
+        if (index !== null) setPlace((p) => (p?.id === d.id && p.list === over.list.profile_id && p.index === index ? p : { id: d.id, list: over.list.profile_id, index }));
+      }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) leave(); }}
+      onDrop={(e) => {
+        e.preventDefault();
+        const d = dragging();
+        const joined = listOf(join?.list)?.list;
+        if (takes(d) && join?.id === d.id && joined) {
+          // Beside the page it joins, in that list, then into a split with it.
+          const items = joined.items.filter((t) => t.id !== d.id);
+          const at = items.findIndex((t) => t.id === join.cell) + (join.side === "right" ? 1 : 0);
+          send({ cmd: "move_tab", id: d.id, space: ctx.spaceId, section: "favorites", index: at, profile: joined.profile_id });
+          send({ cmd: "split_insert", target: join.cell, tab: d.id, side: join.side });
+        } else if (takes(d)) {
+          // The index counts the list without what moves, as the app takes it
+          // out first: the place of the tile it lands before (where the first
+          // of its pages stands in the list), else the end.
+          const to = place?.id === d.id ? place : null;
+          const into = listOf(to?.list) ?? grid.at(-1);
+          if (into) {
+            const moved = movedIds(d);
+            const items = into.list.items.filter((t) => !moved.includes(t.id));
+            const tile = to?.list === into.list.profile_id ? without(into.tiles, moved)[to.index] : undefined;
+            send({ cmd: "move_tab", id: d.id, space: ctx.spaceId, section: "favorites", index: tile ? items.findIndex((t) => tile.includes(t)) : items.length, profile: into.list.profile_id, split: d.pair });
+          }
+        }
+        leave();
+        endDrag();
+      }}
+      // A tile carried off and dropped elsewhere.
+      onDragEnd={() => { leave(); endDrag(); }}
+    >
+      {grid.map(({ list, tiles }) => (
+        <Favorites
+          key={list.profile_id}
+          ctx={ctx}
+          list={list}
+          tiles={tiles}
+          flow={flow}
+          before={before?.list === list.profile_id ? before.index : null}
+          joining={joining?.list === list.profile_id ? joining : null}
+          color={profileColor(profiles, list.profile_id)}
+          profile={mixed ? (profile(list.profile_id)?.name ?? t("sidebar.profile.fallback")) : undefined}
+        />
       ))}
       {tipped && (
         <div ref={label} className="fav-tip" style={{ top: tipped.y }} aria-hidden>
@@ -189,170 +309,109 @@ function asTile(tabs: TabItem[]): Tile[] {
   return first ? [[first, ...rest]] : [];
 }
 
-/**
- * The favorites of one profile: an icon per favorite, in the grid all
- * profiles share. A tab dragged over the list joins the tile it is on in a
- * split, or goes between two tiles, where a line marks its place; it takes
- * this list's profile. `profile` is the profile's name where the tiles say
- * which one they are of, `color` its colour on each tile.
- */
-function Favorites({ ctx, list, flow, profile, color }: { ctx: RowContext; list: FavoriteList; flow: FavFlow; profile?: string; color?: string }) {
-  const { state } = ctx;
-  /** The tab or split being carried over this list (`id` stands for it) and where it would go: before tile `index` of the others. */
-  const [place, setPlace] = useState<{ id: string; index: number } | null>(null);
-  /** The tab `id` carried over a tile: dropped, it joins page `cell` of tile `tile` in a split, on `side`. */
-  const [join, setJoin] = useState<{ id: string; tile: string; cell: string; side: Side } | null>(null);
-  /** A tab this list takes: nothing of the private space is kept. */
-  const takes = (d: ReturnType<typeof dragging>): d is NonNullable<typeof d> =>
-    d?.kind === "tab" && (state.private_space !== ctx.spaceId || state.sidebar.favorites.some((f) => f.items.some((t) => t.id === d.id)));
-  // The favorites of one split are one tile, where the first of them stands,
-  // with its pages in reading order.
-  const tiles = list.items.flatMap((t) => {
+/** The tiles of `list`: the favorites of one split are one tile, where the first of them stands, with its pages in reading order. */
+function favoriteTiles(state: UiState, list: FavoriteList): Tile[] {
+  return list.items.flatMap((t) => {
     const split = state.splits.find((s) => splitIds(s).includes(t.id));
     if (!split) return asTile([t]);
     const pages = splitIds(split).flatMap((id) => list.items.find((x) => x.id === id) ?? []);
     return list.items.find((x) => pages.includes(x)) === t ? asTile(pages) : [];
   });
-  const without = (moved: string[]) => tiles.filter((tile) => !moved.includes(tile[0].id));
-  // What a drag over this list shows. The tiles stay where they are: a line
-  // between two of them marks where the carried one would go, and a tile it
-  // would join previews the pair. A place left over from a drag that ended
-  // elsewhere counts for nothing.
+}
+
+/** `tiles` but those of what is carried (`moved`, from `movedIds`). */
+function without(tiles: Tile[], moved: string[]): Tile[] {
+  return tiles.filter((tile) => !moved.includes(tile[0].id));
+}
+
+/**
+ * The favorites of one profile: an icon per favorite, in the grid all
+ * profiles share (`FavoriteLists`, which takes the drags). `before` is the
+ * place a line marks for what is carried, before tile `before` of the
+ * others, `joining` the tile it would join. `profile` is the profile's name
+ * where the tiles say which one they are of, `color` its colour on each tile.
+ */
+function Favorites({ ctx, list, tiles, flow, before, joining, profile, color }: { ctx: RowContext; list: FavoriteList; tiles: Tile[]; flow: FavFlow; before: number | null; joining: FavJoin | null; profile?: string; color?: string }) {
+  const { state } = ctx;
   const d = dragging();
   const moved = d ? movedIds(d) : [];
-  const joining = join && d?.id === join.id ? join : null;
-  const others = without(moved);
-  const before = place && d?.id === place.id && !joining ? place.index : null;
+  const others = without(tiles, moved);
   // Before the tile it stands before anyway: nothing to mark.
   const own = tiles.findIndex((tile) => moved.includes(tile[0].id));
   const mark = before === null || before === own ? null : others[before] ? { tile: others[before][0].id, side: "left" } : { tile: others.at(-1)?.[0].id, side: "right" };
   // A tile has no room for its name: it is edited in a row under the tiles.
   const renamed = list.items.find((t) => t.id === ctx.renaming);
   return (<>
-    <div
-      className="favs-group"
-      onDragOver={(e) => {
-        const d = dragging();
-        if (!takes(d)) return;
-        e.preventDefault();
-        const rest = without(movedIds(d));
-        const target = e.target as HTMLElement;
-        const overTile = target.closest<HTMLElement>("[data-fav]");
-        const k = rest.findIndex((tile) => tile[0].id === overTile?.dataset.fav);
-        const onto = rest[k];
-        // On a tile, the carried tab joins it: the two form a split, the tab
-        // beside the page under the pointer, on the half of that page.
-        // Between two tiles (their facing edges and the gap) it goes there.
-        const joins = onto && splittable(d) && onto.length < MAX_PANES && !onto.some((t) => t.panel) && !findTab(state, d.id)?.panel;
-        if (overTile && onto && joins && overMiddle(e, overTile)) {
-          // Over the place the carried tab would join, the preview stays.
-          if (target.closest("[data-ghost]")) return;
-          const page = pageAt(e, overTile);
-          const next = { id: d.id, tile: onto[0].id, cell: page.dataset.page ?? onto[0].id, side: sideOf(e, page) };
-          return setJoin((j) => (j && j.id === next.id && j.cell === next.cell && j.side === next.side ? j : next));
-        }
-        setJoin(null);
-        // Over the carried tile itself: where it is. Over a gap: where the
-        // edge passed on the way there said.
-        const own = tiles.findIndex((tile) => tile[0].id === overTile?.dataset.fav);
-        const next = overTile && onto ? (sideOf(e, overTile) === "left" ? k : k + 1) : overTile && own >= 0 ? own : null;
-        if (next !== null) setPlace((p) => (p?.id === d.id && p.index === next ? p : { id: d.id, index: next }));
-      }}
-      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) { setPlace(null); setJoin(null); } }}
-      onDrop={(e) => {
-        e.preventDefault();
-        const d = dragging();
-        if (takes(d) && join?.id === d.id) {
-          // Beside the page it joins, in this list, then into a split with it.
-          const items = list.items.filter((t) => t.id !== d.id);
-          const at = items.findIndex((t) => t.id === join.cell) + (join.side === "right" ? 1 : 0);
-          send({ cmd: "move_tab", id: d.id, space: ctx.spaceId, section: "favorites", index: at, profile: list.profile_id });
-          send({ cmd: "split_insert", target: join.cell, tab: d.id, side: join.side });
-        } else if (takes(d)) {
-          // The index counts the list without what moves, as the app takes it
-          // out first: the place of the tile it lands before (where the first
-          // of its pages stands in the list), else the end.
-          const moved = movedIds(d);
-          const items = list.items.filter((t) => !moved.includes(t.id));
-          const before = place?.id === d.id ? without(moved)[place.index] : undefined;
-          send({ cmd: "move_tab", id: d.id, space: ctx.spaceId, section: "favorites", index: before ? items.findIndex((t) => before.includes(t)) : items.length, profile: list.profile_id, split: d.pair });
-        }
-        setPlace(null);
-        setJoin(null);
-        endDrag();
-      }}
-    >
-          {tiles.map((tile) => {
-            const page = (fav: TabItem) => {
-              const rt = state.runtime[fav.id];
-              const notes = [fav.panel && t("sidebar.favorites.panel"), rt?.shared && t("sidebar.favorites.shared")].filter((note): note is string => !!note);
-              return {
-                "data-active": state.active_tab === fav.id || state.web_panel === fav.id || undefined,
-                "data-unloaded": !rt?.loaded || undefined,
-                "data-shared": rt?.shared || undefined,
-                onClick: () => send(fav.panel ? { cmd: "toggle_web_panel", id: fav.id } : { cmd: "activate_tab", id: fav.id }),
-                onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); flow.noTip(); ctx.openMenu(e.clientX, e.clientY, tabMenu(ctx, fav, "favorites", { x: e.screenX, y: e.screenY })); },
-                // The name and the profile show in a label of the lists' own, sooner than the system's would.
-                onMouseEnter: (e: React.MouseEvent<HTMLElement>) => flow.tip(fav, e.currentTarget, profile, color, notes),
-                onMouseLeave: flow.noTip,
-                "aria-label": [fav.title || hostOf(fav.url), profile, ...notes].filter(Boolean).join(" · "),
-                children: <><Favicon url={fav.url} src={rt?.favicon} loading={rt?.loading} /></>,
-              };
-            };
-            const [lead] = tile;
-            const drag = {
-              "data-profile": color ? true : undefined,
-              style: color ? { ["--profile" as string]: color } : undefined,
-              "data-fav": lead.id,
-              "data-carried": moved.includes(lead.id) || undefined,
-              draggable: true,
-              onDragEnd: () => { setPlace(null); setJoin(null); endDrag(); },
-            };
-            const joined = joining?.tile === lead.id ? joining : null;
-            const carried = joined && findTab(state, joined.id);
-            // Where the carried tile would go: a line in the gap beside this one.
-            const line = mark?.tile === lead.id && <span className="fav-insert" data-side={mark.side} />;
-            if (tile.length === 1 && !joined) {
-              const { children, ...props } = page(lead);
-              return <button key={lead.id} className="fav no-drag" data-panel={lead.panel || undefined} {...drag} onDragStart={(e) => { flow.noTip(); startDrag(e, { kind: "tab", id: lead.id }); }} {...props}>{children}{line}</button>;
-            }
-            // A split: one tile with a half per page. It drags as one item.
-            const ids = tile.map((x) => x.id);
-            return (
-              <div
-                key={lead.id}
-                className="fav fav-split no-drag"
-                data-on-screen={ids.includes(state.active_tab ?? "") || undefined}
-                data-wide={tile.length > 2 || undefined}
-                {...drag}
-                onDragStart={(e) => { flow.noTip(); startDrag(e, tile.length === 1 ? { kind: "tab", id: lead.id } : { kind: "tab", id: lead.id, pair: true, group: ids }); }}
-              >
-                {tile.map((x) => {
-                  const own = <button key={x.id} className="fav-page" data-page={x.id} {...page(x)} />;
-                  if (joined?.cell !== x.id || !carried) return own;
-                  const ghost = <span key="ghost" className="fav-page" data-ghost><Favicon url={carried.url} src={state.runtime[carried.id]?.favicon} /></span>;
-                  return joined.side === "left" ? [ghost, own] : [own, ghost];
-                })}
-                {line}
-              </div>
-            );
+    {tiles.map((tile) => {
+      const page = (fav: TabItem) => {
+        const rt = state.runtime[fav.id];
+        const notes = [fav.panel && t("sidebar.favorites.panel"), rt?.shared && t("sidebar.favorites.shared")].filter((note): note is string => !!note);
+        return {
+          "data-active": state.active_tab === fav.id || state.web_panel === fav.id || undefined,
+          "data-unloaded": !rt?.loaded || undefined,
+          "data-shared": rt?.shared || undefined,
+          onClick: () => send(fav.panel ? { cmd: "toggle_web_panel", id: fav.id } : { cmd: "activate_tab", id: fav.id }),
+          onContextMenu: (e: React.MouseEvent) => { e.preventDefault(); flow.noTip(); ctx.openMenu(e.clientX, e.clientY, tabMenu(ctx, fav, "favorites", { x: e.screenX, y: e.screenY })); },
+          // The name and the profile show in a label of the lists' own, sooner than the system's would.
+          onMouseEnter: (e: React.MouseEvent<HTMLElement>) => flow.tip(fav, e.currentTarget, profile, color, notes),
+          onMouseLeave: flow.noTip,
+          "aria-label": [fav.title || hostOf(fav.url), profile, ...notes].filter(Boolean).join(" · "),
+          children: <><Favicon url={fav.url} src={rt?.favicon} loading={rt?.loading} /></>,
+        };
+      };
+      const [lead] = tile;
+      const drag = {
+        "data-profile": color ? true : undefined,
+        style: color ? { ["--profile" as string]: color } : undefined,
+        "data-fav": lead.id,
+        "data-list": list.profile_id,
+        "data-carried": moved.includes(lead.id) || undefined,
+        draggable: true,
+      };
+      const joined = joining?.tile === lead.id ? joining : null;
+      const carried = joined && findTab(state, joined.id);
+      // Where the carried tile would go: a line in the gap beside this one.
+      const line = mark?.tile === lead.id && <span className="fav-insert" data-side={mark.side} />;
+      if (tile.length === 1 && !joined) {
+        const { children, ...props } = page(lead);
+        return <button key={lead.id} className="fav no-drag" data-panel={lead.panel || undefined} {...drag} onDragStart={(e) => { flow.noTip(); startDrag(e, { kind: "tab", id: lead.id }); }} {...props}>{children}{line}</button>;
+      }
+      // A split: one tile with a half per page. It drags as one item.
+      const ids = tile.map((x) => x.id);
+      return (
+        <div
+          key={lead.id}
+          className="fav fav-split no-drag"
+          data-on-screen={ids.includes(state.active_tab ?? "") || undefined}
+          data-wide={tile.length > 2 || undefined}
+          {...drag}
+          onDragStart={(e) => { flow.noTip(); startDrag(e, tile.length === 1 ? { kind: "tab", id: lead.id } : { kind: "tab", id: lead.id, pair: true, group: ids }); }}
+        >
+          {tile.map((x) => {
+            const own = <button key={x.id} className="fav-page" data-page={x.id} {...page(x)} />;
+            if (joined?.cell !== x.id || !carried) return own;
+            const ghost = <span key="ghost" className="fav-page" data-ghost><Favicon url={carried.url} src={state.runtime[carried.id]?.favicon} /></span>;
+            return joined.side === "left" ? [ghost, own] : [own, ghost];
           })}
-    </div>
-      {renamed && (
-        <div className="row fav-rename">
-          <Favicon url={renamed.url} src={state.runtime[renamed.id]?.favicon} />
-          <RenameInput
-            value={renamed.title}
-            label={t("sidebar.favorites.rename_label", { name: renamed.title || hostOf(renamed.url) })}
-            onCommit={(title, from) => {
-              // Left as it was: no rename, so the title keeps following the page.
-              if (title !== from) send({ cmd: "rename_tab", id: renamed.id, title });
-              ctx.setRenaming(null);
-            }}
-            onCancel={() => ctx.setRenaming(null)}
-          />
+          {line}
         </div>
-      )}
+      );
+    })}
+    {renamed && (
+      <div className="row fav-rename">
+        <Favicon url={renamed.url} src={state.runtime[renamed.id]?.favicon} />
+        <RenameInput
+          value={renamed.title}
+          label={t("sidebar.favorites.rename_label", { name: renamed.title || hostOf(renamed.url) })}
+          onCommit={(title, from) => {
+            // Left as it was: no rename, so the title keeps following the page.
+            if (title !== from) send({ cmd: "rename_tab", id: renamed.id, title });
+            ctx.setRenaming(null);
+          }}
+          onCancel={() => ctx.setRenaming(null)}
+        />
+      </div>
+    )}
   </>);
 }
 
