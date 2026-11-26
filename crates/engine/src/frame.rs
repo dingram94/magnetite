@@ -8,6 +8,11 @@ use serde::{Deserialize, Serialize};
 use crate::client::MagnetiteClient;
 use crate::engine::{Engine, WindowId, WindowState};
 use crate::events::{ContentId, EngineEvent};
+use crate::placement::WindowPlacement;
+
+/// How long a window's bounds stay unchanged before they count as where it
+/// is (`Engine::frame_bounds_changed`).
+const BOUNDS_SETTLE_MS: i64 = 300;
 
 /// When the frame shows around the pages: the gap to the window's edges and
 /// the sidebar, and the pages' rounded corners. Without it a page reaches
@@ -74,8 +79,12 @@ pub(crate) struct FrameState {
 impl Engine {
     /// Create a frame window: the first one after `EngineEvent::Ready`, any
     /// further one as a new window, which is the current one from here on.
-    /// `EngineEvent::FrameCreated` follows.
-    pub fn create_frame(&self) -> WindowId {
+    /// It opens at `placement` (fitted onto a screen) where one with a size
+    /// is given, else centred. `EngineEvent::FrameCreated` follows, and
+    /// `FramePlaced` first if the window opens elsewhere than `placement`.
+    pub fn create_frame(&self, placement: Option<WindowPlacement>) -> WindowId {
+        let given = placement.filter(|p| p.width > 0 && p.height > 0);
+        let placement = given.map(WindowPlacement::on_screen);
         let win = {
             let mut inner = self.lock();
             // The first window is there from the start, without its frame.
@@ -86,9 +95,15 @@ impl Engine {
                 let before_id = inner.set_current(self, id);
                 inner.parked.insert(before_id, before);
             }
+            inner.win.placement = placement;
             inner.current
         };
-        let mut delegate = FrameWindowDelegate::new(win);
+        // Moved onto a screen: saved so, it opens there again, not back
+        // on the screen that was gone this time.
+        if let Some(placement) = placement.filter(|p| given != Some(*p)) {
+            self.emit(EngineEvent::FramePlaced { win, placement });
+        }
+        let mut delegate = FrameWindowDelegate::new(win, placement);
         window_create_top_level(Some(&mut delegate));
         win
     }
@@ -667,6 +682,61 @@ impl Engine {
         }
     }
 
+    /// The current window's bounds changed: once they have stayed for
+    /// `BOUNDS_SETTLE_MS`, its placement follows (`place_frame`). A zoom on
+    /// macOS reports each frame of its animation, and those on the way to
+    /// a maximized window are no bounds to go back to.
+    fn frame_bounds_changed(&self) {
+        let (win, change) = {
+            let mut inner = self.lock();
+            inner.win.bounds_changes += 1;
+            (inner.current, inner.win.bounds_changes)
+        };
+        Self::post_delayed(
+            Box::new(move || {
+                let engine = Engine::global();
+                engine.in_window(win, || engine.place_frame(change));
+            }),
+            BOUNDS_SETTLE_MS,
+        );
+    }
+
+    /// The current window's placement follows its bounds, unless they
+    /// changed again after `change`, and the app hears of a new one. Not
+    /// while the window is minimized or full screen, which the next start
+    /// does not take over.
+    fn place_frame(&self, change: u64) {
+        let window = {
+            let inner = self.lock();
+            if inner.win.bounds_changes != change {
+                return;
+            }
+            inner.win.frame.as_ref().map(|f| f.window.clone())
+        };
+        let Some(window) = window.filter(|w| w.is_minimized() == 0 && w.is_fullscreen() == 0)
+        else {
+            return;
+        };
+        let (bounds, maximized) = (window.bounds(), window.is_maximized() != 0);
+        let previous = self.lock().win.placement;
+        let previous = previous.map(|p| {
+            if maximized {
+                p.onto_screen_of(&bounds)
+            } else {
+                p
+            }
+        });
+        let placement = WindowPlacement::after(previous, &bounds, maximized);
+        let win = {
+            let mut inner = self.lock();
+            if inner.win.placement.replace(placement) == Some(placement) {
+                return;
+            }
+            inner.current
+        };
+        self.emit(EngineEvent::FramePlaced { win, placement });
+    }
+
     /// Maximize the frame window, or restore it when it is maximized.
     pub fn toggle_maximize_frame(&self) {
         if let Some(w) = self.frame_window() {
@@ -967,9 +1037,9 @@ impl Engine {
         if let Some(tree) = split.filter(|t| t.pane_count() > 1) {
             self.layout_split(&tree);
             self.update_dividers(Some(&tree));
-            // The page the peek's buttons sit over may have moved.
+            // The pages the peek's dim and buttons are over may have moved.
             #[cfg(target_os = "linux")]
-            self.sync_peek_buttons();
+            self.sync_peek_backdrop();
             self.update_grab_strip();
             self.place_notifications();
             return;
@@ -987,9 +1057,9 @@ impl Engine {
                 self.place(id, &rect);
             }
         }
-        // The page the peek's buttons sit over may have moved.
+        // The pages the peek's dim and buttons are over may have moved.
         #[cfg(target_os = "linux")]
-        self.sync_peek_buttons();
+        self.sync_peek_backdrop();
         if panel.is_some() && !crate::content::WEB_PANEL_DOCKED {
             // The panel moved or changed its width: its grip and button
             // follow.
@@ -1105,6 +1175,8 @@ wrap_panel_delegate! {
 wrap_window_delegate! {
     struct FrameWindowDelegate {
         win: WindowId,
+        // Where the window opens; none: centred (`create_frame`).
+        placement: Option<WindowPlacement>,
     }
 
     impl ViewDelegate {
@@ -1207,8 +1279,16 @@ wrap_window_delegate! {
                 window.set_window_icon(Some(&mut icon.clone()));
                 window.set_window_app_icon(Some(&mut icon.clone()));
             }
-            window.center_window(Some(&Size { width: 1280, height: 860 }));
+            // Placed by `initial_bounds`, else centred.
+            if self.placement.is_none() {
+                window.center_window(Some(&Size { width: 1280, height: 860 }));
+            }
             window.show();
+            // macOS opens a window maximized only when asked once it shows.
+            #[cfg(target_os = "macos")]
+            if self.placement.is_some_and(|p| p.maximized) {
+                window.maximize();
+            }
             window.layout();
 
             let chrome = engine.lock().win.chrome_color;
@@ -1234,10 +1314,18 @@ wrap_window_delegate! {
             drop(inner);
             // Windows ignores `show` while the window is still being created
             // (the call above): the frame stayed invisible under its pages.
+            // That first call used up the maximized start
+            // (`initial_show_state`), so it is asked for again.
             #[cfg(target_os = "windows")]
             {
                 let window = window.clone();
-                Engine::post(Box::new(move || window.show()));
+                let maximized = self.placement.is_some_and(|p| p.maximized);
+                Engine::post(Box::new(move || {
+                    window.show();
+                    if maximized {
+                        window.maximize();
+                    }
+                }));
             }
             let win = self.win;
             engine.in_window(win, || {
@@ -1252,6 +1340,7 @@ wrap_window_delegate! {
         fn on_window_bounds_changed(&self, _window: Option<&mut Window>, new_bounds: Option<&Rect>) {
             let engine = Engine::global();
             engine.in_window(self.win, || {
+                engine.frame_bounds_changed();
                 // Our pages draw one background across the window: each
                 // needs the window's size, which only some of them see change.
                 if let Some(b) = new_bounds {
@@ -1267,8 +1356,21 @@ wrap_window_delegate! {
                 if engine.float_sidebar_shown() {
                     engine.show_float_sidebar(true);
                 }
-                engine.emit(EngineEvent::FrameBoundsChanged);
             });
+        }
+
+        fn initial_bounds(&self, _window: Option<&mut Window>) -> Rect {
+            self.placement.map_or_else(Rect::default, |p| p.bounds())
+        }
+
+        // Not on macOS, which shows the window as it would be restored:
+        // `on_window_created` maximizes it there.
+        fn initial_show_state(&self, _window: Option<&mut Window>) -> ShowState {
+            if !cfg!(target_os = "macos") && self.placement.is_some_and(|p| p.maximized) {
+                ShowState::MAXIMIZED
+            } else {
+                ShowState::NORMAL
+            }
         }
 
         // Entering or leaving full screen takes or brings back the row of

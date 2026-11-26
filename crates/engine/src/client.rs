@@ -958,37 +958,76 @@ fn add_open_link_in_peek(m: &MenuModel, browser: Option<&Browser>) {
     );
 }
 
+/// The selected text `params` were made for.
+fn selection_of(params: Option<&ContextMenuParams>) -> String {
+    params
+        .map(|p| CefString::from(&p.selection_text()).to_string())
+        .unwrap_or_default()
+}
+
+/// Name the search engine of Settings → Search in Chromium's "Search Google
+/// for “…”" of the menu `m`; `on_context_menu_command` then searches with
+/// it (`web_search.rs`).
+fn name_search_engine(m: &MenuModel, params: Option<&ContextMenuParams>) {
+    let Some(search) = keys::command_id_for("IDC_CONTENT_CONTEXT_SEARCHWEBFOR") else {
+        return;
+    };
+    if m.index_of(search) < 0 {
+        return;
+    }
+    if let Some(label) = crate::web_search::menu_label(&selection_of(params)) {
+        m.set_label(search, Some(&CefString::from(label.as_str())));
+    }
+}
+
 wrap_context_menu_handler! {
     struct MagnetiteContextMenuHandler {
         kind: Kind,
     }
     impl ContextMenuHandler {
-        /// Our UI pages draw their own menus; CEF's menu there keeps only its
-        /// text editing items (`keep_text_editing`). Pages lose "Open Link in
-        /// Incognito Window", which opens nothing here (`on_open_urlfrom_tab`),
-        /// and gain "Open Link in Peek".
+        /// Our UI pages draw their own menus, also the ones shown as a tab
+        /// (Settings, Downloads): CEF's menu there keeps only its text editing
+        /// items (`keep_text_editing`). Pages lose "Open Link in Incognito
+        /// Window", which opens nothing here (`on_open_urlfrom_tab`), and gain
+        /// "Open Link in Peek". Their search item, and that of a page's popup
+        /// window, names the search engine of Settings.
         fn on_before_context_menu(
             &self,
             browser: Option<&mut Browser>,
             _frame: Option<&mut Frame>,
-            _params: Option<&mut ContextMenuParams>,
+            params: Option<&mut ContextMenuParams>,
             model: Option<&mut MenuModel>,
         ) {
             let Some(m) = model else { return };
+            let page_url = params.as_deref().map(|p| CefString::from(&p.page_url()).to_string()).unwrap_or_default();
             if matches!(self.kind, Kind::Sidebar | Kind::TopBar | Kind::Overlay) {
-                keep_text_editing(m);
+                // These pages are Alloy style: CEF lists the standard items
+                // with its own ids, not Chromium's `IDC_*`, Undo to Select All
+                // as one block.
+                use sys::cef_menu_id_t::{MENU_ID_SELECT_ALL, MENU_ID_UNDO};
+                let editing = MENU_ID_UNDO as i32..=MENU_ID_SELECT_ALL as i32;
+                keep_text_editing(m, |id| editing.contains(&id));
+            } else if self.kind == Kind::Content && crate::router::is_ui_url(&page_url) {
+                // A tab is Chrome style: the items carry Chromium's ids.
+                let editing: Vec<i32> = CHROME_TEXT_EDITING.iter().filter_map(|name| keys::command_id_for(name)).collect();
+                keep_text_editing(m, |id| editing.contains(&id));
             } else if self.kind == Kind::Content {
                 if let Some(incognito) = keys::command_id_for("IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD") {
                     m.remove(incognito);
                 }
                 add_open_link_in_peek(m, browser.as_deref());
             }
+            if matches!(self.kind, Kind::Content | Kind::Stray) {
+                name_search_engine(m, params.as_deref());
+            }
         }
         /// "Inspect" in a page's menu opens `DevTools` through us, at the
         /// clicked element, so they dock and get our menu items. "Open Link
         /// in New Window" opens a mini window through us: Chromium would ask
         /// for it just as for a Shift+click (`on_open_urlfrom_tab`). "Open
-        /// Link in Peek" asks for what a Shift+click asks for.
+        /// Link in Peek" asks for what a Shift+click asks for. "Search … for"
+        /// asks for a new tab that searches with the engine of Settings,
+        /// where Chromium would search Google.
         fn on_context_menu_command(
             &self,
             browser: Option<&mut Browser>,
@@ -1000,6 +1039,13 @@ wrap_context_menu_handler! {
             if self.kind == Kind::Content && command_id == OPEN_LINK_IN_PEEK {
                 let Some(url) = params.map(|p| CefString::from(&p.link_url()).to_string()) else { return 0 };
                 Engine::global().request_open(browser.as_deref(), url, UrlSource::Page, false, true, false);
+                return 1;
+            }
+            if matches!(self.kind, Kind::Content | Kind::Stray)
+                && Some(command_id) == keys::command_id_for("IDC_CONTENT_CONTEXT_SEARCHWEBFOR")
+            {
+                let Some(url) = crate::web_search::menu_address(&selection_of(params.as_deref())) else { return 0 };
+                Engine::global().request_open(browser.as_deref(), url, url_source(self.kind), false, false, false);
                 return 1;
             }
             // A page's popup window (`Kind::Stray`) has the item too.
@@ -1022,17 +1068,25 @@ wrap_context_menu_handler! {
     }
 }
 
-/// Trims the menu of a sidebar, top bar or overlay page to its text editing
-/// items: a text field there gets Cut, Copy and Paste, a selection Copy.
-/// Anywhere else nothing is left, and CEF shows no menu at all.
-fn keep_text_editing(m: &MenuModel) {
-    use sys::cef_menu_id_t::{MENU_ID_SELECT_ALL, MENU_ID_UNDO};
-    // CEF lists its standard items with its own ids, not Chromium's `IDC_*`:
-    // Undo to Select All are one block.
-    let editing = MENU_ID_UNDO as i32..=MENU_ID_SELECT_ALL as i32;
+/// Chromium's names for the text editing items of a Chrome style page's menu.
+const CHROME_TEXT_EDITING: [&str; 8] = [
+    "IDC_CONTENT_CONTEXT_UNDO",
+    "IDC_CONTENT_CONTEXT_REDO",
+    "IDC_CONTENT_CONTEXT_CUT",
+    "IDC_CONTENT_CONTEXT_COPY",
+    "IDC_CONTENT_CONTEXT_PASTE",
+    "IDC_CONTENT_CONTEXT_PASTE_AND_MATCH_STYLE",
+    "IDC_CONTENT_CONTEXT_DELETE",
+    "IDC_CONTENT_CONTEXT_SELECTALL",
+];
+
+/// Trims the menu of one of our UI pages to the items for which `editing`
+/// holds: a text field there gets Cut, Copy and Paste, a selection Copy.
+/// Anywhere else nothing is left, and no menu shows at all.
+fn keep_text_editing(m: &MenuModel, editing: impl Fn(i32) -> bool) {
     let separator = |i| m.type_at(i) == MenuItemType::SEPARATOR;
     for i in (0..m.count()).rev() {
-        if !separator(i) && !editing.contains(&m.command_id_at(i)) {
+        if !separator(i) && !editing(m.command_id_at(i)) {
             m.remove_at(i);
         }
     }

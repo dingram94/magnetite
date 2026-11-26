@@ -60,9 +60,10 @@ mod panel_close;
 #[cfg(target_os = "linux")]
 mod panel_stack;
 #[cfg(target_os = "linux")]
-mod peek_buttons;
+mod peek_backdrop;
 #[cfg(target_os = "macos")]
 mod pip;
+mod placement;
 mod privacy;
 mod prompts;
 mod protected;
@@ -79,6 +80,7 @@ mod strings;
 mod system;
 mod tabshare;
 mod trash;
+mod web_search;
 #[cfg(target_os = "windows")]
 mod win;
 
@@ -107,6 +109,7 @@ pub use keymap::{Action, Combo, First, KeysError, Overrides, Priorities};
 pub use keys::set_page_first_sites;
 pub use languages::LanguagePrefs;
 pub use media::{MediaAction, MediaState};
+pub use placement::WindowPlacement;
 pub use privacy::set_global_privacy_control;
 pub use prompts::{PermissionPrompt, PromptAnswer, PromptKind};
 pub use router::ReplyTicket;
@@ -118,6 +121,7 @@ pub use sitedata::{
     registrable_domain,
 };
 pub use trash::move_to_trash;
+pub use web_search::{WebSearch, set_web_search};
 #[cfg(target_os = "windows")]
 pub use win::installer_ready;
 

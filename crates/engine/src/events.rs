@@ -271,7 +271,13 @@ pub enum EngineEvent {
     },
     /// The sidebar page finished loading (safe to push state).
     SidebarLoaded,
-    FrameBoundsChanged,
+    /// Window `win` moved, was resized, maximized or restored, or opened
+    /// elsewhere than asked; `placement` is where it is now, for
+    /// `Engine::create_frame` to open it the same way at the next start.
+    FramePlaced {
+        win: crate::WindowId,
+        placement: crate::WindowPlacement,
+    },
     ContentCreated {
         id: ContentId,
     },
@@ -440,7 +446,7 @@ impl EngineEvent {
             Self::FrameCreated { .. } => "FrameCreated",
             Self::WindowClosed { .. } => "WindowClosed",
             Self::SidebarLoaded => "SidebarLoaded",
-            Self::FrameBoundsChanged => "FrameBoundsChanged",
+            Self::FramePlaced { .. } => "FramePlaced",
             Self::ContentCreated { .. } => "ContentCreated",
             Self::ContentClosed { .. } => "ContentClosed",
             Self::TitleChanged { .. } => "TitleChanged",
