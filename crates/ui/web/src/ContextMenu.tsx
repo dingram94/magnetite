@@ -145,6 +145,8 @@ export function ContextMenu({ x, y, items, onClose, takeFocus = false }: { x: nu
       if (e.key === "End") return handled(), go(places.at(-1));
       if (at && i >= 0 && (e.key === "Enter" || e.key === " ")) {
         handled();
+        // A key held down picks once: its repeats would answer a row that asks first, and open and close a list.
+        if (e.repeat) return;
         pick(at);
         // Into a list that was just opened; back from it, onto its row.
         if (isList) go(open === at.top ? { top: at.top } : { top: at.top, sub: firstRow(here) });

@@ -352,7 +352,8 @@ Code: `crates/engine/src/tabshare.rs`, `tabshare_hook.js`;
   so the labels are in line.
 - Keyboard: the up and down arrows go through the rows, around the ends,
   and through an open list's rows; Home and End go to the first and the
-  last. Enter or Space picks the row. On a row with a list, Enter, Space
+  last. Enter or Space picks the row, once for a key held down: a row that
+  asks first ("Delete space…") wants a second press. On a row with a list, Enter, Space
   or the right arrow opens it and goes to its first row; the left arrow,
   or the row that leads back, returns to the menu, onto that row. Any other key closes the menu.
   The pointer and the keyboard move the same mark, so one row is lit.
