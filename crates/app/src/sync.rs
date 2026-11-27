@@ -706,14 +706,14 @@ impl Worker {
         // The server holds exactly this round's sidebar.
         let mut held = false;
         let mut behind = false;
-        let plain: [(&str, Vec<u8>); 2] = [
+        let mut plain: [(&str, Vec<u8>); 2] = [
             (SIDEBAR, serde_json::to_vec(snapshot).unwrap_or_default()),
             (
                 SETTINGS,
                 serde_json::to_vec(&SyncedSettings::from(settings)).unwrap_or_default(),
             ),
         ];
-        for (name, bytes) in &plain {
+        for (name, bytes) in &mut plain {
             let id = keys.collection_id(name);
             let path = format!("/collections/{id}");
             // The version this job's snapshot is built on, and the newest this
@@ -791,9 +791,15 @@ impl Worker {
                     // a download) without the synced data changing, and a
                     // device that writes the same data again makes every
                     // other device take it over its own newer changes.
-                    same = keys
-                        .open(&id, remote.version, &remote.sealed())
-                        .is_ok_and(|data| data == *bytes);
+                    let data = keys.open(&id, remote.version, &remote.sealed()).ok();
+                    // What the chain holds in profiles private here stays
+                    // as it is there (`carried`).
+                    if *name == SIDEBAR
+                        && let Some(sent) = data.as_deref().and_then(|d| carried(snapshot, d))
+                    {
+                        *bytes = sent;
+                    }
+                    same = data.is_some_and(|data| data == *bytes);
                     held |= same && *name == SIDEBAR;
                 }
                 // Nothing there yet. Only the device that started the chain
@@ -1007,6 +1013,21 @@ pub fn signed_in(data_dir: &Path) -> bool {
     load_code(data_dir).is_some()
 }
 
+/// `snapshot` as it is written over the chain's sidebar `chain` (its
+/// plain bytes): with what the chain holds in profiles that are private on
+/// this device (`carry_private_tabs`). None when that changes nothing.
+fn carried(snapshot: &SidebarSnapshot, chain: &[u8]) -> Option<Vec<u8>> {
+    if !snapshot.profiles.iter().any(|p| p.ephemeral) {
+        return None;
+    }
+    let chain: SidebarSnapshot = serde_json::from_slice(chain).ok()?;
+    let mut sent = snapshot.clone();
+    crate::state::carry_private_tabs(&mut sent, &chain);
+    (sent != *snapshot)
+        .then(|| serde_json::to_vec(&sent).ok())
+        .flatten()
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -1213,6 +1234,64 @@ mod tests {
             "{:?}",
             out.iter().map(describe).collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn what_the_chain_holds_in_a_profile_private_here_is_not_written_away() {
+        // This device's sidebar: a profile that is private here.
+        let mut mine = snapshot("Work");
+        mine.profiles.push(Profile {
+            id: "secret".into(),
+            name: "Secret".into(),
+            is_default: false,
+            ephemeral: true,
+            color: None,
+        });
+        // The chain's: the same, with another device's tab in that profile.
+        let mut chain = mine.clone();
+        chain.spaces[0].today.push(magnetite_core::TabItem {
+            profile_id: Some("secret".into()),
+            ..magnetite_core::TabItem::new("t", "https://example.org/t", "t")
+        });
+        let puts = Arc::new(AtomicUsize::new(0));
+        let code = SyncCode::generate();
+        let server = {
+            let keys = code.keys();
+            let sidebar = keys.collection_id(SIDEBAR);
+            let puts = puts.clone();
+            fake_server(move |method, path| {
+                if method == "PUT" {
+                    puts.fetch_add(1, Ordering::SeqCst);
+                    return (200, r#"{"version":4}"#.into());
+                }
+                let (id, plain) = if path.ends_with(sidebar.as_str()) {
+                    (sidebar.clone(), serde_json::to_vec(&chain).unwrap())
+                } else {
+                    let plain = SyncedSettings::from(&Settings::default());
+                    (
+                        keys.collection_id(SETTINGS),
+                        serde_json::to_vec(&plain).unwrap(),
+                    )
+                };
+                let body = CollectionResponse::new(3, keys.seal(&id, 3, &plain).unwrap());
+                (200, serde_json::to_string(&body).unwrap())
+            })
+        };
+        let dir = data_dir("private-here");
+        save_code(&dir, &code).unwrap();
+        let mut w = Worker::new(dir, SyncSettings::default());
+        let mut settings = sync_settings(3);
+        settings.sync.server_url = server;
+        // Leaving the tab out would close it on the other device: this
+        // device writes nothing, and agrees on its own sidebar.
+        let out = w.sync(&mine, &settings, false);
+        assert!(
+            matches!(out.as_slice(), [Outcome::Pushed { versions, agreed: Some(agreed) }]
+                if versions.is_empty() && **agreed == mine),
+            "{:?}",
+            out.iter().map(describe).collect::<Vec<_>>()
+        );
+        assert_eq!(puts.load(Ordering::SeqCst), 0);
     }
 
     #[test]

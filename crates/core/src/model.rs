@@ -265,15 +265,22 @@ impl SidebarSnapshot {
         named.peek().is_none() || named.any(|id| id == space)
     }
 
-    /// Whether anything in the sidebar runs in profile `id`: a space, a
-    /// favorite, or a tab that keeps a profile of its own.
+    /// Whether anything in the sidebar runs in profile `id`
+    /// (`profiles_in_use`).
     pub fn uses_profile(&self, id: &str) -> bool {
-        self.spaces.iter().any(|s| s.profile_id == id)
-            || self
-                .favorites
-                .iter()
-                .any(|f| f.profile_id == id && !f.items.is_empty())
-            || self.all_tabs().any(|t| t.profile_id.as_deref() == Some(id))
+        self.profiles_in_use().any(|p| p == id)
+    }
+
+    /// The profiles that something in the sidebar runs in: a space, a
+    /// favorite, or a tab that keeps a profile of its own. One can come
+    /// more than once.
+    pub fn profiles_in_use(&self) -> impl Iterator<Item = &Id> {
+        let spaces = self.spaces.iter().map(|s| &s.profile_id);
+        let favorites = (self.favorites.iter())
+            .filter(|f| !f.items.is_empty())
+            .map(|f| &f.profile_id);
+        let tabs = self.all_tabs().filter_map(|t| t.profile_id.as_ref());
+        spaces.chain(favorites).chain(tabs)
     }
 
     /// Every bookmark in the snapshot, space by space, depth first.

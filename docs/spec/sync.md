@@ -97,7 +97,8 @@ changes go into it, and nothing is lost for having synced second:
 - What one device removed goes, unless the other changed it meanwhile: a
   tab closed on one device and used on the other stays open.
 - A folder or space removed on one device stays if the other put something
-  into it or changed something in it meanwhile, with just that.
+  into it or changed something in it meanwhile, with just that. So does a
+  profile removed on one device that the other put to use.
 - Each device removed the spaces the other kept: a sidebar cannot be without
   one, so the chain's sidebar is taken as it arrives, as where both changed
   the same thing.
@@ -227,6 +228,12 @@ it:
   one is the default, is decided here. A profile only this device has
   keeps its favorites. Cookies and logins of a profile are deleted only
   when the profile is deleted here.
+- A profile can be private here and not on another device. That device's
+  Today tabs in it show here as private tabs, and what this device writes
+  leaves them, and where that device's pinned tabs and favorites in it
+  went, on the chain as they are there: closing one of those tabs here
+  does not close it there. Nothing of this device's browsing in the
+  profile is sent.
 - Deleting a profile counts for the device it is done on. The other
   devices keep the profile until it is deleted there, and the device that
   deleted it does not take it back from their list. It returns only with a

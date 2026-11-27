@@ -12,7 +12,8 @@
 //!   first. A tab's last use is the later of the two.
 //! - What one side added stays. What one side removed goes, unless the
 //!   other changed it meanwhile: a change is never lost to a removal.
-//! - A folder or space that still holds something stays with it.
+//! - A folder or space that still holds something stays with it, and so
+//!   does a profile that something runs in.
 //! - The order is that of the side that reordered; what the other side
 //!   added goes next to its neighbours there.
 
@@ -488,20 +489,24 @@ pub fn merge(
             });
         }
     }
-    let profiles: fn(&Profile) -> &Id = |p| &p.id;
-    SidebarSnapshot {
+    let mut merged = SidebarSnapshot {
         format: local.format.clone(),
         version: local.version,
-        profiles: records(
-            &base.profiles,
-            &local.profiles,
-            &remote.profiles,
-            profiles,
-            &HashSet::new(),
-        ),
+        profiles: Vec::new(),
         favorites,
         spaces,
-    }
+    };
+    // A profile that something still runs in stays, as a space does.
+    let needed: HashSet<Id> = merged.profiles_in_use().cloned().collect();
+    let profiles: fn(&Profile) -> &Id = |p| &p.id;
+    merged.profiles = records(
+        &base.profiles,
+        &local.profiles,
+        &remote.profiles,
+        profiles,
+        &needed,
+    );
+    merged
 }
 
 #[cfg(test)]
@@ -917,6 +922,16 @@ mod tests {
         let names: Vec<&str> = merged.profiles.iter().map(|p| p.name.as_str()).collect();
         assert_eq!(names, ["Default", "Job", "Mine"]);
         assert_eq!(merged.profiles[1].color, Some(crate::Color::rgb(1, 2, 3)));
+
+        // Removed on one device, put to use on the other: it stays. One
+        // nothing runs in still goes.
+        let (mut local, mut remote) = (base.clone(), base.clone());
+        local.profiles.retain(|p| p.id == "p");
+        remote.spaces[0].profile_id = "work".into();
+        let merged = merge(&base, &local, &remote);
+        assert_eq!(merged.spaces[0].profile_id, "work");
+        let ids: Vec<&str> = merged.profiles.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, ["p", "work"]);
     }
 
     #[test]
