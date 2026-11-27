@@ -4,6 +4,7 @@
 use std::collections::HashSet;
 
 use magnetite_core::split::SplitNode;
+use magnetite_core::unread::split_unread;
 use magnetite_core::{Color, Id, SidebarNode, Space, TabItem, UnixSeconds};
 use magnetite_engine::{ContentId, MediaState, MemoryPressure};
 
@@ -210,6 +211,33 @@ impl AppState {
         Some(self.runtime.entry(tab).or_default())
     }
 
+    /// Record page `id`'s new title (`EngineEvent::TitleChanged`). An
+    /// unread count in it (`(3) WhatsApp`) goes to the tab's runtime, for
+    /// the bubble on its row or tile, and stays out of the tab's title and
+    /// the history: those are saved and synced, and a count there would be
+    /// stale. A renamed tab keeps its name and still gets the count. The
+    /// peek and the mini windows show their page's title as it is and keep
+    /// the count for when they are kept as a tab (`keep_page`).
+    pub fn set_page_title(&mut self, id: ContentId, title: &str) {
+        if let Some(p) = self.page_outside_mut(id) {
+            title.clone_into(&mut p.title);
+        }
+        let (count, title) = split_unread(title);
+        self.record_title(id, &title);
+        if let Some(rt) = self.page_runtime(id) {
+            rt.unread_count = count;
+        }
+        let Some(tab) = self.content_to_tab.get(&id).cloned() else {
+            return;
+        };
+        if let Some(t) = self.find_tab_mut(&tab)
+            && !t.custom_title
+            && !title.is_empty()
+        {
+            t.title = title.into_owned();
+        }
+    }
+
     /// Record what page `id` plays now (`EngineEvent::MediaChanged`), and
     /// tell whether a sidebar shows the change. A sidebar shows a page's
     /// media in two places: the speaker on its tab's row while it plays
@@ -377,8 +405,10 @@ impl AppState {
     /// Page `p` becomes a Today tab at the top of space `space`: its window
     /// and what is known about it carry over, and it stays in its profile
     /// (its page already runs there), also when that is not the space's.
+    /// The tab's title comes without the page's unread count, which its
+    /// runtime already holds (`set_page_title`).
     fn keep_page(&mut self, p: Peek, space: &str) -> Id {
-        let id = self.new_today_tab(space, &p.url, &p.title);
+        let id = self.new_today_tab(space, &p.url, &split_unread(&p.title).1);
         let space_profile = self.space(space).map(|sp| sp.profile_id.clone());
         if space_profile.as_deref() != Some(p.profile.as_str())
             && let Some(t) = self.find_tab_mut(&id)
@@ -1093,6 +1123,49 @@ mod tests {
             Some("https://down.example/")
         );
         assert_eq!(s.runtime["a"].favicon, None);
+    }
+
+    #[test]
+    fn an_unread_count_goes_from_the_title_to_the_runtime() {
+        let mut s = state();
+        s.content_to_tab.insert(1, "a".into());
+        s.content_to_tab.insert(2, "p".into());
+        s.find_tab_mut("p").unwrap().custom_title = true;
+        s.set_page_title(1, "(3) Chat");
+        s.set_page_title(2, "Inbox (12) - Mail");
+        assert_eq!(s.find_tab("a").unwrap().1.title, "Chat");
+        assert_eq!(s.runtime["a"].unread_count, Some(3));
+        // A renamed tab keeps its name.
+        assert_eq!(s.find_tab("p").unwrap().1.title, "p");
+        assert_eq!(s.runtime["p"].unread_count, Some(12));
+        // Read: the bubble goes.
+        s.set_page_title(1, "Chat");
+        assert_eq!(s.runtime["a"].unread_count, None);
+        // A page that goes takes its count along.
+        s.runtime.get_mut("p").unwrap().unload();
+        assert_eq!(s.runtime["p"].unread_count, None);
+    }
+
+    #[test]
+    fn a_peek_kept_as_a_tab_brings_its_count_but_not_in_the_title() {
+        let mut s = state();
+        let over = s.peek_over();
+        let profile = s.active_space().profile_id.clone();
+        s.peeks.insert(
+            over,
+            crate::state::Peek {
+                content: 5,
+                url: "https://example.org/chat".into(),
+                title: String::new(),
+                runtime: TabRuntime::default(),
+                profile,
+            },
+        );
+        s.set_page_title(5, "(4) Chat");
+        assert_eq!(s.peek().unwrap().title, "(4) Chat");
+        let id = s.keep_peek().unwrap();
+        assert_eq!(s.find_tab(&id).unwrap().1.title, "Chat");
+        assert_eq!(s.runtime[&id].unread_count, Some(4));
     }
 
     #[test]

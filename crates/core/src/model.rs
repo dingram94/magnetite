@@ -285,15 +285,22 @@ impl SidebarSnapshot {
         named.peek().is_none() || named.any(|id| id == space)
     }
 
-    /// Whether anything in the sidebar runs in profile `id`: a space, a
-    /// favorite, or a tab that keeps a profile of its own.
+    /// Whether anything in the sidebar runs in profile `id`
+    /// (`profiles_in_use`).
     pub fn uses_profile(&self, id: &str) -> bool {
-        self.spaces.iter().any(|s| s.profile_id == id)
-            || self
-                .favorites
-                .iter()
-                .any(|f| f.profile_id == id && !f.items.is_empty())
-            || self.all_tabs().any(|t| t.profile_id.as_deref() == Some(id))
+        self.profiles_in_use().any(|p| p == id)
+    }
+
+    /// The profiles that something in the sidebar runs in: a space, a
+    /// favorite, or a tab that keeps a profile of its own. One can come
+    /// more than once.
+    pub fn profiles_in_use(&self) -> impl Iterator<Item = &Id> {
+        let spaces = self.spaces.iter().map(|s| &s.profile_id);
+        let favorites = (self.favorites.iter())
+            .filter(|f| !f.items.is_empty())
+            .map(|f| &f.profile_id);
+        let tabs = self.all_tabs().filter_map(|t| t.profile_id.as_ref());
+        spaces.chain(favorites).chain(tabs)
     }
 
     /// Every bookmark in the snapshot, space by space, depth first.
@@ -314,6 +321,30 @@ impl SidebarSnapshot {
                 .chain(s.today.iter())
         });
         favs.chain(spaces)
+    }
+
+    /// Call `f` on every tab item and bookmark in the snapshot.
+    pub fn for_each_tab_mut(&mut self, f: &mut dyn FnMut(&mut TabItem)) {
+        fn nodes(list: &mut [SidebarNode], f: &mut dyn FnMut(&mut TabItem)) {
+            for n in list {
+                match n {
+                    SidebarNode::Tab(t) => f(t),
+                    SidebarNode::Folder(folder) => nodes(&mut folder.children, f),
+                }
+            }
+        }
+        for t in self
+            .favorites
+            .iter_mut()
+            .flat_map(|set| set.items.iter_mut())
+        {
+            f(t);
+        }
+        for space in &mut self.spaces {
+            nodes(&mut space.pinned, f);
+            space.today.iter_mut().for_each(&mut *f);
+            nodes(&mut space.bookmarks, f);
+        }
     }
 }
 

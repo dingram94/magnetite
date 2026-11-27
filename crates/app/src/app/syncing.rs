@@ -131,15 +131,15 @@ impl MagnetiteApp {
                 self.push_state(engine);
                 self.sync_now();
             }
-            Outcome::Pushed { versions, sidebar } => {
+            Outcome::Pushed { versions, agreed } => {
                 self.with_state(|s| {
                     for (name, v) in versions {
                         // A stored version never goes down (rollback protection).
                         let known = s.settings.sync.versions.entry(name).or_insert(0);
                         *known = (*known).max(v);
                     }
-                    if let Some(sidebar) = sidebar {
-                        s.synced_sidebar = Some(*sidebar);
+                    if let Some(agreed) = agreed {
+                        s.synced_sidebar = Some(*agreed);
                     }
                     s.settings.sync.last_sync_at = Some(now());
                     s.settings.sync.last_error = None;
@@ -150,8 +150,14 @@ impl MagnetiteApp {
                 sidebar,
                 settings,
                 versions,
+                agreed,
             } => {
                 let (contents, write) = self.with_state(|s| {
+                    // Before `sidebar_to_write`: a sidebar written while the
+                    // settings arrived is what the chain holds now.
+                    if let Some(agreed) = agreed {
+                        s.synced_sidebar = Some(*agreed);
+                    }
                     let contents = s.adopt_pull(sidebar, settings, versions);
                     (contents, s.sidebar_to_write())
                 });

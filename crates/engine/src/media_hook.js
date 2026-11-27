@@ -23,6 +23,8 @@
   const every = setInterval.bind(window);
   const Ref = WeakRef;
   const deref = Function.prototype.call.bind(WeakRef.prototype.deref);
+  const clock = Date.now;
+  const rootOf = Function.prototype.call.bind(Node.prototype.getRootNode);
 
   // Media Session handlers the page registers (Spotify, YouTube Music, …).
   const handlers = new Map();
@@ -51,18 +53,44 @@
   // never started (YouTube queues the next video or an ad; background tabs
   // hold new playback back) is not worth a paused player row.
   const played = new WeakSet();
-  let lastPlayed = null;
+  // Each element's current run of playback: when it began, when it stopped
+  // (0 while it plays; of the paused media, the one that stopped last keeps
+  // its row), and whether a new source was loaded since. A source
+  // that starts within RUN_GAP_MS of the last one stopping goes on with its
+  // run (a reader that plays a text sentence by sentence), and so does the
+  // same source resumed after a run that already counted (`isMedia`).
+  const runs = new WeakMap();
+  const RUN_GAP_MS = 1000;
+  const SHORT_SECONDS = 5;
   const onEvent = (e) => {
-    if (e.type === "play") lastPlayed = e.target;
-    if (e.type === "playing") played.add(e.target);
-    if (e.type === "loadstart" || e.type === "emptied") played.delete(e.target);
+    const el = e.target;
+    const run = runs.get(el);
+    if (e.type === "playing") {
+      played.add(el);
+      const gap = run && run.stopped ? clock() - run.stopped : 0;
+      if (!run || (gap > RUN_GAP_MS && (run.reloaded || run.stopped - run.start < SHORT_SECONDS * 1000))) {
+        runs.set(el, { start: clock(), stopped: 0, reloaded: false });
+      } else {
+        run.stopped = 0;
+        run.reloaded = false;
+      }
+    }
+    if (run && !run.stopped && (e.type === "pause" || e.type === "ended")) run.stopped = clock();
+    if (e.type === "loadstart" || e.type === "emptied") {
+      played.delete(el);
+      // A new source ends the old one's run, also when it did not pause first.
+      if (run) {
+        if (!run.stopped) run.stopped = clock();
+        run.reloaded = true;
+      }
+    }
     schedule();
   };
   const watch = (el) => {
     if (watched.has(el)) return;
     watched.add(el);
     elements.add(new Ref(el));
-    for (const type of ["play", "playing", "pause", "ended", "emptied", "loadstart", "volumechange", "loadedmetadata"]) el.addEventListener(type, onEvent);
+    for (const type of ["play", "playing", "pause", "ended", "emptied", "loadstart", "volumechange", "loadedmetadata", "durationchange"]) el.addEventListener(type, onEvent);
   };
   const play = HTMLMediaElement.prototype.play;
   HTMLMediaElement.prototype.play = {
@@ -74,7 +102,6 @@
   window.addEventListener("play", (e) => {
     if (e.target instanceof HTMLMediaElement) {
       watch(e.target);
-      lastPlayed = e.target;
       schedule();
     }
   }, true);
@@ -114,14 +141,33 @@
   window.addEventListener("enterpictureinpicture", onPicture, true);
   window.addEventListener("leavepictureinpicture", onPicture, true);
 
-  // The element that matters: an audible one that really plays, else a
-  // muted video that plays or is in the floating window (Instagram starts
-  // its videos muted; such a video can still pop out), else the last
-  // audible one that played and is paused now.
+  // Whether element `el` is in the floating window. A player that keeps its
+  // video in a shadow root (Reddit) is found there: the document only names
+  // the shadow's host.
+  const inFloatingWindow = (el) => rootOf(el).pictureInPictureElement === el;
+  const audible = (el) => !el.muted && el.volume !== 0;
+
+  // Whether element `el` is media and not a sound effect such as a chat's
+  // message sound, which in a background tab would flash a media row for
+  // the second it plays: a clip of SHORT_SECONDS or more, a loop (a
+  // ringtone), the video in the floating window, or whatever has played on
+  // for SHORT_SECONDS in one run (`runs`): short sources one after another,
+  // or a source of unknown or endless length (a live stream, a recording).
+  const isMedia = (el) => {
+    if ((el.duration >= SHORT_SECONDS && el.duration !== Infinity) || el.loop || inFloatingWindow(el)) return true;
+    const run = runs.get(el);
+    return !!run && (run.stopped || clock()) - run.start >= SHORT_SECONDS * 1000;
+  };
+
+  // The element that matters (`isMedia`): an audible one that really plays,
+  // else a muted video that plays or is in the floating window (Instagram
+  // starts its videos muted; such a video can still pop out), else of the
+  // audible ones paused now the one that stopped last. A sound effect never
+  // counts, so it cannot take that row away.
   const current = () => {
     let paused = null;
+    let pausedAt = -1;
     let silent = null;
-    const floating = document.pictureInPictureElement;
     for (const ref of elements) {
       const el = deref(ref);
       if (!el) {
@@ -135,13 +181,18 @@
         }
         continue;
       }
-      if (!played.has(el)) continue;
-      if (el.muted || el.volume === 0) {
-        if (!silent && el instanceof HTMLVideoElement && (!el.paused || el === floating)) silent = el;
+      if (!played.has(el) || !isMedia(el)) continue;
+      if (!audible(el)) {
+        if (!silent && el instanceof HTMLVideoElement && (!el.paused || inFloatingWindow(el))) silent = el;
         continue;
       }
       if (!el.paused) return el;
-      if (el === lastPlayed) paused = el;
+      // `played` elements always have a run: both are set on `playing`.
+      const stopped = runs.get(el).stopped;
+      if (stopped > pausedAt) {
+        paused = el;
+        pausedAt = stopped;
+      }
     }
     return silent || paused;
   };
@@ -164,7 +215,7 @@
       state.video = el instanceof HTMLVideoElement && el.videoWidth > 0;
       state.pip = !!document.pictureInPictureElement;
       state.live = el.duration === Infinity;
-      state.silent = el.muted || el.volume === 0;
+      state.silent = !audible(el);
       state.can_next = handlers.has("nexttrack");
       state.can_prev = handlers.has("previoustrack");
     }

@@ -12,7 +12,8 @@
 //!   first. A tab's last use is the later of the two.
 //! - What one side added stays. What one side removed goes, unless the
 //!   other changed it meanwhile: a change is never lost to a removal.
-//! - A folder or space that still holds something stays with it.
+//! - A folder or space that still holds something stays with it, and so
+//!   does a profile that something runs in.
 //! - The order is that of the side that reordered; what the other side
 //!   added goes next to its neighbours there.
 
@@ -91,9 +92,15 @@ impl Flat {
                     self.add(Item::Tab(t.clone()), place);
                 }
                 SidebarNode::Folder(f) => {
+                    // Field by field: the children are not copied only to
+                    // be dropped.
                     let shell = Folder {
+                        id: f.id.clone(),
+                        title: f.title.clone(),
+                        icon: f.icon.clone(),
                         children: Vec::new(),
-                        ..f.clone()
+                        smart: f.smart.clone(),
+                        other: f.other.clone(),
                     };
                     if self.add(Item::Folder(shell), place) {
                         self.nodes(&f.children, &Place::Folder(f.id.clone()));
@@ -439,12 +446,21 @@ pub fn merge(
     let needed: HashSet<Id> = (kept.items.values())
         .filter_map(|(_, place)| place.space().cloned())
         .collect();
+    // Spaces without what is in them, field by field: their lists are not
+    // copied only to be dropped.
     let shell = |spaces: &[Space]| -> Vec<Space> {
         let empty = |sp: &Space| Space {
+            id: sp.id.clone(),
+            title: sp.title.clone(),
+            icon: sp.icon.clone(),
+            icon_image: sp.icon_image.clone(),
+            accent: sp.accent,
+            profile_id: sp.profile_id.clone(),
+            shortcut: sp.shortcut.clone(),
             pinned: Vec::new(),
             today: Vec::new(),
             bookmarks: Vec::new(),
-            ..sp.clone()
+            other: sp.other.clone(),
         };
         spaces.iter().map(empty).collect()
     };
@@ -466,31 +482,45 @@ pub fn merge(
         space.today = build.tabs(&Place::Today(space.id.clone()));
         space.bookmarks = build.nodes(&Place::Bookmarks(space.id.clone()));
     }
+    // What a newer version wrote on a favorites list, merged like a field.
+    let list_other = |snap: &SidebarSnapshot, profile: &Id| {
+        (snap.favorites.iter().find(|f| f.profile_id == *profile))
+            .map(|f| f.other.clone())
+            .unwrap_or_default()
+    };
     let mut favorites: Vec<FavoriteSet> = Vec::new();
     for set in remote.favorites.iter().chain(&local.favorites) {
-        if favorites.iter().all(|f| f.profile_id != set.profile_id) {
+        let id = &set.profile_id;
+        if favorites.iter().all(|f| f.profile_id != *id) {
             favorites.push(FavoriteSet {
-                profile_id: set.profile_id.clone(),
-                items: build.tabs(&Place::Favorites(set.profile_id.clone())),
-                other: crate::Other::new(),
+                profile_id: id.clone(),
+                items: build.tabs(&Place::Favorites(id.clone())),
+                other: fields(
+                    &list_other(base, id),
+                    &list_other(local, id),
+                    &list_other(remote, id),
+                ),
             });
         }
     }
-    let profiles: fn(&Profile) -> &Id = |p| &p.id;
-    SidebarSnapshot {
-        format: local.format.clone(),
-        version: local.version,
-        profiles: records(
-            &base.profiles,
-            &local.profiles,
-            &remote.profiles,
-            profiles,
-            &HashSet::new(),
-        ),
+    // Written in this version's format, whichever version wrote the sides.
+    let mut merged = SidebarSnapshot {
         favorites,
         spaces,
-        other: crate::Other::new(),
-    }
+        other: fields(&base.other, &local.other, &remote.other),
+        ..SidebarSnapshot::new()
+    };
+    // A profile that something still runs in stays, as a space does.
+    let needed: HashSet<Id> = merged.profiles_in_use().cloned().collect();
+    let profiles: fn(&Profile) -> &Id = |p| &p.id;
+    merged.profiles = records(
+        &base.profiles,
+        &local.profiles,
+        &remote.profiles,
+        profiles,
+        &needed,
+    );
+    merged
 }
 
 #[cfg(test)]
@@ -912,6 +942,16 @@ mod tests {
         let names: Vec<&str> = merged.profiles.iter().map(|p| p.name.as_str()).collect();
         assert_eq!(names, ["Default", "Job", "Mine"]);
         assert_eq!(merged.profiles[1].color, Some(crate::Color::rgb(1, 2, 3)));
+
+        // Removed on one device, put to use on the other: it stays. One
+        // nothing runs in still goes.
+        let (mut local, mut remote) = (base.clone(), base.clone());
+        local.profiles.retain(|p| p.id == "p");
+        remote.spaces[0].profile_id = "work".into();
+        let merged = merge(&base, &local, &remote);
+        assert_eq!(merged.spaces[0].profile_id, "work");
+        let ids: Vec<&str> = merged.profiles.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, ["p", "work"]);
     }
 
     #[test]
@@ -960,6 +1000,12 @@ mod tests {
         remote.spaces[0]
             .other
             .insert("wallpaper".into(), "hills".into());
+        let SidebarNode::Folder(f) = &mut remote.spaces[0].pinned[1] else {
+            panic!("folder expected")
+        };
+        f.other.insert("stripe".into(), "red".into());
+        remote.favorites[0].other.insert("shelf".into(), 2.into());
+        remote.other.insert("mood".into(), "calm".into());
         find_mut(&mut local, "t1").title = "Named".into();
         let merged = merge(&base, &local, &remote);
         let t1 = find(&merged, "t1");
@@ -968,6 +1014,12 @@ mod tests {
             ("Named", &"new".into())
         );
         assert_eq!(merged.spaces[0].other["wallpaper"], "hills");
+        let SidebarNode::Folder(f) = &merged.spaces[0].pinned[1] else {
+            panic!("folder expected")
+        };
+        assert_eq!(f.other["stripe"], "red");
+        assert_eq!(merged.favorites[0].other["shelf"], 2);
+        assert_eq!(merged.other["mood"], "calm");
     }
 
     #[test]

@@ -91,14 +91,18 @@ from a context Magnetite did not make is not opened.
 ## Private profiles leave nothing behind
 
 - Their Today tabs are not saved to `state.json`, not synced and not
-  archived when closed (`AppState::lasting_sidebar`, `archive_tab`). Their
+  archived when closed (`AppState::lasting_sidebar`, `archive_tab`), nor
+  saved with the sidebar last agreed with the sync chain, which can come
+  from a device where the profile is not private (`lasting_copy`). Their
   pinned tabs and favorites are saved with their home address only, never
   where they went.
 - Whether a profile is private is this device's: a synced sidebar cannot
-  change it for a profile this device has. A page that stays open through a
-  pull keeps its address, title and profile; if the other device moved its
-  tab to another profile, or made it private or not, the page closes
-  (`adopt_sidebar`).
+  change it for a profile this device has. Where the profile is lasting on
+  another device, what this device writes keeps that device's tabs in it as
+  the chain has them, never as browsed here (`carry_private_tabs`). A page
+  that stays open through a pull keeps its address, title and profile; if
+  the other device moved its tab to another profile, or made it private or
+  not, the page closes (`adopt_sidebar`).
 - They leave no history: their pages are not recorded (`history.rs`,
   `record_visit`), in a tab or a peek.
 - Their favicons are not cached on disk. The page fetches its icon in its

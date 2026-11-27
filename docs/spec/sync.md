@@ -83,7 +83,8 @@ the web for the words.
 
 Each device keeps the sidebar it and the chain last agreed on: the one it
 took, or the one it wrote. What differs from that is what the device
-changed since, also before a restart. When a newer sidebar arrives, those
+changed since, also before a restart. It is saved like the device's own
+sidebar: nothing of a profile that is private here goes to disk with it. When a newer sidebar arrives, those
 changes go into it, and nothing is lost for having synced second:
 
 - Everything is told apart by its id: spaces, folders, tabs, favorites,
@@ -98,7 +99,11 @@ changes go into it, and nothing is lost for having synced second:
 - What one device removed goes, unless the other changed it meanwhile: a
   tab closed on one device and used on the other stays open.
 - A folder or space removed on one device stays if the other put something
-  into it or changed something in it meanwhile, with just that.
+  into it or changed something in it meanwhile, with just that. So does a
+  profile removed on one device that the other put to use.
+- Each device removed the spaces the other kept: a sidebar cannot be without
+  one, so the chain's sidebar is taken as it arrives, as where both changed
+  the same thing.
 - The order of a list is that of the device that reordered it (of the one
   that synced first, if both did). What the other device added goes behind
   the tab it follows there, or first.
@@ -226,6 +231,12 @@ it:
   one is the default, is decided here. A profile only this device has
   keeps its favorites. Cookies and logins of a profile are deleted only
   when the profile is deleted here.
+- A profile can be private here and not on another device. That device's
+  Today tabs in it show here as private tabs, and what this device writes
+  leaves them, and where that device's pinned tabs and favorites in it
+  went, on the chain as they are there: closing one of those tabs here
+  does not close it there. Nothing of this device's browsing in the
+  profile is sent.
 - Deleting a profile counts for the device it is done on. The other
   devices keep the profile until it is deleted there, and the device that
   deleted it does not take it back from their list. It returns only with a
@@ -268,10 +279,11 @@ way:
   it came. This version does not read it, and it merges like any other
   field. Such a field goes only with the thing it belongs to.
 - A change to the format that an older version must not write over raises
-  the sidebar's `version` (1 today). A device that finds a higher one than
-  it knows does not take that sidebar and writes none; Settings → Sync says
-  that Magnetite has to be updated. Everything else on the device goes on,
-  the other collections included.
+  the sidebar's `version` (1 today). A device writes its own version,
+  whichever version wrote the sidebar it took. A device that finds a higher
+  one than it knows does not take that sidebar and writes none; Settings →
+  Sync says that Magnetite has to be updated. Everything else on the device
+  goes on, the other collections included.
 
 ## Safety
 

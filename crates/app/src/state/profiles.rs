@@ -147,6 +147,10 @@ impl AppState {
             })
             .collect();
         for set in std::mem::take(&mut self.sidebar.favorites) {
+            // What a newer version wrote on the list stays with it.
+            if let Some(list) = lists.iter_mut().find(|l| l.profile_id == set.profile_id) {
+                list.other.extend(set.other);
+            }
             for mut tab in set.items {
                 let own = tab.profile_id.clone();
                 let wanted = match &own {
@@ -635,7 +639,10 @@ mod tests {
             items: vec![tab("news")],
             other: magnetite_core::Other::new(),
         });
+        // Written by a newer version.
+        (s.sidebar.favorites[0].other).insert("shelf".into(), 2.into());
         s.normalise_favorites();
+        assert_eq!(s.sidebar.favorites[0].other["shelf"], 2);
         let lists: Vec<(&str, Vec<&str>)> = s
             .sidebar
             .favorites
