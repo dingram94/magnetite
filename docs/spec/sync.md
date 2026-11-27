@@ -81,7 +81,8 @@ the web for the words.
 
 Each device keeps the sidebar it and the chain last agreed on: the one it
 took, or the one it wrote. What differs from that is what the device
-changed since, also before a restart. When a newer sidebar arrives, those
+changed since, also before a restart. It is saved like the device's own
+sidebar: nothing of a profile that is private here goes to disk with it. When a newer sidebar arrives, those
 changes go into it, and nothing is lost for having synced second:
 
 - Everything is told apart by its id: spaces, folders, tabs, favorites,
@@ -97,6 +98,9 @@ changes go into it, and nothing is lost for having synced second:
   tab closed on one device and used on the other stays open.
 - A folder or space removed on one device stays if the other put something
   into it or changed something in it meanwhile, with just that.
+- Each device removed the spaces the other kept: a sidebar cannot be without
+  one, so the chain's sidebar is taken as it arrives, as where both changed
+  the same thing.
 - The order of a list is that of the device that reordered it (of the one
   that synced first, if both did). What the other device added goes behind
   the tab it follows there, or first.

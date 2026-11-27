@@ -35,7 +35,7 @@ pub(super) struct Persisted {
     deleted_profiles: Vec<Id>,
     #[serde(default)]
     unsynced_spaces: BTreeSet<Id>,
-    /// `AppState::synced_sidebar`.
+    /// `AppState::synced_sidebar`, as it may be saved (`lasting_copy`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     synced_sidebar: Option<SidebarSnapshot>,
     /// Where the window was that `active_space` and `active_tab` are of.
@@ -380,7 +380,7 @@ impl AppState {
             downloads: self.downloads.lasting(),
             deleted_profiles: self.deleted_profiles.clone(),
             unsynced_spaces: self.unsynced_spaces.clone(),
-            synced_sidebar: self.synced_sidebar.clone(),
+            synced_sidebar: self.synced_sidebar.as_ref().map(|s| self.lasting_copy(s)),
             windows,
         }
     }
@@ -635,6 +635,45 @@ mod tests {
         s.persist();
         let loaded = AppState::load_or_default(&dir, ArcImport::Never);
         assert_eq!(loaded.synced_sidebar, None);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn the_agreed_copy_keeps_a_private_profiles_browsing_off_disk() {
+        use crate::state::testing::tab;
+        use magnetite_core::{SidebarNode, TabItem};
+        let mut s = state();
+        s.settings.sync.enabled = true;
+        // Private here, lasting on the device the copy came from.
+        s.sidebar.profiles.push(Profile {
+            id: "secret".into(),
+            name: "Secret".into(),
+            is_default: false,
+            ephemeral: true,
+            color: None,
+        });
+        let mut agreed = s.sidebar_for_sync();
+        let space = &mut agreed.spaces[0];
+        space.today.push(TabItem {
+            profile_id: Some("secret".into()),
+            ..tab("theirs")
+        });
+        let SidebarNode::Tab(pinned) = &mut space.pinned[0] else {
+            panic!("a pinned tab")
+        };
+        pinned.profile_id = Some("secret".into());
+        pinned.url = "https://example.org/went".into();
+        s.synced_sidebar = Some(agreed.clone());
+        s.persist();
+        let dir = s.data_dir().to_path_buf();
+        let saved = std::fs::read_to_string(dir.join("state.json")).unwrap();
+        assert!(
+            !saved.contains("example.org/theirs"),
+            "no private Today tab"
+        );
+        assert!(!saved.contains("example.org/went"), "a pinned one at home");
+        // What this device and the chain agree on stays as it was.
+        assert_eq!(s.synced_sidebar, Some(agreed));
         let _ = std::fs::remove_dir_all(dir);
     }
 
