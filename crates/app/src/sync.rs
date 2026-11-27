@@ -231,18 +231,21 @@ pub enum Outcome {
     /// Starting or joining a chain did not work.
     ConnectFailed(String),
     /// Remote had newer data; the app should replace its own and re-present.
+    /// `agreed` as in `Pushed`: the sidebar can go through while the
+    /// settings arrive.
     Pulled {
         sidebar: Option<SidebarSnapshot>,
         settings: Option<SyncedSettingsPublic>,
         versions: Vec<(String, u64)>,
+        agreed: Option<Box<SidebarSnapshot>>,
     },
     /// Pushed successfully (or nothing to push); remember the new versions.
-    /// `sidebar`: the sidebar of this round, when the server now holds
+    /// `agreed`: the sidebar of this round, when the server now holds
     /// exactly it (written, or there already): what this device and the
     /// chain agree on, which a later merge starts from.
     Pushed {
         versions: Vec<(String, u64)>,
-        sidebar: Option<Box<SidebarSnapshot>>,
+        agreed: Option<Box<SidebarSnapshot>>,
     },
     /// Another device wrote while this one was about to: the round is run
     /// again, which takes what that device wrote first.
@@ -836,17 +839,16 @@ impl Worker {
             }
         }
         let mut outcomes = Vec::new();
+        let agreed = held.then(|| Box::new(snapshot.clone()));
         if pulled_sidebar.is_some() || pulled_settings.is_some() {
             outcomes.push(Outcome::Pulled {
                 sidebar: pulled_sidebar,
                 settings: pulled_settings,
                 versions,
+                agreed,
             });
         } else if errors.is_empty() || !versions.is_empty() {
-            outcomes.push(Outcome::Pushed {
-                versions,
-                sidebar: held.then(|| Box::new(snapshot.clone())),
-            });
+            outcomes.push(Outcome::Pushed { versions, agreed });
         }
         // Last: a collection that went through must not hide the other's
         // failure.
@@ -1213,6 +1215,53 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_sidebar_written_while_the_settings_arrive_is_agreed_on() {
+        let code = SyncCode::generate();
+        let server = {
+            let keys = code.keys();
+            let sidebar = keys.collection_id(SIDEBAR);
+            fake_server(move |method, path| {
+                if method == "PUT" {
+                    return (200, r#"{"version":4}"#.into());
+                }
+                // The sidebar as this device saw it last; settings another
+                // device wrote since.
+                let (id, version, plain) = if path.ends_with(sidebar.as_str()) {
+                    let plain = serde_json::to_vec(&snapshot("Old")).unwrap();
+                    (sidebar.clone(), 3, plain)
+                } else {
+                    let plain = SyncedSettings::from(&Settings::default());
+                    let plain = serde_json::to_vec(&plain).unwrap();
+                    (keys.collection_id(SETTINGS), 4, plain)
+                };
+                let sealed = keys.seal(&id, version, &plain).unwrap();
+                let body = CollectionResponse::new(version, sealed);
+                (200, serde_json::to_string(&body).unwrap())
+            })
+        };
+        let dir = data_dir("written-and-pulled");
+        save_code(&dir, &code).unwrap();
+        let mut w = Worker::new(dir, SyncSettings::default());
+        let mut settings = sync_settings(3);
+        settings.sync.server_url = server;
+        let out = w.sync(&snapshot("New"), &settings, false);
+        // The settings are taken, and the device still learns that the
+        // chain holds its sidebar now.
+        let [
+            Outcome::Pulled {
+                sidebar: None,
+                settings: Some(_),
+                agreed,
+                ..
+            },
+        ] = out.as_slice()
+        else {
+            panic!("{:?}", out.iter().map(describe).collect::<Vec<_>>())
+        };
+        assert_eq!(agreed.as_deref(), Some(&snapshot("New")));
+    }
+
     /// A worker whose server holds a phone's sent tab in `devices`, at the
     /// version in the first counter (0: nothing there); it answers writes
     /// with the status in the second.
@@ -1433,7 +1482,7 @@ mod tests {
         for _ in 0..3 {
             let out = w.sync(&snapshot("Same"), &settings, false);
             assert!(
-                matches!(out.as_slice(), [Outcome::Pushed { versions, sidebar: Some(agreed) }]
+                matches!(out.as_slice(), [Outcome::Pushed { versions, agreed: Some(agreed) }]
                     if versions.is_empty() && **agreed == snapshot("Same")),
                 "{:?}",
                 out.iter().map(describe).collect::<Vec<_>>()
@@ -1446,7 +1495,7 @@ mod tests {
         // either: the other device would take it and answer in kind.
         let out = w.sync(&snapshot("Kept here"), &settings, true);
         assert!(
-            matches!(out.as_slice(), [Outcome::Pushed { versions, sidebar: None }] if versions.is_empty())
+            matches!(out.as_slice(), [Outcome::Pushed { versions, agreed: None }] if versions.is_empty())
         );
         assert_eq!(puts.load(Ordering::SeqCst), 0);
 
@@ -1462,11 +1511,11 @@ mod tests {
 
         // A changed sidebar is written; the unchanged settings are not.
         let out = w.sync(&snapshot("Renamed"), &settings, false);
-        let [Outcome::Pushed { versions, sidebar }] = out.as_slice() else {
+        let [Outcome::Pushed { versions, agreed }] = out.as_slice() else {
             panic!("{:?}", out.iter().map(describe).collect::<Vec<_>>())
         };
         assert_eq!(versions, &[(SIDEBAR.into(), 4)]);
-        assert_eq!(sidebar.as_deref(), Some(&snapshot("Renamed")));
+        assert_eq!(agreed.as_deref(), Some(&snapshot("Renamed")));
         assert_eq!(puts.load(Ordering::SeqCst), 1);
     }
 

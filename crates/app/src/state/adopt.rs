@@ -211,7 +211,11 @@ impl AppState {
                 let mine = self.sidebar_for_sync();
                 let merged = (self.synced_sidebar.as_ref())
                     .filter(|agreed| **agreed != mine)
-                    .map(|agreed| magnetite_core::merge::merge(agreed, &mine, &remote));
+                    .map(|agreed| magnetite_core::merge::merge(agreed, &mine, &remote))
+                    // Each device removed the spaces the other kept: no
+                    // sidebar can be without one, so the chain's is taken
+                    // as it is, as where both changed the same thing.
+                    .filter(|merged| !merged.spaces.is_empty());
                 if let Some(merged) = merged {
                     contents = self.adopt_sidebar(merged);
                     // The chain holds `remote`: this device's changes are
@@ -608,35 +612,61 @@ impl AppState {
         let mut snap = self.sidebar.clone();
         (snap.spaces).retain(|sp| Some(&sp.id) != self.private_space.as_ref());
         (snap.profiles).retain(|p| !self.private_profiles.contains(&p.id));
-        // Private pinned tabs and favorites keep their home address, not
-        // where they went: the page's later addresses and titles are
-        // browsing in a private profile.
-        let forget = |t: &mut TabItem| {
-            if self.is_private_tab(&t.id) {
-                if let Some(home) = &t.home_url {
-                    t.url.clone_from(home);
-                }
-                if !t.custom_title {
-                    t.title.clone_from(&t.url);
-                }
-            }
-        };
-        fn walk(nodes: &mut [SidebarNode], forget: &dyn Fn(&mut TabItem)) {
-            for node in nodes {
-                match node {
-                    SidebarNode::Tab(t) => forget(t),
-                    SidebarNode::Folder(f) => walk(&mut f.children, forget),
-                }
-            }
-        }
-        for set in &mut snap.favorites {
-            set.items.iter_mut().for_each(forget);
-        }
-        for space in &mut snap.spaces {
-            space.today.retain(|t| !self.is_private_tab(&t.id));
-            walk(&mut space.pinned, &forget);
-        }
+        forget_private(&mut snap, &|t, _| self.is_private_tab(&t.id));
         snap
+    }
+
+    /// `snap`, a sidebar this device and its chain agreed on
+    /// (`synced_sidebar`), as it may be saved here: what runs in a profile
+    /// private on this device is left out as `lasting_sidebar` leaves it
+    /// out of the device's own. The copy can come from another device, or
+    /// from before a profile was made private, so it is judged by this
+    /// device's profiles as they are now, the way `is_private_tab` judges.
+    pub(super) fn lasting_copy(&self, snap: &SidebarSnapshot) -> SidebarSnapshot {
+        let profile = |id: &str| self.sidebar.profiles.iter().find(|p| p.id == id);
+        let mut snap = snap.clone();
+        forget_private(&mut snap, &|t, owner| match &t.profile_id {
+            // A profile of its own that this device does not have: private.
+            Some(own) => profile(own).is_none_or(|p| p.ephemeral),
+            None => profile(owner).is_some_and(|p| p.ephemeral),
+        });
+        snap
+    }
+}
+
+/// Take out of `snap` what private profiles keep in memory: the Today tabs
+/// `private` names go, and such pinned tabs and favorites keep their home
+/// address, not where they went (the page's later addresses and titles are
+/// browsing in a private profile). `private` gets a tab and the profile of
+/// the space or favorites list it is in.
+fn forget_private(snap: &mut SidebarSnapshot, private: &dyn Fn(&TabItem, &str) -> bool) {
+    fn forget(t: &mut TabItem) {
+        if let Some(home) = &t.home_url {
+            t.url.clone_from(home);
+        }
+        if !t.custom_title {
+            t.title.clone_from(&t.url);
+        }
+    }
+    fn walk(nodes: &mut [SidebarNode], owner: &str, private: &dyn Fn(&TabItem, &str) -> bool) {
+        for node in nodes {
+            match node {
+                SidebarNode::Tab(t) if private(t, owner) => forget(t),
+                SidebarNode::Tab(_) => {}
+                SidebarNode::Folder(f) => walk(&mut f.children, owner, private),
+            }
+        }
+    }
+    for set in &mut snap.favorites {
+        for t in &mut set.items {
+            if private(t, &set.profile_id) {
+                forget(t);
+            }
+        }
+    }
+    for space in &mut snap.spaces {
+        space.today.retain(|t| !private(t, &space.profile_id));
+        walk(&mut space.pinned, &space.profile_id, private);
     }
 }
 
@@ -810,6 +840,34 @@ mod tests {
         s.adopt_pull(Some(remote(&["x"])), None, vec![("sidebar".into(), 1)]);
         assert!(s.find_tab("mine").is_none());
         assert!(s.find_tab("x").is_some());
+        assert!(!s.sidebar_to_write());
+    }
+
+    #[test]
+    fn a_merge_that_leaves_no_space_takes_the_chains_sidebar() {
+        let mut s = state();
+        s.settings.sync.enabled = true;
+        let first = s.active_space.clone();
+        s.sidebar.spaces.push(magnetite_core::Space {
+            id: "second".into(),
+            title: "Second".into(),
+            pinned: vec![],
+            today: vec![tab("x")],
+            ..s.sidebar.spaces[0].clone()
+        });
+        let agreed = s.sidebar_for_sync();
+        s.synced_sidebar = Some(agreed.clone());
+        // Each device removes the space the other keeps.
+        s.sidebar.spaces.retain(|sp| sp.id == "second");
+        let mut theirs = agreed;
+        theirs.spaces.retain(|sp| sp.id == first);
+
+        s.adopt_pull(Some(theirs.clone()), None, vec![("sidebar".into(), 5)]);
+        let spaces: Vec<&str> = s.sidebar.spaces.iter().map(|sp| sp.id.as_str()).collect();
+        assert_eq!(spaces, [first.as_str()]);
+        assert!(s.find_tab("b").is_some());
+        assert_eq!(s.active_space, first);
+        assert_eq!(s.settings.sync.versions["sidebar"], 5);
         assert!(!s.sidebar_to_write());
     }
 

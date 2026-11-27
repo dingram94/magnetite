@@ -91,9 +91,14 @@ impl Flat {
                     self.add(Item::Tab(t.clone()), place);
                 }
                 SidebarNode::Folder(f) => {
+                    // Field by field: the children are not copied only to
+                    // be dropped.
                     let shell = Folder {
+                        id: f.id.clone(),
+                        title: f.title.clone(),
+                        icon: f.icon.clone(),
                         children: Vec::new(),
-                        ..f.clone()
+                        smart: f.smart.clone(),
                     };
                     if self.add(Item::Folder(shell), place) {
                         self.nodes(&f.children, &Place::Folder(f.id.clone()));
@@ -439,12 +444,20 @@ pub fn merge(
     let needed: HashSet<Id> = (kept.items.values())
         .filter_map(|(_, place)| place.space().cloned())
         .collect();
+    // Spaces without what is in them, field by field: their lists are not
+    // copied only to be dropped.
     let shell = |spaces: &[Space]| -> Vec<Space> {
         let empty = |sp: &Space| Space {
+            id: sp.id.clone(),
+            title: sp.title.clone(),
+            icon: sp.icon.clone(),
+            icon_image: sp.icon_image.clone(),
+            accent: sp.accent,
+            profile_id: sp.profile_id.clone(),
+            shortcut: sp.shortcut.clone(),
             pinned: Vec::new(),
             today: Vec::new(),
             bookmarks: Vec::new(),
-            ..sp.clone()
         };
         spaces.iter().map(empty).collect()
     };
