@@ -47,6 +47,12 @@ pub struct Archive {
     /// Oldest first.
     #[serde(default)]
     pub entries: Vec<ArchivedTab>,
+    /// Records archived before this time may be missing here only because
+    /// they did not fit (`SYNCED_MOST`), not because they were removed. Set
+    /// by a device that sent the newest records only, and carried on by
+    /// every later write (`to_write`), so it never goes back.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub left_out_before: Option<UnixSeconds>,
     #[serde(flatten)]
     pub other: Other,
 }
@@ -58,8 +64,25 @@ impl Archive {
         Self {
             version: Self::VERSION,
             entries,
+            left_out_before: None,
             other: Other::new(),
         }
+    }
+
+    /// What a device writes over `chain` (the chain's copy, none before the
+    /// first write): its own records (`mine`, as `newest` gives them), with
+    /// what the chain's copy says beyond them kept, fields of a newer
+    /// version included. `mine` at the limit may have left records out.
+    #[must_use]
+    pub fn to_write(chain: Option<Self>, mine: Vec<ArchivedTab>) -> Self {
+        let cut = (mine.len() >= SYNCED_MOST)
+            .then(|| mine.first().map(|e| e.archived_at))
+            .flatten();
+        let mut a = chain.unwrap_or_else(|| Self::new(Vec::new()));
+        a.version = Self::VERSION;
+        a.left_out_before = a.left_out_before.max(cut);
+        a.entries = mine;
+        a
     }
 }
 
@@ -96,23 +119,21 @@ pub fn newest(mut entries: Vec<ArchivedTab>, most: usize) -> Vec<ArchivedTab> {
 /// - What either side removed since (a tab brought back, deleted or past
 ///   its time) is gone.
 /// - Without `agreed` nothing counts as removed: both sides' records stay.
-/// - A full `remote` holds only the newest records, so one that is older
-///   than all of it was not removed there, it no longer fits: this device
-///   keeps it.
+/// - The chain holds only the newest records: one older than
+///   `left_out_before` (`Archive::left_out_before`) that is missing there
+///   was not removed, it did not fit. This device keeps it.
 #[must_use]
 pub fn merge(
     agreed: Option<&[Key]>,
     local: &[ArchivedTab],
     remote: &[ArchivedTab],
+    left_out_before: Option<UnixSeconds>,
 ) -> Vec<ArchivedTab> {
     let agreed: Option<HashSet<&Key>> = agreed.map(|keys| keys.iter().collect());
     let was_agreed = |key: &Key| agreed.as_ref().is_some_and(|a| a.contains(key));
     let theirs: HashSet<Key> = remote.iter().map(ArchivedTab::key).collect();
     let mine: HashSet<Key> = local.iter().map(ArchivedTab::key).collect();
-    let full_from = (remote.len() >= SYNCED_MOST)
-        .then(|| remote.iter().map(|e| e.archived_at).min())
-        .flatten();
-    let pushed_out = |e: &ArchivedTab| full_from.is_some_and(|oldest| e.archived_at < oldest);
+    let pushed_out = |e: &ArchivedTab| left_out_before.is_some_and(|t| e.archived_at < t);
     let kept = local.iter().filter(|e| {
         let key = e.key();
         theirs.contains(&key) || !was_agreed(&key) || pushed_out(e)
@@ -146,7 +167,7 @@ mod tests {
         let agreed = [entry("a", 1), entry("b", 2)];
         let local = [entry("a", 1), entry("b", 2), entry("here", 5)];
         let remote = [entry("a", 1), entry("b", 2), entry("there", 4)];
-        let merged = merge(Some(&keys(&agreed)), &local, &remote);
+        let merged = merge(Some(&keys(&agreed)), &local, &remote, None);
         assert_eq!(ids(&merged), ["a", "b", "there", "here"]);
     }
 
@@ -156,7 +177,7 @@ mod tests {
         // Here `a` was brought back, there `c` was deleted.
         let local = [entry("b", 2), entry("c", 3)];
         let remote = [entry("a", 1), entry("b", 2)];
-        let merged = merge(Some(&keys(&agreed)), &local, &remote);
+        let merged = merge(Some(&keys(&agreed)), &local, &remote, None);
         assert_eq!(ids(&merged), ["b"]);
     }
 
@@ -166,10 +187,10 @@ mod tests {
         // Brought back here and closed again later; there it never left.
         let local = [entry("a", 9)];
         let remote = [entry("a", 1)];
-        let merged = merge(Some(&keys(&agreed)), &local, &remote);
+        let merged = merge(Some(&keys(&agreed)), &local, &remote, None);
         assert_eq!(keys(&merged), [("a".to_string(), 9)]);
         // Closed on both devices, without knowing of each other: once.
-        let merged = merge(None, &[entry("a", 9)], &[entry("a", 7)]);
+        let merged = merge(None, &[entry("a", 9)], &[entry("a", 7)], None);
         assert_eq!(keys(&merged), [("a".to_string(), 9)]);
     }
 
@@ -178,7 +199,7 @@ mod tests {
         let local = [entry("mine", 3), entry("both", 1)];
         let remote = [entry("both", 1), entry("theirs", 2)];
         assert_eq!(
-            ids(&merge(None, &local, &remote)),
+            ids(&merge(None, &local, &remote, None)),
             ["both", "theirs", "mine"]
         );
     }
@@ -193,16 +214,55 @@ mod tests {
         };
         // Agreed on records 10 and up; the chain then got ten newer ones,
         // and holds 20 and up.
-        let (agreed, remote) = (many(10), many(20));
-        let merged = merge(Some(&keys(&agreed)), &agreed, &remote);
+        let agreed = many(10);
+        let chain = Archive::to_write(None, many(20));
+        assert_eq!(chain.left_out_before, Some(20));
+        let merged = merge(
+            Some(&keys(&agreed)),
+            &agreed,
+            &chain.entries,
+            chain.left_out_before,
+        );
         assert_eq!(merged.len(), SYNCED_MOST + 10);
         assert_eq!(merged[0].tab.id, "t10", "not removed there, only too old");
+        // A device that joined after that holds only the chain's records,
+        // and brings one back: the chain is no longer full, and still says
+        // what it left out.
+        let mut joined = chain.entries.clone();
+        joined.retain(|e| e.tab.id != "t500");
+        let chain = Archive::to_write(Some(chain), joined);
+        assert_eq!(chain.entries.len(), SYNCED_MOST - 1);
+        let merged = merge(
+            Some(&keys(&agreed)),
+            &agreed,
+            &chain.entries,
+            chain.left_out_before,
+        );
+        assert_eq!(merged[0].tab.id, "t10", "still only too old");
         // A newer one that is missing there was removed.
-        let mut remote = remote;
-        remote.retain(|e| e.tab.id != "t500");
-        remote.push(entry("more", 5000));
-        let merged = merge(Some(&keys(&agreed)), &agreed, &remote);
         assert!(merged.iter().all(|e| e.tab.id != "t500"));
+    }
+
+    #[test]
+    fn a_write_keeps_what_the_chain_says_beyond_its_records() {
+        let mut chain = Archive::new(vec![entry("a", 1)]);
+        chain.left_out_before = Some(1);
+        chain.other.insert("sorted".into(), "by day".into());
+        let written = Archive::to_write(Some(chain), vec![entry("b", 2)]);
+        assert_eq!(ids(&written.entries), ["b"]);
+        assert_eq!(written.left_out_before, Some(1));
+        assert_eq!(written.other["sorted"], "by day");
+        // Never further back than a mark there was.
+        let mut chain = written;
+        chain.left_out_before = Some(50);
+        let many: Vec<_> = (0..)
+            .take(SYNCED_MOST)
+            .map(|at| entry(&format!("t{at}"), at))
+            .collect();
+        assert_eq!(
+            Archive::to_write(Some(chain), many).left_out_before,
+            Some(50)
+        );
     }
 
     #[test]

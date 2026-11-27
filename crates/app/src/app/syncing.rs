@@ -198,7 +198,7 @@ impl MagnetiteApp {
                     // merged in, and written right after.
                     let merged = pulled.is_some();
                     if let Some(remote) = pulled {
-                        s.adopt_archive(remote);
+                        s.adopt_archive(*remote);
                     }
                     merged && s.archive_to_write()
                 });

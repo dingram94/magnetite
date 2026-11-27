@@ -51,7 +51,9 @@ The period is one of the settings that sync (`sync.md`).
 ## Finding and restoring
 
 - `Cmd+Shift+T`, History → Reopen Closed Tab, or the command "Reopen last
-  archived tab" restores the tab archived last.
+  archived tab" restores the tab archived last on this device. A tab
+  closed on another device comes back from the archive view or the command
+  bar.
 - The archive view replaces the sidebar. It opens from the archive and
   downloads button in the footer or with the command "Open archive". It
   lists the newest 300 archived tabs by day, with their space, and has a
@@ -77,7 +79,9 @@ The archive is the `archive` list in `<data-dir>/state.json`, oldest first.
 Each record holds the tab (address, title, a custom name, times of creation
 and last use, home page and profile if it had them), the id of its space and
 the time it was archived. Icons are not part of it; the view uses the icon
-cache (`sidebar.md`). The file is readable by its owner only.
+cache (`sidebar.md`). Next to it, `closed_here` holds the ids of the last
+100 tabs this device archived, for "Reopen Closed Tab". The file is
+readable by its owner only.
 
 ## How long records stay
 
@@ -93,7 +97,8 @@ A typed number is saved on Enter or when the field is left. A shorter period
 deletes older records within a minute, and they cannot be brought back. The
 period is one of the settings that sync (`sync.md`): a record deleted for
 its age on one device is deleted on the others, so they keep records
-equally long.
+equally long. Settings written by a version from before the archive synced
+do not name a period, and leave this device's as it is.
 
 ## On other devices
 
@@ -113,7 +118,10 @@ any other of the chain.
 - The chain holds the newest 2000 records, about 1 MiB as they are sent:
   every change writes all of them. A device may hold more (with "Forever",
   or a long period); the older ones stay on it, and are not deleted for no
-  longer being in the chain.
+  longer being in the chain. Once records were left out for room, the
+  chain says from when on it is complete, and every later write keeps
+  saying so: a record older than that is not taken as removed for missing
+  there.
 - Not sent, as with the sidebar: tabs of a space kept on this device and
   tabs that ran in a profile kept on it. They stay in this device's
   archive. Tabs of private profiles are never archived.

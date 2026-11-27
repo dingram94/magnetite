@@ -240,6 +240,11 @@ pub struct AppState {
     pub runtime: HashMap<Id, TabRuntime>,
     pub content_to_tab: HashMap<ContentId, Id>,
     pub archive: Vec<ArchivedTab>,
+    /// The tabs this device archived, oldest first, the last
+    /// `CLOSED_HERE_KEPT`: "Reopen closed tab" takes one of them, not a tab
+    /// closed on another device that synced in later
+    /// (`reopen_closed_here`). Saved.
+    pub closed_here: Vec<Id>,
     /// Pages visited on this device (`history.json`, saved apart).
     pub history: History,
     /// Split views: which tabs tile the page area together, and how. A tab

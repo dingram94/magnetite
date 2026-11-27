@@ -36,6 +36,7 @@ pub(crate) fn state() -> AppState {
         runtime: HashMap::new(),
         content_to_tab: HashMap::new(),
         archive: vec![],
+        closed_here: Vec::new(),
         history: super::History::load(&dir),
         splits: Vec::new(),
         peeks: HashMap::new(),

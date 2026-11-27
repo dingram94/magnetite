@@ -58,6 +58,10 @@ pub struct TabSwitch {
     pub round: u64,
 }
 
+/// How many of the tabs it archived a device remembers for "Reopen closed
+/// tab" (`AppState::closed_here`).
+pub(super) const CLOSED_HERE_KEPT: usize = 100;
+
 impl AppState {
     /// The tab to show on switching to space `id`: the one last used there if
     /// it is still in that space or a favorite, else the space's first tab.
@@ -737,8 +741,24 @@ impl AppState {
                 archived_at: now(),
                 other: magnetite_core::Other::new(),
             });
+            self.closed_here.push(id.to_string());
+            let over = self.closed_here.len().saturating_sub(CLOSED_HERE_KEPT);
+            self.closed_here.drain(..over);
         }
         self.forget_tab(id)
+    }
+
+    /// "Reopen closed tab": restore the tab this device archived last that
+    /// is still in the archive (`closed_here`). A tab closed on another
+    /// device comes back from the archive view or the command bar only.
+    /// Returns its id.
+    pub fn reopen_closed_here(&mut self) -> Option<Id> {
+        while let Some(id) = self.closed_here.pop() {
+            if let Some(pos) = self.archive.iter().rposition(|a| a.tab.id == id) {
+                return self.restore_archived(pos);
+            }
+        }
+        None
     }
 
     /// Archive pinned tab `id` (`remove_pinned`) at the page it was pinned
@@ -1514,6 +1534,26 @@ mod tests {
         (p.url, p.title, p.custom_title) = ("https://example.org/p/x".into(), "Work".into(), true);
         s.archive_pinned("p");
         assert_eq!(s.archive.pop().unwrap().tab.title, "Work");
+    }
+
+    #[test]
+    fn reopen_closed_takes_the_tab_closed_here_not_one_closed_elsewhere() {
+        let mut s = state();
+        s.archive_tab("a");
+        s.archive_tab("b");
+        // `b` came back from the archive view; then another device's newer
+        // record synced in, and sorts last.
+        let pos = s.archive.iter().position(|e| e.tab.id == "b").unwrap();
+        s.restore_archived(pos);
+        s.archive.push(ArchivedTab {
+            tab: tab("elsewhere"),
+            space_id: s.active_space.clone(),
+            archived_at: now() + 60,
+            other: magnetite_core::Other::new(),
+        });
+        assert_eq!(s.reopen_closed_here().as_deref(), Some("a"));
+        assert_eq!(s.reopen_closed_here(), None, "nothing else closed here");
+        assert_eq!(s.archive.len(), 1);
     }
 
     #[test]

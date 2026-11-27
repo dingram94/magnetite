@@ -23,6 +23,10 @@ pub(super) struct Persisted {
     active_tab: HashMap<Id, Id>,
     #[serde(default)]
     archive: Vec<ArchivedTab>,
+    /// `AppState::closed_here`. Missing in a file from before the archive
+    /// synced, whose archive this device closed all of.
+    #[serde(default)]
+    closed_here: Option<Vec<Id>>,
     #[serde(default)]
     favicons: HashMap<Id, String>,
     #[serde(default, deserialize_with = "splits_compat")]
@@ -142,6 +146,17 @@ impl AppState {
             .as_ref()
             .filter(|p| p.settings.sync.enabled)
             .and_then(|p| p.synced_archive.clone());
+        let closed_here = (persisted.as_ref())
+            .map(|p| {
+                p.closed_here.clone().unwrap_or_else(|| {
+                    let from = p
+                        .archive
+                        .len()
+                        .saturating_sub(super::tabs::CLOSED_HERE_KEPT);
+                    p.archive[from..].iter().map(|a| a.tab.id.clone()).collect()
+                })
+            })
+            .unwrap_or_default();
         // `--import-arc`: Arc's sidebar takes the place of the saved one. The
         // archive, settings and downloads stay, and without a sidebar file
         // of Arc nothing changes.
@@ -225,6 +240,7 @@ impl AppState {
             runtime,
             content_to_tab: HashMap::new(),
             archive,
+            closed_here,
             history: super::History::load(data_dir),
             splits,
             peeks: HashMap::new(),
@@ -387,6 +403,7 @@ impl AppState {
             active_tab: first.active_tab,
             placement: first.placement,
             archive: self.archive.clone(),
+            closed_here: Some(self.closed_here.clone()),
             favicons,
             splits: self.splits.clone(),
             settings: self.settings.clone(),

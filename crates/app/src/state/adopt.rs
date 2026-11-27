@@ -599,9 +599,10 @@ impl AppState {
     /// elsewhere are checked like tabs that arrive: an address Magnetite
     /// does not open from stored data is dropped, times are no later than
     /// tomorrow, and each comes back as a plain Today tab.
-    pub fn adopt_archive(&mut self, mut remote: Vec<ArchivedTab>) {
+    pub fn adopt_archive(&mut self, chain: archive::Archive) {
         use crate::url_policy::{Source, allowed};
         let latest = now() + 24 * 60 * 60;
+        let mut remote = chain.entries;
         remote.retain_mut(|e| {
             e.archived_at = e.archived_at.clamp(0, latest);
             for time in [&mut e.tab.created_at, &mut e.tab.last_active_at] {
@@ -615,7 +616,12 @@ impl AppState {
         let remote = archive::newest(remote, archive::SYNCED_MOST);
         let mine = self.archive_for_sync();
         let sent: HashSet<archive::Key> = mine.iter().map(ArchivedTab::key).collect();
-        let merged = archive::merge(self.synced_archive.as_deref(), &mine, &remote);
+        let merged = archive::merge(
+            self.synced_archive.as_deref(),
+            &mine,
+            &remote,
+            chain.left_out_before,
+        );
         let kept = std::mem::take(&mut self.archive)
             .into_iter()
             .filter(|e| !sent.contains(&e.key()));
@@ -1014,7 +1020,7 @@ mod tests {
             },
             ..archived("bad", &space, 4)
         });
-        s.adopt_archive(theirs);
+        s.adopt_archive(archive::Archive::new(theirs));
         let ids: Vec<&str> = s.archive.iter().map(|e| e.tab.id.as_str()).collect();
         assert_eq!(ids, ["own", "theirs", "mine"]);
         // The chain does not have `mine` yet, and still has `b`.

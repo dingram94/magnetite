@@ -1232,10 +1232,7 @@ impl MagnetiteApp {
     }
 
     pub(super) fn reopen_closed(&self, engine: &Engine) {
-        let restored = self.with_state(|s| {
-            let last = s.archive.len().checked_sub(1)?;
-            s.restore_archived(last)
-        });
+        let restored = self.with_state(AppState::reopen_closed_here);
         if let Some(id) = restored {
             self.activate_tab(engine, &id);
         }

@@ -275,8 +275,8 @@ way:
 
 - A field a newer version wrote that this version does not know is kept
   with what it belongs to (the sidebar, a profile, a list of favorites, a
-  space, a folder, a tab, a smart folder's definition) and written back as
-  it came. This version does not read it, and it merges like any other
+  space, a folder, a tab, a smart folder's definition, the archive or one
+  of its records) and written back as it came. This version does not read it, and it merges like any other
   field. Such a field goes only with the thing it belongs to.
 - A change to the format that an older version must not write over raises
   the sidebar's `version` (1 today). A device writes its own version,

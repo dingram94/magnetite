@@ -159,7 +159,7 @@ fn server_base(url: &str) -> Result<String, String> {
 /// `shortcuts` is left out while no shortcut has other keys, so a version
 /// from before them writes the same bytes; such a version writes without
 /// them, which reads as "all on their default keys" here. The same goes
-/// for `shortcut_priority` and `shortcut_sites`.
+/// for `shortcut_priority` and `shortcut_sites`, not for `archive_days`.
 #[derive(Serialize, Deserialize)]
 struct SyncedSettings {
     auto_archive_hours: u32,
@@ -174,21 +174,15 @@ struct SyncedSettings {
     shortcut_priority: magnetite_engine::Priorities,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     shortcut_sites: Vec<String>,
-    /// Left out while it is the usual one, like `shortcuts`.
-    #[serde(
-        default = "usual_archive_days",
-        skip_serializing_if = "is_usual_archive_days"
-    )]
-    archive_days: u32,
-}
-
-fn usual_archive_days() -> u32 {
-    Settings::default().archive_days
-}
-
-#[allow(clippy::trivially_copy_pass_by_ref)] // what serde calls it with
-fn is_usual_archive_days(days: &u32) -> bool {
-    *days == usual_archive_days()
+    /// How long archived tabs are kept. Left out while it is the usual
+    /// period and the chain's copy has none, so a version from before
+    /// writes the same bytes; sent always once the chain's copy has it
+    /// (`period_carried`), so going back to the usual one reaches the
+    /// others. Missing, as a version from before writes, this device's
+    /// stays: read as the usual period it would delete older records for
+    /// good.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    archive_days: Option<u32>,
 }
 
 impl SyncedSettings {
@@ -200,7 +194,8 @@ impl SyncedSettings {
             shortcuts: s.shortcuts.clone(),
             shortcut_priority: s.shortcut_priority.clone(),
             shortcut_sites: s.shortcut_sites.clone(),
-            archive_days: s.archive_days,
+            archive_days: (s.archive_days != Settings::default().archive_days)
+                .then_some(s.archive_days),
         }
     }
     fn apply(self, s: &mut Settings) {
@@ -210,7 +205,9 @@ impl SyncedSettings {
         s.shortcuts = self.shortcuts;
         s.shortcut_priority = self.shortcut_priority;
         s.shortcut_sites = self.shortcut_sites;
-        s.archive_days = self.archive_days;
+        if let Some(days) = self.archive_days {
+            s.archive_days = days;
+        }
     }
 }
 
@@ -274,7 +271,7 @@ pub enum Outcome {
     /// merged with it. `agreed`: the server holds exactly this round's
     /// records (written, or there already). `version`: to remember.
     Archive {
-        pulled: Option<Vec<ArchivedTab>>,
+        pulled: Option<Box<Archive>>,
         agreed: Option<Vec<archive::Key>>,
         version: Option<u64>,
     },
@@ -838,10 +835,13 @@ impl Worker {
                     // changes into it, for nothing.
                     let data = keys.open(&id, remote.version, &remote.sealed()).ok();
                     // What the chain holds in profiles private here stays
-                    // as it is there (`carried`).
-                    if *name == SIDEBAR
-                        && let Some(sent) = data.as_deref().and_then(|d| carried(snapshot, d))
-                    {
+                    // as it is there (`carried`), and so does that the
+                    // settings name the archive's period (`period_carried`).
+                    let sent = data.as_deref().and_then(|d| match *name {
+                        SIDEBAR => carried(snapshot, d),
+                        _ => period_carried(settings, d),
+                    });
+                    if let Some(sent) = sent {
                         *bytes = sent;
                     }
                     same = data.is_some_and(|data| data == *bytes);
@@ -976,8 +976,9 @@ impl Worker {
                 version,
             }]
         };
-        let bytes = serde_json::to_vec(&Archive::new(mine.to_vec())).unwrap_or_default();
-        match self.request(&keys, "GET", &path, None) {
+        // The chain's copy: a write keeps what it says besides the records
+        // (`Archive::to_write`).
+        let chain = match self.request(&keys, "GET", &path, None) {
             Ok(r) if r.status == 200 => {
                 let remote: CollectionResponse = match r.json() {
                     Ok(c) => c,
@@ -991,36 +992,35 @@ impl Worker {
                         seen = seen
                     ))];
                 }
-                let Ok(data) = keys.open(&id, remote.version, &remote.sealed()) else {
-                    return failed(t!("app.sync.unreadable").into(), remote.version);
+                // Not counted as seen when it cannot be read, as in `sync`:
+                // this device then never writes over it.
+                let chain = match keys
+                    .open(&id, remote.version, &remote.sealed())
+                    .ok()
+                    .and_then(|data| serde_json::from_slice::<Archive>(&data).ok())
+                {
+                    Some(a) if a.version > Archive::VERSION => {
+                        return failed(t!("app.sync.newer_format").into(), remote.version);
+                    }
+                    Some(a) => a,
+                    None => return failed(t!("app.sync.unreadable").into(), remote.version),
                 };
                 if remote.version > seen {
-                    // Not counted as seen when it cannot be read, as in
-                    // `sync`: this device then never writes over it.
-                    return match serde_json::from_slice::<Archive>(&data) {
-                        Ok(a) if a.version > Archive::VERSION => {
-                            failed(t!("app.sync.newer_format").into(), remote.version)
-                        }
-                        Ok(a) => {
-                            self.known.insert(ARCHIVE.to_string(), remote.version);
-                            vec![Outcome::Archive {
-                                pulled: Some(a.entries),
-                                agreed: None,
-                                version: Some(remote.version),
-                            }]
-                        }
-                        Err(_) => failed(t!("app.sync.unreadable").into(), remote.version),
-                    };
+                    self.known.insert(ARCHIVE.to_string(), remote.version);
+                    return vec![Outcome::Archive {
+                        pulled: Some(Box::new(chain)),
+                        agreed: None,
+                        version: Some(remote.version),
+                    }];
                 }
-                if data == bytes {
-                    return agreed(None);
-                }
+                Some(chain)
             }
             // Nothing there yet, and nothing to put there.
             Ok(r) if r.status == 404 && seen == 0 => {
                 if mine.is_empty() {
                     return Vec::new();
                 }
+                None
             }
             Ok(r) if r.status == 404 => {
                 return vec![Outcome::Error(t!(
@@ -1032,12 +1032,17 @@ impl Worker {
             }
             Ok(r) => return vec![Outcome::Error(r.error())],
             Err(e) => return vec![Outcome::Error(e)],
+        };
+        if chain.as_ref().is_some_and(|c| c.entries == mine) {
+            return agreed(None);
         }
         // `seen > applied`: these records predate a pull the UI thread is
         // applying; writing them would undo it.
         if unchanged || seen > applied {
             return Vec::new();
         }
+        let bytes =
+            serde_json::to_vec(&Archive::to_write(chain, mine.to_vec())).unwrap_or_default();
         match self.push(&keys, ARCHIVE, applied, &bytes) {
             Ok(version) => {
                 self.known.insert(ARCHIVE.to_string(), version);
@@ -1179,6 +1184,20 @@ fn carried(snapshot: &SidebarSnapshot, chain: &[u8]) -> Option<Vec<u8>> {
         .flatten()
 }
 
+/// The settings as sent when the chain's copy (`chain`) names how long
+/// archived tabs are kept and this device's period is the usual one: with
+/// it, so a device that went back to it does not keep the old one there.
+/// None: as `SyncedSettings::from` builds them.
+fn period_carried(settings: &Settings, chain: &[u8]) -> Option<Vec<u8>> {
+    let chain: SyncedSettings = serde_json::from_slice(chain).ok()?;
+    let mut sent = SyncedSettings::from(settings);
+    if chain.archive_days.is_none() || sent.archive_days.is_some() {
+        return None;
+    }
+    sent.archive_days = Some(settings.archive_days);
+    serde_json::to_vec(&sent).ok()
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -1204,13 +1223,37 @@ mod tests {
         let mut settings = Settings::default();
         let sent = |s: &Settings| serde_json::to_string(&super::SyncedSettings::from(s)).unwrap();
         // As a version from before the archive synced writes the settings.
-        assert!(!sent(&settings).contains("archive_days"));
+        let older = sent(&settings);
+        assert!(!older.contains("archive_days"));
         settings.archive_days = 30;
         assert!(sent(&settings).contains(r#""archive_days":30"#));
         let theirs: super::SyncedSettings = serde_json::from_str(&sent(&settings)).unwrap();
         let mut here = Settings::default();
         theirs.apply(&mut here);
         assert_eq!(here.archive_days, 30);
+        // Settings without it keep this device's, "Forever" too: as the
+        // usual period they would delete older records for good.
+        here.archive_days = 0;
+        let older: super::SyncedSettings = serde_json::from_str(&older).unwrap();
+        older.apply(&mut here);
+        assert_eq!(here.archive_days, 0);
+    }
+
+    #[test]
+    fn going_back_to_the_usual_archive_period_reaches_the_chain() {
+        let usual = Settings::default();
+        let longer = Settings {
+            archive_days: 365,
+            ..Settings::default()
+        };
+        let chain = |s: &Settings| serde_json::to_vec(&super::SyncedSettings::from(s)).unwrap();
+        // The chain's copy names a period: this device's goes along.
+        let sent = super::period_carried(&usual, &chain(&longer)).unwrap();
+        let sent: super::SyncedSettings = serde_json::from_slice(&sent).unwrap();
+        assert_eq!(sent.archive_days, Some(usual.archive_days));
+        // It names none, or this device's is sent anyway: as built.
+        assert_eq!(super::period_carried(&usual, &chain(&usual)), None);
+        assert_eq!(super::period_carried(&longer, &chain(&longer)), None);
     }
 
     use super::*;
@@ -1476,7 +1519,7 @@ mod tests {
         else {
             panic!("{:?}", out.iter().map(describe).collect::<Vec<_>>())
         };
-        assert_eq!(theirs.len(), 2);
+        assert_eq!(theirs.entries.len(), 2);
         // The same records as the server's: agreed, without a write.
         w.settings.versions.insert(ARCHIVE.into(), 2);
         let same = [archived("b", 2), archived("c", 3)];
