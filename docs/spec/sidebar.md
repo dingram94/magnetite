@@ -70,6 +70,22 @@ the row turns the icon into a back arrow that takes the page back.
   archived), a minus where only the page is unloaded and the row stays (a
   pinned tab). A bold title marks a tab that
   opened in the background and was not viewed yet.
+- Unread counts: chat and mail sites put the number of unread messages
+  into their page title, in parentheses at its start ("(3) WhatsApp") or
+  after its first word ("Inbox (12) - Gmail"), followed by a space or the
+  end of the title ("invoice (1).pdf" is a file name). A plain number of
+  four digits or more reads as a year and does not count ("(2024) Annual
+  report"); larger counts need thousands separators ("(1,234)"). The
+  sidebar shows the number in a red bubble, "99+" above 99: at the end of
+  the tab's row (the hover button takes its place), in its cell of a
+  split row, in the tab switcher and on the corner of a favorite's icon.
+  The tab's title is shown, saved, synced and kept in the history without
+  the number, also a count of 0 and the title of a peek kept as a tab;
+  titles saved, synced or imported with a count lose it when read. The
+  bubble goes when the site takes the number out of its title, for
+  example once the messages are read on another device, and with the
+  page: an unloaded tab has none. A renamed tab keeps its name and still
+  gets the bubble. The count lives in memory only.
 - A click shows the tab and loads its page if needed. Tabs without a loaded
   page are dimmed. A page is unloaded once it has been off screen for more
   than 4 hours (Settings → Tabs and archive: 10 minutes, 30 minutes,
@@ -496,7 +512,7 @@ not opened.
 - Changing the home page of a pinned tab or favorite without pinning it
   again, and a "back to home page" control for favorites.
 
-Code: `crates/core/src/{model,sidebar}.rs`, `crates/app/src/app/tabs.rs`,
+Code: `crates/core/src/{model,sidebar,unread}.rs`, `crates/app/src/app/tabs.rs`,
 `crates/app/src/state/{tabs,folders,profiles}.rs`,
 `crates/engine/src/{keys,frame,floatbar,favicon}.rs`,
 `crates/ui/web/src/{App,Rows}.tsx`.
