@@ -126,10 +126,15 @@ impl MagnetiteApp {
                         .filter(|u| !smart.items.contains(u))
                         .collect::<Vec<_>>(),
                 );
-                if let Some(o) = old.filter(|o| o.source == smart.source) {
-                    smart.snoozed = o.snoozed;
-                    smart.hidden = o.hidden;
-                    smart.filled = o.filled;
+                if let Some(o) = old {
+                    // What a newer version wrote stays: the form knows
+                    // nothing of it.
+                    smart.other = o.other;
+                    if o.source == smart.source {
+                        smart.snoozed = o.snoozed;
+                        smart.hidden = o.hidden;
+                        smart.filled = o.filled;
+                    }
                 }
                 f.smart = Some(smart);
                 Some(id)

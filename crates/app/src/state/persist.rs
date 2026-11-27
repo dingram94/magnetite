@@ -651,6 +651,7 @@ mod tests {
             is_default: false,
             ephemeral: true,
             color: None,
+            other: magnetite_core::Other::new(),
         });
         let mut agreed = s.sidebar_for_sync();
         let space = &mut agreed.spaces[0];

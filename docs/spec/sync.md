@@ -97,7 +97,8 @@ changes go into it, and nothing is lost for having synced second:
 - What one device removed goes, unless the other changed it meanwhile: a
   tab closed on one device and used on the other stays open.
 - A folder or space removed on one device stays if the other put something
-  into it or changed something in it meanwhile, with just that.
+  into it or changed something in it meanwhile, with just that. A profile
+  removed on one device stays while something that stays runs in it.
 - Each device removed the spaces the other kept: a sidebar cannot be without
   one, so the chain's sidebar is taken as it arrives, as where both changed
   the same thing.
@@ -269,10 +270,11 @@ way:
   it came. This version does not read it, and it merges like any other
   field. Such a field goes only with the thing it belongs to.
 - A change to the format that an older version must not write over raises
-  the sidebar's `version` (1 today). A device that finds a higher one than
-  it knows does not take that sidebar and writes none; Settings → Sync says
-  that Magnetite has to be updated. Everything else on the device goes on,
-  the other collections included.
+  the sidebar's `version` (1 today). A device writes its own version,
+  whichever version wrote the sidebar it took. A device that finds a higher
+  one than it knows does not take that sidebar and writes none; Settings →
+  Sync says that Magnetite has to be updated. Everything else on the device
+  goes on, the other collections included.
 
 ## Safety
 

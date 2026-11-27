@@ -522,9 +522,14 @@ impl AppState {
     /// which would look like a change on every round. And without what is
     /// kept on this device alone: the spaces marked so (`unsynced_spaces`)
     /// and, of the profiles that only they use (`unsynced_profiles`), the
-    /// profile, its favorites and tabs elsewhere that run in it.
+    /// profile, its favorites and tabs elsewhere that run in it. It says it
+    /// is in this version's format, whatever version saved or sent the
+    /// sidebar this device took: a device of an older one must not take
+    /// it (`SidebarSnapshot::VERSION`, docs/adr/0017-sidebar-versions.md).
     pub fn sidebar_for_sync(&self) -> SidebarSnapshot {
         let mut snap = self.lasting_sidebar();
+        snap.format = SidebarSnapshot::FORMAT.into();
+        snap.version = SidebarSnapshot::VERSION;
         drop_unsafe_tabs(&mut snap);
         if !self.unsynced_spaces.is_empty() {
             let here = self.unsynced_profiles();

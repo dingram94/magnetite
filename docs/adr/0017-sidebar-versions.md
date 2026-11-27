@@ -37,9 +37,10 @@ Option 3, with a limit for what it cannot cover.
 - This covers what a version adds. A field whose meaning depends on another
   one that an older version changes without knowing, or a change to what a
   field means, is not covered. Such a change raises
-  `SidebarSnapshot::VERSION`, and a device that reads a higher version than
-  its own neither takes that sidebar nor writes one, and says that an
-  update is needed.
+  `SidebarSnapshot::VERSION`. Every device writes its own version, also
+  over a sidebar an older one wrote, and a device that reads a higher
+  version than its own neither takes that sidebar nor writes one, and says
+  that an update is needed.
 
 ## Consequences
 

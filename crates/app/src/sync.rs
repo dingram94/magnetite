@@ -794,9 +794,10 @@ impl Worker {
                     }
                     // Compared by content, not by a count of local changes:
                     // the app's state changes all the time (a page's title,
-                    // a download) without the synced data changing, and a
-                    // device that writes the same data again makes every
-                    // other device take it over its own newer changes.
+                    // a download) without the synced data changing. Writing
+                    // the same data again costs a request and a version, and
+                    // every other device would take it, or merge its own
+                    // changes into it, for nothing.
                     same = keys
                         .open(&id, remote.version, &remote.sealed())
                         .is_ok_and(|data| data == *bytes);
@@ -853,7 +854,9 @@ impl Worker {
                 versions,
                 agreed,
             });
-        } else if errors.is_empty() || !versions.is_empty() {
+        } else if errors.is_empty() || !versions.is_empty() || agreed.is_some() {
+            // Also when only the sidebar went through, there already: a
+            // later merge starts from it.
             outcomes.push(Outcome::Pushed { versions, agreed });
         }
         // Last: a collection that went through must not hide the other's
@@ -1270,6 +1273,35 @@ mod tests {
         assert_eq!(agreed.as_deref(), Some(&snapshot("New")));
     }
 
+    #[test]
+    fn a_sidebar_the_server_holds_is_agreed_on_while_the_settings_fail() {
+        let code = SyncCode::generate();
+        let server = {
+            let keys = code.keys();
+            let sidebar = keys.collection_id(SIDEBAR);
+            fake_server(move |_, path| {
+                if !path.ends_with(sidebar.as_str()) {
+                    return (500, "{}".into());
+                }
+                let plain = serde_json::to_vec(&snapshot("Same")).unwrap();
+                let body = CollectionResponse::new(3, keys.seal(&sidebar, 3, &plain).unwrap());
+                (200, serde_json::to_string(&body).unwrap())
+            })
+        };
+        let dir = data_dir("held-settings-failed");
+        save_code(&dir, &code).unwrap();
+        let mut w = Worker::new(dir, SyncSettings::default());
+        let mut settings = sync_settings(3);
+        settings.sync.server_url = server;
+        let out = w.sync(&snapshot("Same"), &settings, false);
+        assert!(
+            matches!(out.as_slice(), [Outcome::Pushed { versions, agreed: Some(agreed) }, Outcome::Error(_)]
+                if versions.is_empty() && **agreed == snapshot("Same")),
+            "{:?}",
+            out.iter().map(describe).collect::<Vec<_>>()
+        );
+    }
+
     /// A worker whose server holds a phone's sent tab in `devices`, at the
     /// version in the first counter (0: nothing there); it answers writes
     /// with the status in the second.
@@ -1500,7 +1532,7 @@ mod tests {
 
         // A sidebar that differs only by what this device keeps of its own
         // since it took the chain's (`sidebar_unchanged`) is not written
-        // either: the other device would take it and answer in kind.
+        // either: it holds nothing new for the other devices.
         let out = w.sync(&snapshot("Kept here"), &settings, true);
         assert!(
             matches!(out.as_slice(), [Outcome::Pushed { versions, agreed: None }] if versions.is_empty())
