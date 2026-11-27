@@ -31,6 +31,11 @@ pub struct ArchivedTab {
 /// tab brought back and closed again is another record.
 pub type Key = (Id, UnixSeconds);
 
+/// A place in `newest`'s order: the time a record was archived, then its
+/// tab's id (many tabs are archived in the same second, as with a space
+/// deleted).
+pub type Mark = (UnixSeconds, Id);
+
 impl ArchivedTab {
     pub fn key(&self) -> Key {
         (self.tab.id.clone(), self.archived_at)
@@ -47,12 +52,12 @@ pub struct Archive {
     /// Oldest first.
     #[serde(default)]
     pub entries: Vec<ArchivedTab>,
-    /// Records archived before this time may be missing here only because
+    /// Records before this place (`Mark`) may be missing here only because
     /// they did not fit (`SYNCED_MOST`), not because they were removed. Set
     /// by a device that sent the newest records only, and carried on by
     /// every later write (`to_write`), so it never goes back.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub left_out_before: Option<UnixSeconds>,
+    pub left_out_before: Option<Mark>,
     #[serde(flatten)]
     pub other: Other,
 }
@@ -76,7 +81,7 @@ impl Archive {
     #[must_use]
     pub fn to_write(chain: Option<Self>, mine: Vec<ArchivedTab>) -> Self {
         let cut = (mine.len() >= SYNCED_MOST)
-            .then(|| mine.first().map(|e| e.archived_at))
+            .then(|| mine.first().map(|e| (e.archived_at, e.tab.id.clone())))
             .flatten();
         let mut a = chain.unwrap_or_else(|| Self::new(Vec::new()));
         a.version = Self::VERSION;
@@ -119,21 +124,23 @@ pub fn newest(mut entries: Vec<ArchivedTab>, most: usize) -> Vec<ArchivedTab> {
 /// - What either side removed since (a tab brought back, deleted or past
 ///   its time) is gone.
 /// - Without `agreed` nothing counts as removed: both sides' records stay.
-/// - The chain holds only the newest records: one older than
-///   `left_out_before` (`Archive::left_out_before`) that is missing there
-///   was not removed, it did not fit. This device keeps it.
+/// - The chain holds only the newest records: one before `left_out_before`
+///   (`Archive::left_out_before`) that is missing there was not removed,
+///   it did not fit. This device keeps it.
 #[must_use]
 pub fn merge(
     agreed: Option<&[Key]>,
     local: &[ArchivedTab],
     remote: &[ArchivedTab],
-    left_out_before: Option<UnixSeconds>,
+    left_out_before: Option<&Mark>,
 ) -> Vec<ArchivedTab> {
     let agreed: Option<HashSet<&Key>> = agreed.map(|keys| keys.iter().collect());
     let was_agreed = |key: &Key| agreed.as_ref().is_some_and(|a| a.contains(key));
     let theirs: HashSet<Key> = remote.iter().map(ArchivedTab::key).collect();
     let mine: HashSet<Key> = local.iter().map(ArchivedTab::key).collect();
-    let pushed_out = |e: &ArchivedTab| left_out_before.is_some_and(|t| e.archived_at < t);
+    let pushed_out = |e: &ArchivedTab| {
+        left_out_before.is_some_and(|(at, id)| (e.archived_at, &e.tab.id) < (*at, id))
+    };
     let kept = local.iter().filter(|e| {
         let key = e.key();
         theirs.contains(&key) || !was_agreed(&key) || pushed_out(e)
@@ -216,12 +223,12 @@ mod tests {
         // and holds 20 and up.
         let agreed = many(10);
         let chain = Archive::to_write(None, many(20));
-        assert_eq!(chain.left_out_before, Some(20));
+        assert_eq!(chain.left_out_before, Some((20, "t20".into())));
         let merged = merge(
             Some(&keys(&agreed)),
             &agreed,
             &chain.entries,
-            chain.left_out_before,
+            chain.left_out_before.as_ref(),
         );
         assert_eq!(merged.len(), SYNCED_MOST + 10);
         assert_eq!(merged[0].tab.id, "t10", "not removed there, only too old");
@@ -236,7 +243,7 @@ mod tests {
             Some(&keys(&agreed)),
             &agreed,
             &chain.entries,
-            chain.left_out_before,
+            chain.left_out_before.as_ref(),
         );
         assert_eq!(merged[0].tab.id, "t10", "still only too old");
         // A newer one that is missing there was removed.
@@ -244,24 +251,47 @@ mod tests {
     }
 
     #[test]
+    fn a_record_left_out_in_a_second_full_of_them_is_not_taken_as_removed() {
+        // A space of 2000 tabs deleted in one second, then one more closed
+        // in it: the chain leaves out the first of them by id.
+        let agreed: Vec<_> = (0..SYNCED_MOST)
+            .map(|n| entry(&format!("t{n:04}"), 5))
+            .collect();
+        let mut all = agreed.clone();
+        all.push(entry("u", 5));
+        let mut chain = Archive::to_write(None, newest(all, SYNCED_MOST));
+        assert_eq!(chain.left_out_before, Some((5, "t0001".into())));
+        chain.entries.retain(|e| e.tab.id != "t0500");
+        let merged = merge(
+            Some(&keys(&agreed)),
+            &agreed,
+            &chain.entries,
+            chain.left_out_before.as_ref(),
+        );
+        assert_eq!(merged[0].tab.id, "t0000", "left out, not removed");
+        assert!(merged.iter().all(|e| e.tab.id != "t0500"), "removed");
+        assert_eq!(merged.len(), SYNCED_MOST);
+    }
+
+    #[test]
     fn a_write_keeps_what_the_chain_says_beyond_its_records() {
         let mut chain = Archive::new(vec![entry("a", 1)]);
-        chain.left_out_before = Some(1);
+        chain.left_out_before = Some((1, "a".into()));
         chain.other.insert("sorted".into(), "by day".into());
         let written = Archive::to_write(Some(chain), vec![entry("b", 2)]);
         assert_eq!(ids(&written.entries), ["b"]);
-        assert_eq!(written.left_out_before, Some(1));
+        assert_eq!(written.left_out_before, Some((1, "a".into())));
         assert_eq!(written.other["sorted"], "by day");
         // Never further back than a mark there was.
         let mut chain = written;
-        chain.left_out_before = Some(50);
+        chain.left_out_before = Some((50, "x".into()));
         let many: Vec<_> = (0..)
             .take(SYNCED_MOST)
             .map(|at| entry(&format!("t{at}"), at))
             .collect();
         assert_eq!(
             Archive::to_write(Some(chain), many).left_out_before,
-            Some(50)
+            Some((50, "x".into()))
         );
     }
 

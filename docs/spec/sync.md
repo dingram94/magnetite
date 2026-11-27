@@ -219,6 +219,9 @@ should not reach a private device, turn it on at the work device.
   As soon as a synced space uses the profile it is sent again. The default
   profile always is.
 - Turned off again, the space is sent like the rest.
+- Its archived tabs are not sent either (`archive.md`, "On other
+  devices"), also once the space is deleted: the device remembers the
+  space as kept here while its archive holds tabs of it.
 
 ## Taking another device's data
 

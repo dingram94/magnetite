@@ -568,14 +568,21 @@ impl AppState {
         use crate::url_policy::{Source, allowed};
         let here = self.unsynced_profiles();
         let sent = |e: &&ArchivedTab| {
-            !self.unsynced_spaces.contains(&e.space_id)
-                && !e.tab.profile_id.as_ref().is_some_and(|p| here.contains(p))
-                && allowed(&e.tab.url, Source::Stored)
+            !self.archived_here_only(e, &here) && allowed(&e.tab.url, Source::Stored)
         };
         archive::newest(
             self.archive.iter().filter(sent).cloned().collect(),
             archive::SYNCED_MOST,
         )
+    }
+
+    /// Whether archived tab `e` stays on this device: it is of a space kept
+    /// here (also one deleted since, `delete_space`), or ran in a profile
+    /// kept here (`here`, `unsynced_profiles`). Such a record is neither
+    /// sent (`archive_for_sync`) nor taken (`adopt_archive`).
+    fn archived_here_only(&self, e: &ArchivedTab, here: &BTreeSet<String>) -> bool {
+        self.unsynced_spaces.contains(&e.space_id)
+            || e.tab.profile_id.as_ref().is_some_and(|p| here.contains(p))
     }
 
     /// Whether this device has something of its archive to write to its
@@ -598,10 +605,13 @@ impl AppState {
     /// to itself (`archive_for_sync`) stays as it is. Records from
     /// elsewhere are checked like tabs that arrive: an address Magnetite
     /// does not open from stored data is dropped, times are no later than
-    /// tomorrow, and each comes back as a plain Today tab.
+    /// tomorrow, and each comes back as a plain Today tab. One of a space
+    /// or profile kept here is not taken (`archived_here_only`): an old
+    /// copy elsewhere does not change what stays on this device.
     pub fn adopt_archive(&mut self, chain: archive::Archive) {
         use crate::url_policy::{Source, allowed};
         let latest = now() + 24 * 60 * 60;
+        let here = self.unsynced_profiles();
         let mut remote = chain.entries;
         remote.retain_mut(|e| {
             e.archived_at = e.archived_at.clamp(0, latest);
@@ -611,7 +621,9 @@ impl AppState {
             e.tab.home_url = None;
             e.tab.keep_active = false;
             e.tab.end_panel();
-            !e.tab.id.is_empty() && allowed(&e.tab.url, Source::Stored)
+            !e.tab.id.is_empty()
+                && allowed(&e.tab.url, Source::Stored)
+                && !self.archived_here_only(e, &here)
         });
         let remote = archive::newest(remote, archive::SYNCED_MOST);
         let mine = self.archive_for_sync();
@@ -620,7 +632,7 @@ impl AppState {
             self.synced_archive.as_deref(),
             &mine,
             &remote,
-            chain.left_out_before,
+            chain.left_out_before.as_ref(),
         );
         let kept = std::mem::take(&mut self.archive)
             .into_iter()
@@ -985,6 +997,33 @@ mod tests {
     }
 
     #[test]
+    fn tabs_of_a_deleted_space_kept_here_stay_out_of_sync() {
+        let mut s = state();
+        s.sidebar.spaces.push(magnetite_core::Space {
+            id: "here".into(),
+            title: "Here".into(),
+            profile_id: "default".into(),
+            today: vec![tab("x")],
+            ..Default::default()
+        });
+        assert!(s.set_space_synced("here", false));
+        s.delete_space("here");
+        assert!(s.archive.iter().any(|e| e.tab.id == "x"));
+        assert!(s.archive_for_sync().iter().all(|e| e.tab.id != "x"));
+        assert!(s.unsynced_spaces.contains("here"));
+        // A space kept here that leaves nothing in the archive is gone.
+        s.sidebar.spaces.push(magnetite_core::Space {
+            id: "empty".into(),
+            title: "Empty".into(),
+            profile_id: "default".into(),
+            ..Default::default()
+        });
+        assert!(s.set_space_synced("empty", false));
+        s.delete_space("empty");
+        assert!(!s.unsynced_spaces.contains("empty"));
+    }
+
+    #[test]
     fn tabs_closed_and_brought_back_on_other_devices_are_so_here() {
         let mut s = state();
         s.settings.sync.enabled = true;
@@ -1009,9 +1048,15 @@ mod tests {
         s.archive.remove(1);
         s.archive.push(archived("mine", &space, 6));
         assert!(s.archive_to_write());
-        // There `a` was deleted and `theirs` closed; and something that
-        // is no web page got in.
-        let mut theirs = vec![archived("b", &space, 2), archived("theirs", &space, 5)];
+        // There `a` was deleted and `theirs` closed; something that is no
+        // web page got in, and an old copy of the space kept here closed
+        // `own` later and `there`.
+        let mut theirs = vec![
+            archived("b", &space, 2),
+            archived("theirs", &space, 5),
+            archived("own", "here", 7),
+            archived("there", "here", 8),
+        ];
         theirs.push(ArchivedTab {
             tab: TabItem {
                 url: "javascript:alert(1)".into(),
@@ -1023,6 +1068,10 @@ mod tests {
         s.adopt_archive(archive::Archive::new(theirs));
         let ids: Vec<&str> = s.archive.iter().map(|e| e.tab.id.as_str()).collect();
         assert_eq!(ids, ["own", "theirs", "mine"]);
+        assert_eq!(
+            s.archive[0].archived_at, 3,
+            "the space kept here is as it was"
+        );
         // The chain does not have `mine` yet, and still has `b`.
         assert!(s.archive_to_write());
         let sent: Vec<String> = (s.archive_for_sync().iter())
@@ -1660,9 +1709,10 @@ mod tests {
         assert!(sent.favorites.iter().any(|f| f.profile_id == "work"));
         assert!(sent.all_tabs().any(|t| t.id == "c"));
 
-        // Deleted, the space leaves no mark behind.
+        // Deleted, the space stays marked while its tabs are in the archive
+        // (`tabs_of_a_deleted_space_kept_here_stay_out_of_sync`).
         s.delete_space("office");
-        assert!(s.unsynced_spaces.is_empty());
+        assert_eq!(s.unsynced_spaces, ["office".to_string()].into());
     }
 
     #[test]

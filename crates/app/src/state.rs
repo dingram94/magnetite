@@ -240,11 +240,11 @@ pub struct AppState {
     pub runtime: HashMap<Id, TabRuntime>,
     pub content_to_tab: HashMap<ContentId, Id>,
     pub archive: Vec<ArchivedTab>,
-    /// The tabs this device archived, oldest first, the last
-    /// `CLOSED_HERE_KEPT`: "Reopen closed tab" takes one of them, not a tab
-    /// closed on another device that synced in later
+    /// The records this device archived (`archive::Key`), oldest first,
+    /// the last `CLOSED_HERE_KEPT`: "Reopen closed tab" takes one of them,
+    /// not a tab closed on another device that synced in later
     /// (`reopen_closed_here`). Saved.
-    pub closed_here: Vec<Id>,
+    pub closed_here: Vec<magnetite_core::archive::Key>,
     /// Pages visited on this device (`history.json`, saved apart).
     pub history: History,
     /// Split views: which tabs tile the page area together, and how. A tab
@@ -299,7 +299,9 @@ pub struct AppState {
     /// device's own choice, never synced: such a space is not sent
     /// (`sidebar_for_sync`), and a sidebar that arrives leaves it as it is
     /// (`adopt_sidebar`). A profile that only such spaces use stays with
-    /// them (`unsynced_profiles`).
+    /// them (`unsynced_profiles`). A deleted one stays listed while the
+    /// archive holds tabs of it, so they do not sync either
+    /// (`delete_space`).
     pub unsynced_spaces: BTreeSet<Id>,
     /// Profiles deleted on this device, oldest first. The device's own
     /// memory, never synced: a deleted profile is not taken back from

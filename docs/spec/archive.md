@@ -79,8 +79,8 @@ The archive is the `archive` list in `<data-dir>/state.json`, oldest first.
 Each record holds the tab (address, title, a custom name, times of creation
 and last use, home page and profile if it had them), the id of its space and
 the time it was archived. Icons are not part of it; the view uses the icon
-cache (`sidebar.md`). Next to it, `closed_here` holds the ids of the last
-100 tabs this device archived, for "Reopen Closed Tab". The file is
+cache (`sidebar.md`). Next to it, `closed_here` names the last 100 records
+this device archived (tab id and time), for "Reopen Closed Tab". The file is
 readable by its owner only.
 
 ## How long records stay
@@ -119,12 +119,13 @@ any other of the chain.
   every change writes all of them. A device may hold more (with "Forever",
   or a long period); the older ones stay on it, and are not deleted for no
   longer being in the chain. Once records were left out for room, the
-  chain says from when on it is complete, and every later write keeps
-  saying so: a record older than that is not taken as removed for missing
-  there.
-- Not sent, as with the sidebar: tabs of a space kept on this device and
-  tabs that ran in a profile kept on it. They stay in this device's
-  archive. Tabs of private profiles are never archived.
+  chain says from which record on it is complete (by time, then tab), and
+  every later write keeps saying so: a record before that is not taken as
+  removed for missing there.
+- Not sent, as with the sidebar: tabs of a space kept on this device, also
+  after the space was deleted, and tabs that ran in a profile kept on it.
+  They stay in this device's archive, and such records from another device
+  are not taken. Tabs of private profiles are never archived.
 - Records that arrive are checked like tabs that arrive: an address
   Magnetite does not open from stored data is dropped, times are no later
   than tomorrow, and each comes back as a plain Today tab. A record names
