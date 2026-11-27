@@ -165,6 +165,7 @@ mod tests {
                 TabItem::new("a", "https://example.org/a", "(7) Chat"),
                 renamed,
             ],
+            other: crate::Other::new(),
         });
         strip_counts(&mut snap);
         let titles: Vec<&str> = snap.all_tabs().map(|t| t.title.as_str()).collect();
